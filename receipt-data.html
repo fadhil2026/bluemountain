@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Receipt Data — Blue Mountain POS</title>
+  <meta http-equiv="Content-Type" content="application/json; charset=utf-8">
+  <script>
+    /**
+     * receipt-data.html
+     * Serves receipt JSON from sessionStorage for Bluetooth Print App.
+     *
+     * When Bluetooth Print App opens this URL, it expects pure JSON.
+     * The script reads from sessionStorage and outputs JSON via document.write.
+     */
+    (function() {
+      const data = sessionStorage.getItem('pendingReceipt');
+      if (data) {
+        // Output raw JSON — Bluetooth Print App reads the page body
+        document.open('application/json');
+        document.write(data);
+        document.close();
+      } else {
+        // Fallback: empty receipt placeholder
+        document.open('application/json');
+        document.write(JSON.stringify([
+          { type: 0, content: 'Blue Mountain Refilling Station', bold: 1, align: 1, format: 2 },
+          { type: 0, content: 'Tidak ada struk tersedia.', bold: 0, align: 1, format: 0 }
+        ]));
+        document.close();
+      }
+    })();
+  </script>
+</head>
+<body></body>
+</html>
