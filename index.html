@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+
+  <!-- SEO & PWA -->
+  <title>Blue Mountain Refilling Station — Kasir POS</title>
+  <meta name="description" content="Sistem Kasir POS canggih untuk Blue Mountain Refilling Station. Kelola transaksi, cetak struk thermal via Bluetooth, dan pantau laporan keuangan.">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#1e3a8a" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1e3a8a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Blue Mountain">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="keywords" content="kasir, POS, point of sale, refilling station, galon, laporan keuangan">
+  <meta name="author" content="Blue Mountain Refilling Station">
+
+  <!-- Icons -->
+  <link rel="icon" type="image/png" href="./assets/logo-x8cg0OuI.png">
+  <link rel="apple-touch-icon" href="./assets/logo-x8cg0OuI.png">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+
+  <style>
+    /* Splash / loading screen */
+    #splash {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 60%, #f0f4ff 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      transition: opacity 600ms ease, transform 600ms ease;
+    }
+
+    #splash.hide {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .splash-logo {
+      width: 140px;
+      height: 140px;
+      object-fit: contain;
+      animation: splash-logo-in 700ms cubic-bezier(0.34,1.56,0.64,1);
+    }
+
+    @keyframes splash-logo-in {
+      from { transform: scale(0.4); opacity: 0; }
+      to   { transform: scale(1);   opacity: 1; }
+    }
+
+    .splash-name {
+      text-align: center;
+      animation: splash-text-in 500ms 200ms both ease;
+    }
+
+    @keyframes splash-text-in {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .splash-name h1 {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #1e3a8a;
+    }
+
+    .splash-name p {
+      font-size: 13px;
+      color: #2563eb;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    .splash-loader {
+      display: flex;
+      gap: 6px;
+      animation: splash-text-in 400ms 500ms both ease;
+    }
+
+    .splash-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #2563eb;
+      animation: dot-bounce 900ms ease-in-out infinite;
+    }
+
+    .splash-dot:nth-child(2) { animation-delay: 150ms; }
+    .splash-dot:nth-child(3) { animation-delay: 300ms; }
+
+    @keyframes dot-bounce {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40%            { transform: scale(1);   opacity: 1; }
+    }
+  </style>
+  <script type="module" crossorigin src="./assets/index-BdRRmyCV.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/vendor-db-2jmnBxhj.js">
+  <link rel="modulepreload" crossorigin href="./assets/vendor-pdf-j4-ZKoBl.js">
+  <link rel="stylesheet" crossorigin href="./assets/index-C6xbOj-0.css">
+<link rel="manifest" href="./manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="./registerSW.js"></script></head>
+<body>
+
+  <!-- ── Splash Screen ── -->
+  <div id="splash">
+    <img src="./assets/logo-x8cg0OuI.png" alt="Blue Mountain Refilling Station" class="splash-logo">
+    <div class="splash-loader">
+      <div class="splash-dot"></div>
+      <div class="splash-dot"></div>
+      <div class="splash-dot"></div>
+    </div>
+  </div>
+
+  <!-- ── App Shell ── -->
+  <div id="app">
+
+    <!-- ── Top Bar ── -->
+    <header class="topbar" role="banner">
+      <div class="topbar__brand">
+        <img src="./assets/logo-x8cg0OuI.png" alt="Logo" class="topbar__logo">
+      </div>
+
+      <div class="topbar__center">
+        <div>
+          <div class="topbar__time" id="topbar-time">00:00:00</div>
+          <div class="topbar__date" id="topbar-date" style="font-size:11px;color:var(--text-secondary);text-align:center"></div>
+        </div>
+      </div>
+
+      <div class="topbar__right">
+        <div class="status-badge" id="status-badge">Sistem Online</div>
+      </div>
+    </header>
+
+    <!-- ── Main Content ── -->
+    <main class="main-content" role="main">
+
+      <!-- POS View -->
+      <section id="view-pos" class="view" aria-label="Kasir POS"></section>
+
+      <!-- Products View -->
+      <section id="view-products" class="view" aria-label="Manajemen Produk"></section>
+
+      <!-- Transactions View -->
+      <section id="view-transactions" class="view" aria-label="Riwayat Transaksi"></section>
+
+      <!-- Reports View -->
+      <section id="view-reports" class="view" aria-label="Laporan Penjualan"></section>
+
+      <!-- Settings View -->
+      <section id="view-settings" class="view" aria-label="Pengaturan"></section>
+
+      <!-- Finance View -->
+      <section id="view-finance" class="view" aria-label="Keuangan"></section>
+
+    </main>
+
+    <!-- ── macOS Dock ── -->
+    <nav class="dock-container" aria-label="Navigasi Utama">
+      <div class="dock" role="navigation">
+
+        <div class="dock-item active" data-view="pos" id="dock-pos" role="button" tabindex="0" aria-label="Kasir POS">
+          <div class="dock-icon">🏪</div>
+          <div class="dock-dot"></div>
+          <div class="dock-label">Kasir POS</div>
+        </div>
+
+        <div class="dock-item" data-view="products" id="dock-products" role="button" tabindex="0" aria-label="Produk">
+          <div class="dock-icon">📦</div>
+          <div class="dock-dot"></div>
+          <div class="dock-label">Produk</div>
+        </div>
+
+        <div class="dock-separator" aria-hidden="true"></div>
+
+        <div class="dock-item" data-view="transactions" id="dock-transactions" role="button" tabindex="0" aria-label="Transaksi">
+          <div class="dock-icon">📋</div>
+          <div class="dock-dot"></div>
+          <div class="dock-label">Transaksi</div>
+        </div>
+
+        <div class="dock-item" data-view="reports" id="dock-reports" role="button" tabindex="0" aria-label="Laporan">
+          <div class="dock-icon">📊</div>
+          <div class="dock-dot"></div>
+          <div class="dock-label">Laporan</div>
+        </div>
+
+        <div class="dock-separator" aria-hidden="true"></div>
+
+        <div class="dock-item" data-view="settings" id="dock-settings" role="button" tabindex="0" aria-label="Pengaturan">
+          <div class="dock-icon">⚙️</div>
+          <div class="dock-dot"></div>
+          <div class="dock-label">Pengaturan</div>
+        </div>
+
+        <div class="dock-separator" aria-hidden="true"></div>
+
+        <div class="dock-item" data-view="finance" id="dock-finance" role="button" tabindex="0" aria-label="Keuangan">
+          <div class="dock-icon">💰</div>
+          <div class="dock-dot"></div>
+          <div class="dock-label">Keuangan</div>
+        </div>
+
+      </div>
+    </nav>
+
+  </div><!-- /#app -->
+
+  <!-- ── Toast Container ── -->
+  <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- ── Main Script (ES modules) ── -->
+
+  <!-- ── Splash hide after app ready ── -->
+  <script>
+    // Hide splash when DOM + fonts ready
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        const splash = document.getElementById('splash');
+        if (splash) {
+          splash.classList.add('hide');
+          setTimeout(() => splash.remove(), 700);
+        }
+      }, 1200);
+    });
+
+    // Keyboard nav for dock items
+    document.addEventListener('keydown', (e) => {
+      if (e.target.classList.contains('dock-item') && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        e.target.click();
+      }
+    });
+  </script>
+</body>
+</html>
