@@ -78,7 +78,7 @@ import{X as jt}from"./vendor-db-2jmnBxhj.js";import{_ as V}from"./vendor-pdf-j4-
         <div class="input-group" style="margin-top:10px">
           <label class="input-label" for="debt-paid-now">💵 Bayar DP / Uang Muka Sekarang (Rp)</label>
           <input type="number" class="input" id="debt-paid-now"
-            value="0" min="0" max="${e}" step="1000" inputmode="numeric">
+            placeholder="0" min="0" max="${e}" step="1000" inputmode="numeric">
         </div>
         <div style="margin-top:8px;padding:10px 14px;background:var(--bg-elevated);border-radius:10px;border:1.5px solid var(--border-subtle)">
           <div style="display:flex;justify-content:space-between;font-size:13px">
@@ -170,7 +170,7 @@ import{X as jt}from"./vendor-db-2jmnBxhj.js";import{_ as V}from"./vendor-pdf-j4-
           <div class="discount-row">
             <span style="font-size:13px;color:var(--text-secondary);flex:1">💳 Diskon (Rp)</span>
             <input type="number" class="discount-input" id="discount-input"
-              value="0" min="0" max="99999999" placeholder="0" inputmode="numeric">
+              value="${g.state.discount||""}" min="0" max="99999999" placeholder="0" inputmode="numeric">
           </div>
           <div class="cart-summary-row" id="tax-row" style="display:none">
             <span class="label">Pajak</span>
@@ -1237,7 +1237,7 @@ Tindakan ini TIDAK dapat dibatalkan!`))try{await Gt(),window.showToast("Semua da
         </div>
         <div class="input-group">
           <label class="input-label">💰 Jumlah Modal Awal (Rp)</label>
-          <input type="number" class="input" id="modal-awal-input" value="${g.state.settings.modalAwal||0}" min="0" max="999999999999" step="10000" inputmode="numeric">
+          <input type="number" class="input" id="modal-awal-input" value="${g.state.settings.modalAwal||0||""}" placeholder="0" min="0" max="999999999999" step="10000" inputmode="numeric">
         </div>
       </div>
       <div class="modal-footer">
@@ -1259,7 +1259,7 @@ Tindakan ini TIDAK dapat dibatalkan!`))try{await Gt(),window.showToast("Semua da
         </div>
         <div class="input-group" style="margin-top:10px">
           <label class="input-label">💵 Jumlah (Rp)</label>
-          <input type="number" class="input" id="exp-amount" value="0" min="1" max="999999999" step="1000" inputmode="numeric">
+          <input type="number" class="input" id="exp-amount" placeholder="0" min="1" max="999999999" step="1000" inputmode="numeric">
         </div>
       </div>
       <div class="modal-footer">
@@ -1309,4 +1309,4 @@ Tindakan ini TIDAK dapat dibatalkan!`))try{await Gt(),window.showToast("Semua da
             🔄 Reload Halaman
           </button>
         </div>
-      `)}g.navigate(t)}},Me=(t,e)=>{if(!t)return;const s=t.getBoundingClientRect(),n=Math.max(s.width,s.height),a=document.createElement("span");a.className="ripple-effect",a.style.cssText=`width:${n}px;height:${n}px;left:${e.clientX-s.left-n/2}px;top:${e.clientY-s.top-n/2}px`,t.style.position="relative",t.appendChild(a),a.addEventListener("animationend",()=>a.remove(),{once:!0})},Ct=t=>{const e=(t==null?void 0:t.shopName)||"Blue Mountain Refilling Station";document.title=`${e} — Kasir POS`};g.on("settings:change",Ct);const Ne=async()=>{try{await Vt(),await Ut()}catch(v){console.error("[DB] Failed to open database:",v),window.showToast("Database gagal dibuka. Coba reload halaman.","error","Database Error");return}const t=["shopName","shopAddress","shopPhone","cashierName","printEnabled","taxRate","printerUrl","bankName","bankNumber","bankHolder","qrisNumber","modalAwal"],e={};for(const v of t){const h=await ct(v);h!==null&&(v==="modalAwal"||v==="taxRate"?e[v]=parseFloat(h)||0:e[v]=h)}g.updateSettings(e),Ct(g.state.settings),bt(),xt(),setInterval(xt,1e3);const s=document.querySelector(".dock"),n=[...document.querySelectorAll(".dock-item")],a=1.55,o=1.28,i=1.1,d=16,l=n.map(()=>1),r=n.map(()=>1);let c=null;const y=(v,h,w)=>v+(h-v)*w,x=.22,S=()=>{let v=!1;n.forEach((h,w)=>{l[w]=y(l[w],r[w],x),Math.abs(l[w]-r[w])>.001&&(v=!0);const b=l[w],u=(b-1)/(a-1)*d;h.style.transform=`translateY(${-u}px) scale(${b.toFixed(4)})`,h.style.zIndex=b>1.01?Math.round(b*10):""}),c=v?requestAnimationFrame(S):null},_=()=>{c||(c=requestAnimationFrame(S))},k=v=>{n.forEach((h,w)=>{const b=Math.abs(w-v);r[w]=b===0?a:b===1?o:b===2?i:1})},$=()=>n.forEach((v,h)=>r[h]=1);s==null||s.addEventListener("mousemove",v=>{let h=0,w=1/0;n.forEach((b,u)=>{const T=b.getBoundingClientRect(),B=Math.abs(v.clientX-(T.left+T.width/2));B<w&&(w=B,h=u)}),k(h),_()}),s==null||s.addEventListener("mouseleave",()=>{$(),_()}),n.forEach((v,h)=>{v.addEventListener("touchstart",()=>{k(h),_()},{passive:!0}),v.addEventListener("touchend",()=>{setTimeout(()=>{$(),_()},350)},{passive:!0})}),document.querySelectorAll(".dock-item").forEach(v=>{v.addEventListener("click",async h=>{const w=v.dataset.view;w&&(v.classList.add("bouncing"),v.addEventListener("animationend",()=>v.classList.remove("bouncing"),{once:!0}),Me(v.querySelector(".dock-icon"),h),await $t(w))})});const m=sessionStorage.getItem("activeView")||"pos";await $t(m)};document.addEventListener("DOMContentLoaded",Ne);
+      `)}g.navigate(t)}},Me=(t,e)=>{if(!t)return;const s=t.getBoundingClientRect(),n=Math.max(s.width,s.height),a=document.createElement("span");a.className="ripple-effect",a.style.cssText=`width:${n}px;height:${n}px;left:${e.clientX-s.left-n/2}px;top:${e.clientY-s.top-n/2}px`,t.style.position="relative",t.appendChild(a),a.addEventListener("animationend",()=>a.remove(),{once:!0})},Ct=t=>{const e=(t==null?void 0:t.shopName)||"Blue Mountain Refilling Station";document.title=`${e} — Kasir POS`};g.on("settings:change",Ct);document.addEventListener("focusin",t=>{t.target instanceof HTMLInputElement&&(t.target.type==="number"||t.target.inputMode==="numeric"||t.target.classList.contains("discount-input"))&&setTimeout(()=>{try{t.target.select()}catch{}},25)});const Ne=async()=>{try{await Vt(),await Ut()}catch(v){console.error("[DB] Failed to open database:",v),window.showToast("Database gagal dibuka. Coba reload halaman.","error","Database Error");return}const t=["shopName","shopAddress","shopPhone","cashierName","printEnabled","taxRate","printerUrl","bankName","bankNumber","bankHolder","qrisNumber","modalAwal"],e={};for(const v of t){const h=await ct(v);h!==null&&(v==="modalAwal"||v==="taxRate"?e[v]=parseFloat(h)||0:e[v]=h)}g.updateSettings(e),Ct(g.state.settings),bt(),xt(),setInterval(xt,1e3);const s=document.querySelector(".dock"),n=[...document.querySelectorAll(".dock-item")],a=1.55,o=1.28,i=1.1,d=16,l=n.map(()=>1),r=n.map(()=>1);let c=null;const y=(v,h,w)=>v+(h-v)*w,x=.22,S=()=>{let v=!1;n.forEach((h,w)=>{l[w]=y(l[w],r[w],x),Math.abs(l[w]-r[w])>.001&&(v=!0);const b=l[w],u=(b-1)/(a-1)*d;h.style.transform=`translateY(${-u}px) scale(${b.toFixed(4)})`,h.style.zIndex=b>1.01?Math.round(b*10):""}),c=v?requestAnimationFrame(S):null},_=()=>{c||(c=requestAnimationFrame(S))},k=v=>{n.forEach((h,w)=>{const b=Math.abs(w-v);r[w]=b===0?a:b===1?o:b===2?i:1})},$=()=>n.forEach((v,h)=>r[h]=1);s==null||s.addEventListener("mousemove",v=>{let h=0,w=1/0;n.forEach((b,u)=>{const T=b.getBoundingClientRect(),B=Math.abs(v.clientX-(T.left+T.width/2));B<w&&(w=B,h=u)}),k(h),_()}),s==null||s.addEventListener("mouseleave",()=>{$(),_()}),n.forEach((v,h)=>{v.addEventListener("touchstart",()=>{k(h),_()},{passive:!0}),v.addEventListener("touchend",()=>{setTimeout(()=>{$(),_()},350)},{passive:!0})}),document.querySelectorAll(".dock-item").forEach(v=>{v.addEventListener("click",async h=>{const w=v.dataset.view;w&&(v.classList.add("bouncing"),v.addEventListener("animationend",()=>v.classList.remove("bouncing"),{once:!0}),Me(v.querySelector(".dock-icon"),h),await $t(w))})});const m=sessionStorage.getItem("activeView")||"pos";await $t(m)};document.addEventListener("DOMContentLoaded",Ne);

@@ -448,7 +448,7 @@ const bindFinanceEvents = (txs) => {
         </div>
         <div class="input-group">
           <label class="input-label">💰 Jumlah Modal Awal (Rp)</label>
-          <input type="number" class="input" id="modal-awal-input" value="${current}" min="0" max="999999999999" step="10000" inputmode="numeric">
+          <input type="number" class="input" id="modal-awal-input" value="${current || ''}" placeholder="0" min="0" max="999999999999" step="10000" inputmode="numeric">
         </div>
       </div>
       <div class="modal-footer">
@@ -489,7 +489,7 @@ const bindFinanceEvents = (txs) => {
         </div>
         <div class="input-group" style="margin-top:10px">
           <label class="input-label">💵 Jumlah (Rp)</label>
-          <input type="number" class="input" id="exp-amount" value="0" min="1" max="999999999" step="1000" inputmode="numeric">
+          <input type="number" class="input" id="exp-amount" placeholder="0" min="1" max="999999999" step="1000" inputmode="numeric">
         </div>
       </div>
       <div class="modal-footer">

@@ -79,7 +79,7 @@ const renderPOS = () => {
           <div class="discount-row">
             <span style="font-size:13px;color:var(--text-secondary);flex:1">💳 Diskon (Rp)</span>
             <input type="number" class="discount-input" id="discount-input"
-              value="0" min="0" max="99999999" placeholder="0" inputmode="numeric">
+              value="${store.state.discount || ''}" min="0" max="99999999" placeholder="0" inputmode="numeric">
           </div>
           <div class="cart-summary-row" id="tax-row" style="display:none">
             <span class="label">Pajak</span>

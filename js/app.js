@@ -147,6 +147,15 @@ const updateHeaderBrand = (settings) => {
 
 store.on('settings:change', updateHeaderBrand);
 
+/* ── Global Auto-Select on Focus for Number Inputs ── */
+document.addEventListener('focusin', (e) => {
+  if (e.target instanceof HTMLInputElement && (e.target.type === 'number' || e.target.inputMode === 'numeric' || e.target.classList.contains('discount-input'))) {
+    setTimeout(() => {
+      try { e.target.select(); } catch (_) {}
+    }, 25);
+  }
+});
+
 /* ── Main Init ── */
 const init = async () => {
   try {

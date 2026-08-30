@@ -137,7 +137,7 @@ export const showPaymentModal = (method = 'cash') => {
         <div class="input-group" style="margin-top:10px">
           <label class="input-label" for="debt-paid-now">💵 Bayar DP / Uang Muka Sekarang (Rp)</label>
           <input type="number" class="input" id="debt-paid-now"
-            value="0" min="0" max="${total}" step="1000" inputmode="numeric">
+            placeholder="0" min="0" max="${total}" step="1000" inputmode="numeric">
         </div>
         <div style="margin-top:8px;padding:10px 14px;background:var(--bg-elevated);border-radius:10px;border:1.5px solid var(--border-subtle)">
           <div style="display:flex;justify-content:space-between;font-size:13px">
