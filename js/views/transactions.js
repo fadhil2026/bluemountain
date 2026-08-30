@@ -1,9 +1,11 @@
 /**
  * views/transactions.js — Full CRUD + Realtime + Hutang/Piutang + Transfer Konfirmasi
+ * FIX: todayKas now uses paidAmount for debt transactions, not total
  */
 import { getAllTransactions, deleteTransaction, updateTransaction } from '../db.js';
 import { formatRupiah }          from '../utils/currency.js';
 import { formatDateTime }        from '../utils/date.js';
+import { esc }                   from '../utils/sanitize.js';
 import { openModal, closeModal } from './modals.js';
 import { getReceiptPreviewHTML, getPrintSchemeUrl } from '../printer.js';
 import { buildReceiptJSON }      from '../receipt.js';
@@ -12,36 +14,32 @@ import store                     from '../store.js';
 let _unsubscribe = null;
 
 export const initTransactions = async () => {
-  // Always load fresh — never skip based on store cache
-  await renderTransactions();
-
   if (_unsubscribe) _unsubscribe();
   _unsubscribe = store.on('transactions:change', (txs) => {
     renderTransactionsUI(txs);
   });
+
+  await renderTransactions();
 };
 
 export const renderTransactions = async () => {
   const txs = await getAllTransactions();
   store.setTransactions(txs);
+  renderTransactionsUI(txs);
 };
 
 /* ── Status Helpers ── */
 const statusBadge = (tx) => {
   const pm = tx.paymentMethod;
   const ps = tx.paymentStatus;
-  if (pm === 'transfer' && ps === 'transfer_pending') {
+  if (pm === 'transfer' && ps === 'transfer_pending')
     return `<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d">⏳ Pending</span>`;
-  }
-  if (pm === 'transfer' && ps === 'transfer_confirmed') {
+  if (pm === 'transfer' && ps === 'transfer_confirmed')
     return `<span class="badge badge--green">✅ Confirmed</span>`;
-  }
-  if (pm === 'debt' || ps === 'unpaid') {
+  if (ps === 'unpaid')
     return `<span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5">🔴 Belum Lunas</span>`;
-  }
-  if (ps === 'partial') {
+  if (ps === 'partial')
     return `<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d">🟡 Cicilan</span>`;
-  }
   return `<span class="badge badge--green">✅ Lunas</span>`;
 };
 
@@ -49,13 +47,11 @@ const methodLabel = (tx) => {
   if (tx.paymentMethod === 'cash')     return '💵 Tunai';
   if (tx.paymentMethod === 'transfer') return '📲 Transfer';
   if (tx.paymentMethod === 'debt')     return '📋 Hutang';
-  return tx.paymentMethod || '—';
+  return esc(tx.paymentMethod) || '—';
 };
 
-const canDelete = (tx) => {
-  if (tx.paymentMethod === 'debt' && (tx.remainingDebt || 0) > 0) return false;
-  return true;
-};
+const canDelete = (tx) =>
+  !(tx.paymentMethod === 'debt' && (tx.remainingDebt || 0) > 0);
 
 /* ── Render ── */
 const renderTransactionsUI = (allTxs) => {
@@ -65,17 +61,24 @@ const renderTransactionsUI = (allTxs) => {
   const sorted = [...allTxs].sort((a, b) => new Date(b.date) - new Date(a.date));
   const today  = new Date().toISOString().split('T')[0];
 
-  // Summary stats
-  const todayTxs    = allTxs.filter(t => t.dateKey === today);
-  const todayKas    = todayTxs.filter(t => t.paymentStatus === 'paid' || t.paymentStatus === 'transfer_confirmed')
-                               .reduce((s,t) => s + t.total, 0);
-  const totalPiutang = allTxs.reduce((s,t) => s + (t.remainingDebt || 0), 0);
-  const pendingTransfer = allTxs.filter(t => t.paymentStatus === 'transfer_pending')
-                                .reduce((s,t) => s + t.total, 0);
+  const todayTxs = allTxs.filter(t => t.dateKey === today);
+
+  // FIX: kas hari ini pakai paidAmount untuk debt, total untuk paid/confirmed
+  const todayKas = todayTxs.reduce((s, t) => {
+    if (t.paymentStatus === 'paid' && t.paymentMethod === 'cash') return s + t.total;
+    if (t.paymentStatus === 'transfer_confirmed') return s + t.total;
+    if (t.paymentMethod === 'debt') return s + (t.paidAmount || 0); // hanya cicilan yang masuk
+    return s;
+  }, 0);
+
+  const totalPiutang    = allTxs.reduce((s, t) => s + (t.remainingDebt || 0), 0);
+  const pendingTransfer = allTxs
+    .filter(t => t.paymentStatus === 'transfer_pending')
+    .reduce((s, t) => s + t.total, 0);
 
   view.innerHTML = `
     <div class="section-header">
-      <h2 class="section-title">Riwayat Transaksi <span style="font-size:13px;font-weight:500;color:var(--text-muted)">${allTxs.length} transaksi</span></h2>
+      <h2 class="section-title">Riwayat Transaksi <span>${allTxs.length} transaksi</span></h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input type="date" class="input" id="tx-filter-date" style="width:auto" value="${today}">
         <button class="btn btn--secondary btn--sm" id="tx-clear-filter">Tampil Semua</button>
@@ -140,9 +143,9 @@ const renderTxRows = (txs) => {
   }
   return txs.map(tx => `
     <tr>
-      <td><span style="font-family:monospace;font-size:11px;color:var(--blue-700);font-weight:700">${tx.invoiceNo || '-'}</span></td>
+      <td><span style="font-family:monospace;font-size:11px;color:var(--blue-700);font-weight:700">${esc(tx.invoiceNo || '-')}</span></td>
       <td style="font-size:11px;white-space:nowrap">${formatDateTime(new Date(tx.date))}</td>
-      <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tx.customerName || '<span style="color:var(--text-muted)">—</span>'}</td>
+      <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(tx.customerName) || '<span style="color:var(--text-muted)">—</span>'}</td>
       <td><span class="badge badge--blue">${tx.items?.length || 0} item</span></td>
       <td style="font-weight:800;color:var(--blue-700);white-space:nowrap">
         ${formatRupiah(tx.total)}
@@ -178,18 +181,18 @@ const renderTxRows = (txs) => {
 
 const bindTxEvents = (allTxs, sortedAll) => {
   document.getElementById('tx-filter-date')?.addEventListener('change', (e) => {
-    const key = e.target.value;
+    const key      = e.target.value;
     const filtered = key
-      ? [...allTxs].filter(tx => tx.dateKey === key).sort((a,b) => new Date(b.date) - new Date(a.date))
+      ? [...allTxs].filter(tx => tx.dateKey === key).sort((a, b) => new Date(b.date) - new Date(a.date))
       : sortedAll;
     const tbody = document.getElementById('tx-tbody');
     if (tbody) tbody.innerHTML = renderTxRows(filtered);
   });
 
   document.getElementById('tx-clear-filter')?.addEventListener('click', () => {
-    const tbody = document.getElementById('tx-tbody');
-    if (tbody) tbody.innerHTML = renderTxRows(sortedAll);
+    const tbody     = document.getElementById('tx-tbody');
     const dateInput = document.getElementById('tx-filter-date');
+    if (tbody) tbody.innerHTML = renderTxRows(sortedAll);
     if (dateInput) dateInput.value = '';
   });
 
@@ -202,33 +205,38 @@ const bindTxEvents = (allTxs, sortedAll) => {
 
     if (action === 'detail') {
       if (txObj) showTxDetail(txObj);
+      return;
     }
 
     if (action === 'confirm-transfer') {
-      if (!confirm(`Konfirmasi transfer ${formatRupiah(txObj?.total)} dari ${txObj?.customerName || 'pelanggan'} sudah diterima?`)) return;
+      if (!txObj) return;
+      if (!confirm(`Konfirmasi transfer ${formatRupiah(txObj.total)} dari ${esc(txObj.customerName || 'pelanggan')} sudah diterima?`)) return;
       try {
         const updated = { ...txObj, paymentStatus: 'transfer_confirmed', paidAmount: txObj.total, confirmedAt: new Date().toISOString() };
         await updateTransaction(updated);
         store.updateTransaction(id, { paymentStatus: 'transfer_confirmed', paidAmount: txObj.total, confirmedAt: updated.confirmedAt });
         window.showToast('Transfer dikonfirmasi! Kas bertambah.', 'success');
-      } catch(err) { console.error(err); window.showToast('Gagal konfirmasi', 'error'); }
+      } catch (err) { console.error('[tx]', err); window.showToast('Gagal konfirmasi', 'error'); }
+      return;
     }
 
     if (action === 'pay-debt') {
       if (txObj) showPayDebtModal(txObj);
+      return;
     }
 
     if (action === 'delete') {
+      if (!txObj) return;
       if (!canDelete(txObj)) {
         window.showToast('Tidak bisa hapus transaksi yang masih ada sisa hutang!', 'error');
         return;
       }
-      if (!confirm(`Hapus transaksi ${txObj?.invoiceNo}? Tindakan tidak bisa dibatalkan.`)) return;
+      if (!confirm(`Hapus transaksi ${esc(txObj.invoiceNo)}? Tindakan tidak bisa dibatalkan.`)) return;
       try {
         await deleteTransaction(id);
         store.removeTransaction(id);
         window.showToast('Transaksi dihapus', 'success');
-      } catch(err) { console.error(err); window.showToast('Gagal menghapus', 'error'); }
+      } catch (err) { console.error('[tx]', err); window.showToast('Gagal menghapus', 'error'); }
     }
   });
 };
@@ -244,9 +252,9 @@ const showPayDebtModal = (tx) => {
     <div class="modal-body">
       <div style="padding:12px;background:var(--bg-elevated);border-radius:10px;border:1.5px solid var(--border-subtle);margin-bottom:14px">
         <div style="font-size:12px;color:var(--text-muted)">Invoice</div>
-        <div style="font-weight:800;font-family:monospace;color:var(--blue-700)">${tx.invoiceNo}</div>
+        <div style="font-weight:800;font-family:monospace;color:var(--blue-700)">${esc(tx.invoiceNo)}</div>
         <div style="font-size:12px;color:var(--text-muted);margin-top:6px">Pelanggan</div>
-        <div style="font-weight:700">${tx.customerName || '—'}</div>
+        <div style="font-weight:700">${esc(tx.customerName || '—')}</div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
@@ -265,7 +273,7 @@ const showPayDebtModal = (tx) => {
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">Riwayat Pembayaran</div>
         ${tx.debtPayments.map(p => `
           <div style="display:flex;justify-content:space-between;padding:6px 10px;background:var(--bg-elevated);border-radius:8px;margin-bottom:4px;font-size:12px">
-            <span>${new Date(p.date).toLocaleDateString('id-ID')} — ${p.note || '-'}</span>
+            <span>${new Date(p.date).toLocaleDateString('id-ID')} — ${esc(p.note || '-')}</span>
             <strong style="color:#16a34a">+${formatRupiah(p.amount)}</strong>
           </div>
         `).join('')}
@@ -273,11 +281,13 @@ const showPayDebtModal = (tx) => {
 
       <div class="input-group">
         <label class="input-label" for="cicil-amount">💵 Jumlah Cicilan (maks. ${formatRupiah(remaining)})</label>
-        <input type="number" class="input" id="cicil-amount" value="${remaining}" min="1" max="${remaining}" step="1000" inputmode="numeric">
+        <input type="number" class="input" id="cicil-amount"
+          value="${remaining}" min="1" max="${remaining}" step="1000" inputmode="numeric">
       </div>
       <div class="input-group" style="margin-top:10px">
         <label class="input-label" for="cicil-note">📝 Catatan (opsional)</label>
-        <input type="text" class="input" id="cicil-note" placeholder="Cicilan ke-2, dll">
+        <input type="text" class="input" id="cicil-note"
+          placeholder="Cicilan ke-2, dll" maxlength="100">
       </div>
     </div>
     <div class="modal-footer">
@@ -292,7 +302,6 @@ const showPayDebtModal = (tx) => {
     document.getElementById('debt-cancel')?.addEventListener('click', () => closeModal('debt-modal'));
     document.getElementById('debt-save')?.addEventListener('click',   async () => {
       const amount = parseFloat(document.getElementById('cicil-amount')?.value) || 0;
-      const note   = document.getElementById('cicil-note')?.value?.trim() || 'Cicilan';
       if (amount <= 0 || amount > remaining) {
         window.showToast(`Jumlah cicilan harus antara 1 dan ${formatRupiah(remaining)}`, 'warning');
         return;
@@ -300,6 +309,11 @@ const showPayDebtModal = (tx) => {
       const newPaid      = (tx.paidAmount || 0) + amount;
       const newRemaining = Math.max(0, remaining - amount);
       const newStatus    = newRemaining === 0 ? 'paid' : 'partial';
+
+      const nextCicilNum = (tx.debtPayments || []).length + 1;
+      const defaultNote  = newRemaining === 0 ? `Pelunasan (#${nextCicilNum}/LUNAS ✅)` : `Cicilan #${nextCicilNum}`;
+      const note         = document.getElementById('cicil-note')?.value?.trim() || defaultNote;
+
       const newPayments  = [...(tx.debtPayments || []), { date: new Date().toISOString(), amount, note }];
 
       const updated = { ...tx, paidAmount: newPaid, remainingDebt: newRemaining, paymentStatus: newStatus, debtPayments: newPayments };
@@ -308,17 +322,17 @@ const showPayDebtModal = (tx) => {
         store.updateTransaction(tx.id, { paidAmount: newPaid, remainingDebt: newRemaining, paymentStatus: newStatus, debtPayments: newPayments });
         closeModal('debt-modal');
         window.showToast(newRemaining === 0 ? '🎉 Hutang LUNAS!' : `Cicilan ${formatRupiah(amount)} dicatat`, 'success');
-      } catch(err) { console.error(err); window.showToast('Gagal simpan cicilan','error'); }
+      } catch (err) { console.error('[debt]', err); window.showToast('Gagal simpan cicilan', 'error'); }
     });
   }, 0);
 };
 
 /* ── Detail Modal ── */
 const showTxDetail = (tx) => {
-  const json = buildReceiptJSON(tx, store.state.settings);
+  const json     = buildReceiptJSON(tx, store.state.settings);
   sessionStorage.setItem('pendingReceipt', JSON.stringify(json));
-  const printUrl  = getPrintSchemeUrl(tx);
-  const canPrint  = store.state.settings.printEnabled;
+  const printUrl = getPrintSchemeUrl(tx);
+  const canPrint = store.state.settings.printEnabled;
 
   const html = `
     <div class="modal-header">
@@ -329,7 +343,7 @@ const showTxDetail = (tx) => {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div style="background:var(--bg-elevated);padding:10px 12px;border-radius:10px;border:1.5px solid var(--border-subtle)">
           <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700">Invoice</div>
-          <div style="font-weight:800;color:var(--blue-700);font-family:monospace;font-size:13px;margin-top:2px">${tx.invoiceNo}</div>
+          <div style="font-weight:800;color:var(--blue-700);font-family:monospace;font-size:13px;margin-top:2px">${esc(tx.invoiceNo)}</div>
         </div>
         <div style="background:var(--bg-elevated);padding:10px 12px;border-radius:10px;border:1.5px solid var(--border-subtle)">
           <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700">Status</div>
@@ -337,7 +351,7 @@ const showTxDetail = (tx) => {
         </div>
         <div style="background:var(--bg-elevated);padding:10px 12px;border-radius:10px;border:1.5px solid var(--border-subtle)">
           <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700">Pelanggan</div>
-          <div style="font-weight:600;margin-top:2px">${tx.customerName || '—'}</div>
+          <div style="font-weight:600;margin-top:2px">${esc(tx.customerName || '—')}</div>
         </div>
         <div style="background:var(--bg-elevated);padding:10px 12px;border-radius:10px;border:1.5px solid var(--border-subtle)">
           <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700">Metode</div>
@@ -378,43 +392,39 @@ const showTxDetail = (tx) => {
 
   setTimeout(() => {
     document.getElementById('td-x')?.addEventListener('click',        () => closeModal('tx-detail'));
-    document.getElementById('td-close-btn')?.addEventListener('click',() => closeModal('tx-detail'));
+    document.getElementById('td-close-btn')?.addEventListener('click', () => closeModal('tx-detail'));
 
+    // PNG export via npm html2canvas
     document.getElementById('btn-save-png')?.addEventListener('click', async () => {
       const btn = document.getElementById('btn-save-png');
       btn.textContent = '⏳...'; btn.disabled = true;
       try {
-        if (!window.html2canvas) {
-          await new Promise((res, rej) => {
-            const s = document.createElement('script');
-            s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
-            s.onload = res; s.onerror = rej;
-            document.head.appendChild(s);
-          });
-        }
+        const { default: html2canvas } = await import('html2canvas');
         const el     = document.getElementById('receipt-capture');
-        const canvas = await window.html2canvas(el, { backgroundColor:'#fff', scale:2, useCORS:true, logging:false });
+        const canvas = await html2canvas(el, { backgroundColor: '#fff', scale: 2, useCORS: true, logging: false });
         const blob   = await new Promise(r => canvas.toBlob(r, 'image/png'));
-        const fname  = `Struk-${tx.invoiceNo||tx.id}.png`;
-        if (navigator.canShare?.({ files:[new File([blob],fname,{type:'image/png'})] })) {
-          await navigator.share({ title:`Struk ${tx.invoiceNo}`, files:[new File([blob],fname,{type:'image/png'})] });
+        const fname  = `Struk-${tx.invoiceNo || tx.id}.png`;
+        if (navigator.canShare?.({ files: [new File([blob], fname, { type: 'image/png' })] })) {
+          await navigator.share({ title: `Struk ${tx.invoiceNo}`, files: [new File([blob], fname, { type: 'image/png' })] });
         } else {
           const url = URL.createObjectURL(blob);
-          Object.assign(document.createElement('a'),{href:url,download:fname}).click();
+          Object.assign(document.createElement('a'), { href: url, download: fname }).click();
           setTimeout(() => URL.revokeObjectURL(url), 2000);
           window.showToast('PNG tersimpan!', 'success');
         }
-      } catch(err) { window.showToast('Gagal buat PNG','error'); }
-      finally { btn.textContent='🖼️ PNG'; btn.disabled=false; }
+      } catch (err) { console.error('[png]', err); window.showToast('Gagal buat PNG', 'error'); }
+      finally { btn.textContent = '🖼️ PNG'; btn.disabled = false; }
     });
 
+    // PDF export via print dialog
     document.getElementById('btn-save-pdf')?.addEventListener('click', () => {
       const el = document.getElementById('receipt-capture');
       if (!el) return;
-      const win = window.open('','_blank','width=400,height=700');
-      win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Struk ${tx.invoiceNo||''}</title>
+      const win = window.open('', '_blank', 'width=400,height=700');
+      if (!win) { window.showToast('Popup diblokir browser. Ijinkan popup.', 'warning'); return; }
+      win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Struk ${esc(tx.invoiceNo || '')}</title>
         <style>@page{size:80mm auto;margin:6mm}body{margin:0;padding:0;font-family:'Courier New',monospace;font-size:12px;color:#111;background:#fff}img{max-width:100%}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>
-      </head><body>${el.innerHTML}<script>window.onload=function(){window.print();window.onafterprint=function(){window.close()};}<\/script></body></html>`);
+      </head><body>${el.innerHTML}<script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}<\/script></body></html>`);
       win.document.close();
     });
   }, 0);

@@ -2,36 +2,17 @@
  * printer.js — Bluetooth Print App integration
  * Protocol: my.bluetoothprint.scheme://<RESPONSE_URL>
  */
-
 import { buildReceiptJSON } from './receipt.js';
 import { formatRupiah }     from './utils/currency.js';
 import { formatDateTime }   from './utils/date.js';
 import store                from './store.js';
 
 /**
- * Build receipt endpoint URL (static GitHub Pages / localhost)
+ * Build receipt endpoint URL (static file for GitHub Pages)
  */
 const getReceiptUrl = () => {
   const path = window.location.pathname.replace(/\/[^/]*$/, '/');
   return `${window.location.origin}${path}receipt-data.html`;
-};
-
-/**
- * Print receipt via Bluetooth Print App scheme
- * Stores JSON in sessionStorage for receipt-data.html to serve.
- */
-export const printReceipt = (txData) => {
-  const settings = store.state.settings;
-  if (!settings.printEnabled) return;
-
-  const jsonData = buildReceiptJSON(txData, settings);
-  sessionStorage.setItem('pendingReceipt', JSON.stringify(jsonData));
-
-  const url = settings.printerUrl
-    ? `my.bluetoothprint.scheme://${settings.printerUrl}`
-    : `my.bluetoothprint.scheme://${getReceiptUrl()}`;
-
-  window.location.href = url;
 };
 
 /**
@@ -48,7 +29,7 @@ export const prepareReceiptForPrint = (txData) => {
  */
 export const getPrintSchemeUrl = (txData) => {
   prepareReceiptForPrint(txData);
-  const settings = store.state.settings;
+  const settings   = store.state.settings;
   const receiptUrl = settings.printerUrl || getReceiptUrl();
   return `my.bluetoothprint.scheme://${receiptUrl}`;
 };
@@ -58,16 +39,16 @@ export const getPrintSchemeUrl = (txData) => {
  */
 export const getReceiptPreviewHTML = (txData) => {
   const settings = store.state.settings;
-  const items = txData.items || [];
+  const items    = txData.items || [];
 
-  const line = (t, bold = false, align = 'left') =>
+  const line  = (t, bold = false, align = 'left') =>
     `<div style="text-align:${align};font-weight:${bold ? 'bold' : 'normal'}">${t}</div>`;
-  const sep = () => '<div style="border-top:1px dashed #bbb;margin:5px 0"></div>';
+  const sep   = () => '<div style="border-top:1px dashed #bbb;margin:5px 0"></div>';
   const empty = () => '<div>&nbsp;</div>';
 
   let html = '';
 
-  // ── Logo di atas struk ──
+  // Logo
   html += `<div style="text-align:center;margin-bottom:2px;margin-top:6px">
     <img src="assets/logo.png"
          alt="Logo"
@@ -104,18 +85,20 @@ export const getReceiptPreviewHTML = (txData) => {
   if (txData.paymentMethod === 'cash') {
     html += line(`Bayar    : ${formatRupiah(txData.paid)}`);
     html += line(`<strong>Kembali  : ${formatRupiah(txData.change)}</strong>`, true);
-  } else {
+  } else if (txData.paymentMethod === 'transfer') {
     html += line(`Transfer : ${formatRupiah(txData.total)}`);
+    html += line(`Status   : ${txData.paymentStatus === 'transfer_confirmed' ? 'TERKONFIRMASI ✅' : 'MENUNGGU KONFIRMASI ⏳'}`);
+  } else if (txData.paymentMethod === 'debt') {
+    html += line(`DP       : ${formatRupiah(txData.paidAmount || 0)}`);
+    html += line(`<strong>Sisa Hutang: ${formatRupiah(txData.remainingDebt || 0)}</strong>`, true);
   }
 
   html += sep();
   html += empty();
   html += line('Terima kasih sudah berbelanja!', true, 'center');
+  // FIX: use settings.shopName
   html += line(settings.shopName || 'Blue Mountain Refilling Station', false, 'center');
   html += empty();
 
   return html;
 };
-
-/** Check if running on Android */
-export const isAndroid = () => /Android/i.test(navigator.userAgent);

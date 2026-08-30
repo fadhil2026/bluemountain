@@ -1,80 +1,86 @@
 /**
- * store.js — Reactive state management (no framework)
+ * store.js — Reactive state management
+ * Handles cart, UI state, and settings.
+ * DB queries handled by Dexie (db.js) — this is UI state only.
  */
 
 const _listeners = {};
 
 const store = {
   state: {
-    cart: [],
-    products: [],
+    cart:         [],
+    products:     [],
     transactions: [],
-    expenses: [],
-    currentView: 'pos',
-    discount: 0,
+    expenses:     [],
+    currentView:  'pos',
+    discount:     0,
     customerName: '',
     settings: {
-      shopName:    'Blue Mountain Refilling Station',
-      shopAddress: 'Jl. Contoh No. 1, Kota',
-      shopPhone:   '0812-3456-7890',
-      cashierName: 'Admin',
-      printerUrl:  '',
+      shopName:     'Blue Mountain Refilling Station',
+      shopAddress:  'Jl. Contoh No. 1, Kota',
+      shopPhone:    '0812-3456-7890',
+      cashierName:  'Admin',
+      printerUrl:   '',
       printEnabled: false,
-      taxRate:     0,
-      bankName:    'BCA',
-      bankNumber:  '',
-      bankHolder:  'Blue Mountain Refilling Station',
-      modalAwal:   0,
+      taxRate:      0,
+      bankName:     'BCA',
+      bankNumber:   '',
+      bankHolder:   'Blue Mountain Refilling Station',
+      qrisNumber:   '',
+      modalAwal:    0,
     },
   },
 
   // ── Subscriptions ──
   on(event, fn) {
     (_listeners[event] ??= []).push(fn);
-    return () => { _listeners[event] = _listeners[event].filter(f => f !== fn); };
+    // Return unsubscribe function
+    return () => {
+      _listeners[event] = (_listeners[event] ?? []).filter(f => f !== fn);
+    };
   },
 
   emit(event, data) {
     (_listeners[event] ?? []).forEach(fn => fn(data));
-    (_listeners['*'] ?? []).forEach(fn => fn(event, data));
   },
 
   // ── Cart ──
-  addToCart(product) {
-    const idx = this.state.cart.findIndex(i => i.product.id === product.id);
+  addToCart(product, quantity = 1) {
+    const qtyToAdd = Math.max(1, parseInt(quantity) || 1);
+    const idx = this.state.cart.findIndex(i => String(i.product.id) === String(product.id));
     if (idx >= 0) {
-      this.state.cart[idx].qty++;
+      this.state.cart[idx].qty += qtyToAdd;
     } else {
-      this.state.cart.push({ product, qty: 1 });
+      this.state.cart.push({ product, qty: qtyToAdd });
     }
     this.emit('cart:change', this.state.cart);
   },
 
   removeFromCart(productId) {
-    this.state.cart = this.state.cart.filter(i => i.product.id !== productId);
+    this.state.cart = this.state.cart.filter(i => String(i.product.id) !== String(productId));
     this.emit('cart:change', this.state.cart);
   },
 
   setQty(productId, qty) {
     if (qty <= 0) return this.removeFromCart(productId);
-    const item = this.state.cart.find(i => i.product.id === productId);
+    const item = this.state.cart.find(i => String(i.product.id) === String(productId));
     if (item) { item.qty = qty; this.emit('cart:change', this.state.cart); }
   },
 
   clearCart() {
-    this.state.cart = [];
-    this.state.discount = 0;
+    this.state.cart         = [];
+    this.state.discount     = 0;
     this.state.customerName = '';
     this.emit('cart:change', this.state.cart);
   },
 
   setDiscount(amount) {
-    this.state.discount = Math.max(0, amount);
+    this.state.discount = Math.max(0, parseFloat(amount) || 0);
     this.emit('cart:change', this.state.cart);
   },
 
   setCustomerName(name) {
-    this.state.customerName = name;
+    this.state.customerName = String(name ?? '').slice(0, 80);
   },
 
   // ── Computed ──
@@ -83,7 +89,7 @@ const store = {
   },
 
   get tax() {
-    return Math.round(this.subtotal * this.state.settings.taxRate / 100);
+    return Math.round(this.subtotal * (this.state.settings.taxRate || 0) / 100);
   },
 
   get total() {
@@ -140,7 +146,7 @@ const store = {
     this.emit('expenses:change', this.state.expenses);
   },
 
-  // ── View ──
+  // ── Navigation ──
   navigate(view) {
     this.state.currentView = view;
     this.emit('navigate', view);

@@ -1,9 +1,11 @@
 /**
  * views/settings.js — App settings
+ * FIX: version from __APP_VERSION__ (injected by Vite define)
  */
-import { getSetting, setSetting } from '../db.js';
-import store from '../store.js';
-import { openModal, closeModal } from './modals.js';
+import { getSetting, setSetting, clearAllData } from '../db.js';
+import store                      from '../store.js';
+import { openModal, closeModal }  from './modals.js';
+import { esc }                    from '../utils/sanitize.js';
 
 export const initSettings = async () => {
   await loadSettings();
@@ -11,7 +13,12 @@ export const initSettings = async () => {
 };
 
 const loadSettings = async () => {
-  const keys = ['shopName','shopAddress','shopPhone','cashierName','printerUrl','printEnabled','taxRate','bankName','bankNumber','bankHolder'];
+  const keys = [
+    'shopName', 'shopAddress', 'shopPhone', 'cashierName',
+    'printerUrl', 'printEnabled', 'taxRate',
+    'bankName', 'bankNumber', 'bankHolder',
+    'qrisNumber',
+  ];
   const s = {};
   for (const k of keys) {
     const v = await getSetting(k);
@@ -22,7 +29,13 @@ const loadSettings = async () => {
 
 export const renderSettings = async () => {
   const view = document.getElementById('view-settings');
-  const s = store.state.settings;
+  const s    = store.state.settings;
+
+  // __APP_VERSION__ is injected by vite.config.js define
+  const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.0.0';
+
+  // Check if app is running in standalone mode (PWA installed)
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
   view.innerHTML = `
     <div class="section-header">
@@ -37,26 +50,23 @@ export const renderSettings = async () => {
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">Nama Toko</div>
-          <div class="settings-row__desc">Tampil di struk & header</div>
+          <div class="settings-row__desc">Tampil di struk &amp; header</div>
         </div>
-        <input type="text" class="input" id="set-shopName" value="${s.shopName || ''}"
-          style="max-width:260px">
+        <input type="text" class="input" id="set-shopName" value="${esc(s.shopName || '')}" maxlength="80" style="max-width:260px">
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">Alamat</div>
         </div>
-        <input type="text" class="input" id="set-shopAddress" value="${s.shopAddress || ''}"
-          style="max-width:260px">
+        <input type="text" class="input" id="set-shopAddress" value="${esc(s.shopAddress || '')}" maxlength="120" style="max-width:260px">
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">No. Telepon</div>
         </div>
-        <input type="text" class="input" id="set-shopPhone" value="${s.shopPhone || ''}"
-          style="max-width:200px">
+        <input type="text" class="input" id="set-shopPhone" value="${esc(s.shopPhone || '')}" maxlength="20" style="max-width:200px">
       </div>
 
       <div class="settings-row">
@@ -64,8 +74,7 @@ export const renderSettings = async () => {
           <div class="settings-row__label">Nama Kasir</div>
           <div class="settings-row__desc">Tampil di struk sebagai kasir</div>
         </div>
-        <input type="text" class="input" id="set-cashierName" value="${s.cashierName || 'Admin'}"
-          style="max-width:200px">
+        <input type="text" class="input" id="set-cashierName" value="${esc(s.cashierName || 'Admin')}" maxlength="40" style="max-width:200px">
       </div>
 
       <div class="settings-row">
@@ -73,8 +82,7 @@ export const renderSettings = async () => {
           <div class="settings-row__label">Tarif Pajak (%)</div>
           <div class="settings-row__desc">0 = tidak ada pajak</div>
         </div>
-        <input type="number" class="input" id="set-taxRate" value="${s.taxRate || 0}"
-          min="0" max="100" style="max-width:100px">
+        <input type="number" class="input" id="set-taxRate" value="${s.taxRate || 0}" min="0" max="100" step="0.5" style="max-width:100px">
       </div>
     </div>
 
@@ -86,24 +94,21 @@ export const renderSettings = async () => {
         <div class="settings-row__info">
           <div class="settings-row__label">Nama Bank</div>
         </div>
-        <input type="text" class="input" id="set-bankName" value="${s.bankName || 'BCA'}"
-          style="max-width:200px">
+        <input type="text" class="input" id="set-bankName" value="${esc(s.bankName || 'BCA')}" maxlength="30" style="max-width:200px">
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">Nomor Rekening</div>
         </div>
-        <input type="text" class="input" id="set-bankNumber" value="${s.bankNumber || ''}"
-          style="max-width:220px" placeholder="1234567890">
+        <input type="text" class="input" id="set-bankNumber" value="${esc(s.bankNumber || '')}" maxlength="30" style="max-width:220px" placeholder="1234567890">
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">Atas Nama</div>
         </div>
-        <input type="text" class="input" id="set-bankHolder" value="${s.bankHolder || ''}"
-          style="max-width:240px">
+        <input type="text" class="input" id="set-bankHolder" value="${esc(s.bankHolder || '')}" maxlength="60" style="max-width:240px">
       </div>
     </div>
 
@@ -129,8 +134,8 @@ export const renderSettings = async () => {
             Contoh: <code style="font-size:11px;color:var(--blue-300)">http://192.168.1.x/receipt.php</code>
           </div>
         </div>
-        <input type="url" class="input" id="set-printerUrl" value="${s.printerUrl || ''}"
-          placeholder="http://..." style="max-width:280px">
+        <input type="url" class="input" id="set-printerUrl" value="${esc(s.printerUrl || '')}"
+          placeholder="http://..." maxlength="200" style="max-width:280px">
       </div>
 
       <div class="settings-row">
@@ -151,20 +156,27 @@ export const renderSettings = async () => {
           <div class="settings-row__label">Install sebagai App</div>
           <div class="settings-row__desc">Tambahkan ke layar utama perangkat</div>
         </div>
-        <button class="btn btn--primary btn--sm" id="btn-install-pwa">📲 Install</button>
+        ${isStandalone
+          ? `<span class="badge badge--green">✅ App Terinstall</span>`
+          : `<button class="btn btn--primary btn--sm" id="btn-install-pwa">📲 Install</button>`
+        }
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">Versi Aplikasi</div>
+          <div class="settings-row__desc">Dukungan Otomatis via package.json &amp; Vite Engine</div>
         </div>
-        <span class="badge badge--blue">v1.0.0</span>
+        <div style="text-align:right">
+          <span class="badge badge--blue" style="font-size:12px;padding:6px 12px;font-weight:800">v${esc(appVersion)} High-End</span>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">Build: ${new Date().toLocaleDateString('id-ID')}</div>
+        </div>
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">Hapus Cache</div>
-          <div class="settings-row__desc">Reset service worker cache</div>
+          <div class="settings-row__desc">Reset service worker cache &amp; reload</div>
         </div>
         <button class="btn btn--secondary btn--sm" id="btn-clear-cache">🗑️ Clear Cache</button>
       </div>
@@ -176,7 +188,7 @@ export const renderSettings = async () => {
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">Reset Semua Data</div>
-          <div class="settings-row__desc" style="color:var(--color-danger)">Hapus semua transaksi dan produk. Tidak bisa dibatalkan!</div>
+          <div class="settings-row__desc" style="color:var(--color-danger)">Hapus semua transaksi, pengeluaran, dan produk. Tidak bisa dibatalkan!</div>
         </div>
         <button class="btn btn--danger btn--sm" id="btn-reset-all">🗑️ Reset</button>
       </div>
@@ -187,11 +199,10 @@ export const renderSettings = async () => {
 };
 
 const bindSettingsEvents = () => {
-  // Save settings
   document.getElementById('btn-save-settings')?.addEventListener('click', async () => {
     const fields = [
-      'shopName','shopAddress','shopPhone','cashierName','taxRate',
-      'bankName','bankNumber','bankHolder','printerUrl'
+      'shopName', 'shopAddress', 'shopPhone', 'cashierName', 'taxRate',
+      'bankName', 'bankNumber', 'bankHolder', 'printerUrl', 'qrisNumber',
     ];
     const updates = {};
     for (const f of fields) {
@@ -212,36 +223,49 @@ const bindSettingsEvents = () => {
     window.showToast('Pengaturan berhasil disimpan', 'success');
   });
 
-  // Printer guide
   document.getElementById('btn-printer-guide')?.addEventListener('click', () => {
     showPrinterGuide();
   });
 
-  // Install PWA
   document.getElementById('btn-install-pwa')?.addEventListener('click', () => {
     if (window._pwaPrompt) {
       window._pwaPrompt.prompt();
     } else {
-      window.showToast('Buka di Chrome Android untuk install', 'info');
+      window.showToast('Buka di Chrome / Edge untuk meng-install aplikasi ini', 'info');
     }
   });
 
-  // Clear cache
   document.getElementById('btn-clear-cache')?.addEventListener('click', async () => {
-    if ('caches' in window) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map(k => caches.delete(k)));
-      window.showToast('Cache dihapus. Reload untuk memperbarui.', 'success');
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const reg of registrations) {
+          await reg.unregister();
+        }
+      }
+      window.showToast('Cache dihapus. Memperbarui...', 'success');
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (err) {
+      console.error('[cache]', err);
+      window.showToast('Gagal hapus cache', 'error');
     }
   });
 
-  // Reset all
-  document.getElementById('btn-reset-all')?.addEventListener('click', () => {
-    const confirmed = confirm('⚠️ HAPUS SEMUA DATA?\n\nSemua transaksi dan produk akan dihapus permanen.\nTindakan ini TIDAK dapat dibatalkan!');
+  document.getElementById('btn-reset-all')?.addEventListener('click', async () => {
+    const confirmed = confirm('⚠️ HAPUS SEMUA DATA?\n\nSemua transaksi, pengeluaran, dan produk akan dihapus permanen.\nTindakan ini TIDAK dapat dibatalkan!');
     if (confirmed) {
-      indexedDB.deleteDatabase('BlueMountainPOS');
-      window.showToast('Database dihapus. Reload halaman...', 'error');
-      setTimeout(() => window.location.reload(), 2000);
+      try {
+        await clearAllData();
+        window.showToast('Semua data berhasil dihapus. Reloading...', 'error');
+        setTimeout(() => window.location.reload(), 1500);
+      } catch (err) {
+        console.error('[reset]', err);
+        window.showToast('Gagal menghapus data', 'error');
+      }
     }
   });
 };
@@ -256,7 +280,7 @@ const showPrinterGuide = () => {
       <h3 style="color:var(--text-primary);margin-bottom:8px">Langkah Setup:</h3>
       <ol style="padding-left:20px;display:flex;flex-direction:column;gap:10px">
         <li><strong style="color:var(--text-primary)">Install App:</strong><br>
-          Download <a href="https://play.google.com/store/apps/details?id=mate.bluetoothprint" target="_blank"
+          Download <a href="https://play.google.com/store/apps/details?id=mate.bluetoothprint" target="_blank" rel="noopener noreferrer"
             style="color:var(--blue-300)">Bluetooth Print App</a> dari Play Store</li>
         <li><strong style="color:var(--text-primary)">Enable Browser Print:</strong><br>
           Buka app → Settings → Browser/Website Print → Enable</li>
@@ -278,9 +302,8 @@ const showPrinterGuide = () => {
     </div>
   `;
   openModal(html, 'printer-guide');
-  // setTimeout 0: ensure modal DOM is painted before querying elements
   setTimeout(() => {
-    document.getElementById('pg-close')?.addEventListener('click', () => closeModal());
-    document.getElementById('pg-close2')?.addEventListener('click', () => closeModal());
+    document.getElementById('pg-close')?.addEventListener('click',  () => closeModal('printer-guide'));
+    document.getElementById('pg-close2')?.addEventListener('click', () => closeModal('printer-guide'));
   }, 0);
 };
