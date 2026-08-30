@@ -67,5 +67,72 @@ export const clearAllData = async () => {
   localStorage.clear();
 };
 
+// ── Export Full Backup JSON (Cross-device sync) ──
+export const exportFullBackup = async () => {
+  const [products, transactions, expenses, settings] = await Promise.all([
+    db.products.toArray(),
+    db.transactions.toArray(),
+    db.expenses.toArray(),
+    db.settings.toArray(),
+  ]);
+
+  const shopSetting = settings.find(s => s.key === 'shopName');
+  const shopName = shopSetting?.value || 'Blue Mountain';
+
+  return {
+    app: 'Blue Mountain POS',
+    version: '3.0.0',
+    exportedAt: new Date().toISOString(),
+    shopName,
+    data: {
+      products,
+      transactions,
+      expenses,
+      settings,
+    },
+    meta: {
+      productCount: products.length,
+      transactionCount: transactions.length,
+      expenseCount: expenses.length,
+      settingCount: settings.length,
+    },
+  };
+};
+
+// ── Import Full Backup JSON (Cross-device sync) ──
+export const importFullBackup = async (backupJson, mode = 'replace') => {
+  if (!backupJson || !backupJson.data) {
+    throw new Error('Format file backup tidak valid atau rusak.');
+  }
+
+  const { products = [], transactions = [], expenses = [], settings = [] } = backupJson.data;
+
+  if (mode === 'replace') {
+    await Promise.all([
+      db.products.clear(),
+      db.transactions.clear(),
+      db.expenses.clear(),
+      db.settings.clear(),
+    ]);
+
+    if (products.length)     await db.products.bulkAdd(products);
+    if (transactions.length) await db.transactions.bulkAdd(transactions);
+    if (expenses.length)     await db.expenses.bulkAdd(expenses);
+    if (settings.length)     await db.settings.bulkPut(settings);
+  } else if (mode === 'merge') {
+    if (products.length)     await db.products.bulkPut(products);
+    if (transactions.length) await db.transactions.bulkPut(transactions);
+    if (expenses.length)     await db.expenses.bulkPut(expenses);
+    if (settings.length)     await db.settings.bulkPut(settings);
+  }
+
+  return {
+    products: products.length,
+    transactions: transactions.length,
+    expenses: expenses.length,
+    settings: settings.length,
+  };
+};
+
 // ── Open DB (Dexie opens lazily, but we can pre-open) ──
 export const openDB = () => db.open();

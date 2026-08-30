@@ -2,7 +2,7 @@
  * views/settings.js — App settings
  * FIX: version from __APP_VERSION__ (injected by Vite define)
  */
-import { getSetting, setSetting, clearAllData } from '../db.js';
+import { getSetting, setSetting, clearAllData, exportFullBackup, importFullBackup, getAllProducts, getAllTransactions, getAllExpenses } from '../db.js';
 import store                      from '../store.js';
 import { openModal, closeModal }  from './modals.js';
 import { esc }                    from '../utils/sanitize.js';
@@ -182,6 +182,34 @@ export const renderSettings = async () => {
       </div>
     </div>
 
+    <!-- Backup & Restore Data (Sinkronisasi Antar Device) -->
+    <div class="settings-section">
+      <div class="settings-section-header">💾 Ekspor &amp; Impor Data (Sinkronisasi Antar Device)</div>
+
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__label">📥 Ekspor Backup Lengkap (JSON)</div>
+          <div class="settings-row__desc">Unduh seluruh produk, transaksi, cicilan, pengeluaran &amp; pengaturan ke file JSON. Kirim file ini ke device lain untuk sinkronisasi.</div>
+        </div>
+        <button class="btn btn--primary btn--sm" id="btn-export-backup" style="background:#2563eb;white-space:nowrap">
+          📥 Unduh Backup JSON
+        </button>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__label">📤 Impor / Pulihkan Data (JSON)</div>
+          <div class="settings-row__desc">Pulihkan atau sinkronkan database dari file backup JSON perangkat lain.</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="file" id="input-import-backup" accept=".json,application/json" style="display:none">
+          <button class="btn btn--secondary btn--sm" id="btn-trigger-import" style="white-space:nowrap">
+            📤 Pilih File Backup
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Danger Zone -->
     <div class="settings-section">
       <div class="settings-section-header" style="color:#fca5a5">⚠️ Zona Berbahaya</div>
@@ -199,6 +227,153 @@ export const renderSettings = async () => {
 };
 
 const bindSettingsEvents = () => {
+  // Export Full Backup JSON
+  document.getElementById('btn-export-backup')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-export-backup');
+    if (btn) { btn.textContent = '⏳ Menyiapkan...'; btn.disabled = true; }
+    try {
+      const backup = await exportFullBackup();
+      const jsonStr = JSON.stringify(backup, null, 2);
+      const blob    = new Blob([jsonStr], { type: 'application/json' });
+      const nowStr  = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+      const cleanShop = (backup.shopName || 'KASIR').replace(/[^a-zA-Z0-9]/g, '_');
+      const fname   = `Backup-KASIR-${cleanShop}-${nowStr}.json`;
+
+      if (navigator.canShare?.({ files: [new File([blob], fname, { type: 'application/json' })] })) {
+        await navigator.share({ title: `Backup KASIR`, files: [new File([blob], fname, { type: 'application/json' })] });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a   = document.createElement('a');
+        a.href     = url;
+        a.download = fname;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      }
+      window.showToast('✅ File backup berhasil diunduh!', 'success');
+    } catch (err) {
+      console.error('[export-backup]', err);
+      window.showToast('Gagal ekspor backup', 'error');
+    } finally {
+      if (btn) { btn.textContent = '📥 Unduh Backup JSON'; btn.disabled = false; }
+    }
+  });
+
+  // Import Backup JSON Trigger
+  document.getElementById('btn-trigger-import')?.addEventListener('click', () => {
+    document.getElementById('input-import-backup')?.click();
+  });
+
+  // Import Backup File Change
+  document.getElementById('input-import-backup')?.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result;
+        const parsed = JSON.parse(text);
+
+        if (!parsed.data || (!parsed.data.products && !parsed.data.transactions)) {
+          window.showToast('Format file backup tidak valid!', 'error');
+          return;
+        }
+
+        const pCount = (parsed.data.products || []).length;
+        const tCount = (parsed.data.transactions || []).length;
+        const eCount = (parsed.data.expenses || []).length;
+        const expDate = parsed.exportedAt ? new Date(parsed.exportedAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Tidak diketahui';
+
+        const modalHtml = `
+          <div class="modal-header">
+            <span class="modal-title">📤 Konfirmasi Impor Data</span>
+            <button class="modal-close" id="imp-x">✕</button>
+          </div>
+          <div class="modal-body">
+            <div style="padding:12px;background:#dbeafe;border-radius:10px;font-size:12px;color:#1e40af;margin-bottom:12px">
+              ℹ️ <strong>File Backup Terdeteksi:</strong><br>
+              Toko: <strong>${esc(parsed.shopName || 'Blue Mountain')}</strong><br>
+              Waktu Ekspor: ${expDate}
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;text-align:center">
+              <div style="padding:8px;background:var(--bg-elevated);border-radius:8px;border:1px solid var(--border-subtle)">
+                <div style="font-size:10px;color:var(--text-muted)">Produk</div>
+                <div style="font-size:16px;font-weight:900;color:var(--blue-700)">${pCount}</div>
+              </div>
+              <div style="padding:8px;background:var(--bg-elevated);border-radius:8px;border:1px solid var(--border-subtle)">
+                <div style="font-size:10px;color:var(--text-muted)">Transaksi</div>
+                <div style="font-size:16px;font-weight:900;color:#16a34a">${tCount}</div>
+              </div>
+              <div style="padding:8px;background:var(--bg-elevated);border-radius:8px;border:1px solid var(--border-subtle)">
+                <div style="font-size:10px;color:var(--text-muted)">Pengeluaran</div>
+                <div style="font-size:16px;font-weight:900;color:#dc2626">${eCount}</div>
+              </div>
+            </div>
+
+            <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:8px">Pilih Mode Impor:</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <label style="display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--bg-elevated);border-radius:8px;border:1.5px solid var(--border-subtle);cursor:pointer">
+                <input type="radio" name="import-mode" value="replace" checked style="margin-top:2px">
+                <div style="font-size:12px">
+                  <strong>🔄 Timpa / Restore Penuh (Rekomendasi untuk Pindah HP)</strong>
+                  <div style="font-size:11px;color:var(--text-muted)">Ganti seluruh database di device ini sama persis dengan file backup.</div>
+                </div>
+              </label>
+              <label style="display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--bg-elevated);border-radius:8px;border:1.5px solid var(--border-subtle);cursor:pointer">
+                <input type="radio" name="import-mode" value="merge" style="margin-top:2px">
+                <div style="font-size:12px">
+                  <strong>➕ Gabung Data (Merge)</strong>
+                  <div style="font-size:11px;color:var(--text-muted)">Tambahkan data dari file backup tanpa menghapus data lokal yang sudah ada.</div>
+                </div>
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn--secondary" id="imp-cancel">Batal</button>
+            <button class="btn btn--success" id="imp-confirm">🚀 Pulihkan &amp; Sinkronkan</button>
+          </div>
+        `;
+
+        openModal(modalHtml, 'import-confirm-modal');
+
+        setTimeout(() => {
+          document.getElementById('imp-x')?.addEventListener('click',      () => closeModal('import-confirm-modal'));
+          document.getElementById('imp-cancel')?.addEventListener('click', () => closeModal('import-confirm-modal'));
+          document.getElementById('imp-confirm')?.addEventListener('click', async () => {
+            const mode = document.querySelector('input[name="import-mode"]:checked')?.value || 'replace';
+            const btnConfirm = document.getElementById('imp-confirm');
+            if (btnConfirm) { btnConfirm.textContent = '⏳ Memulihkan...'; btnConfirm.disabled = true; }
+
+            try {
+              await importFullBackup(parsed, mode);
+              // Reload fresh data into store
+              const [newProds, newTxs, newExps] = await Promise.all([
+                getAllProducts(),
+                getAllTransactions(),
+                getAllExpenses(),
+              ]);
+              store.setProducts(newProds);
+              store.setTransactions(newTxs);
+              store.setExpenses(newExps);
+
+              closeModal('import-confirm-modal');
+              window.showToast('🎉 Data berhasil dipulihkan & sinkron!', 'success');
+              setTimeout(() => renderSettings(), 600);
+            } catch (err) {
+              console.error('[import-backup]', err);
+              window.showToast('Gagal memulihkan data: ' + err.message, 'error');
+            }
+          });
+        }, 0);
+
+      } catch (err) {
+        console.error('[parse-backup]', err);
+        window.showToast('File JSON rusak atau tidak terbaca!', 'error');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = ''; // reset
+  });
   document.getElementById('btn-save-settings')?.addEventListener('click', async () => {
     const fields = [
       'shopName', 'shopAddress', 'shopPhone', 'cashierName', 'taxRate',
