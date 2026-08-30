@@ -6,6 +6,7 @@ import { getSetting, setSetting, clearAllData, exportFullBackup, importFullBacku
 import store                      from '../store.js';
 import { openModal, closeModal }  from './modals.js';
 import { esc }                    from '../utils/sanitize.js';
+import { printTestReceipt }       from '../printer.js';
 
 export const initSettings = async () => {
   await loadSettings();
@@ -15,7 +16,7 @@ export const initSettings = async () => {
 const loadSettings = async () => {
   const keys = [
     'shopName', 'shopAddress', 'shopPhone', 'cashierName',
-    'printerUrl', 'printEnabled', 'taxRate',
+    'printerUrl', 'printEnabled', 'printerPaper', 'taxRate',
     'bankName', 'bankNumber', 'bankHolder',
     'qrisNumber',
   ];
@@ -114,34 +115,31 @@ export const renderSettings = async () => {
 
     <!-- Printer -->
     <div class="settings-section">
-      <div class="settings-section-header">🖨️ Bluetooth Thermal Printer</div>
+      <div class="settings-section-header">🖨️ Thermal Printer &amp; Struk Kasir (58mm / 80mm)</div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Aktifkan Print</div>
-          <div class="settings-row__desc">Cetak struk via Bluetooth Print App (Android)</div>
+          <div class="settings-row__label">Ukuran Kertas Thermal</div>
+          <div class="settings-row__desc">Pilih ukuran roll kertas printer thermal Anda</div>
         </div>
-        <label class="toggle-switch">
-          <input type="checkbox" id="set-printEnabled" ${s.printEnabled ? 'checked' : ''}>
-          <span class="toggle-slider"></span>
-        </label>
+        <select class="input" id="set-printerPaper" style="max-width:220px">
+          <option value="58mm" ${s.printerPaper !== '80mm' ? 'selected' : ''}>58mm (Standar Mini Bluetooth Kasir)</option>
+          <option value="80mm" ${s.printerPaper === '80mm' ? 'selected' : ''}>80mm (Thermal Besar / Desktop)</option>
+        </select>
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">URL Printer (Opsional)</div>
-          <div class="settings-row__desc">Untuk testing via localhost PHP server.<br>
-            Contoh: <code style="font-size:11px;color:var(--blue-300)">http://192.168.1.x/receipt.php</code>
-          </div>
+          <div class="settings-row__label">Uji Coba Cetak (Test Print)</div>
+          <div class="settings-row__desc">Cetak struk dummy untuk cek kerapian format 58mm di printer Anda</div>
         </div>
-        <input type="url" class="input" id="set-printerUrl" value="${esc(s.printerUrl || '')}"
-          placeholder="http://..." maxlength="200" style="max-width:280px">
+        <button class="btn btn--secondary btn--sm" id="btn-test-print" style="font-weight:700">🧪 Test Cetak Struk</button>
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Panduan Setup Printer</div>
-          <div class="settings-row__desc">Cara menghubungkan printer Bluetooth</div>
+          <div class="settings-row__label">Panduan Setup Printer Bluetooth</div>
+          <div class="settings-row__desc">Cara menghubungkan printer 58mm di HP Android, PC &amp; Laptop</div>
         </div>
         <button class="btn btn--secondary btn--sm" id="btn-printer-guide">📖 Lihat Panduan</button>
       </div>
@@ -376,7 +374,7 @@ const bindSettingsEvents = () => {
   document.getElementById('btn-save-settings')?.addEventListener('click', async () => {
     const fields = [
       'shopName', 'shopAddress', 'shopPhone', 'cashierName', 'taxRate',
-      'bankName', 'bankNumber', 'bankHolder', 'printerUrl', 'qrisNumber',
+      'bankName', 'bankNumber', 'bankHolder', 'printerUrl', 'printerPaper', 'qrisNumber',
     ];
     const updates = {};
     for (const f of fields) {
@@ -387,14 +385,12 @@ const bindSettingsEvents = () => {
       }
     }
 
-    const printEl = document.getElementById('set-printEnabled');
-    if (printEl) {
-      updates.printEnabled = printEl.checked;
-      await setSetting('printEnabled', printEl.checked);
-    }
-
     store.updateSettings(updates);
     window.showToast('Pengaturan berhasil disimpan', 'success');
+  });
+
+  document.getElementById('btn-test-print')?.addEventListener('click', () => {
+    printTestReceipt();
   });
 
   document.getElementById('btn-printer-guide')?.addEventListener('click', () => {
@@ -447,32 +443,31 @@ const bindSettingsEvents = () => {
 const showPrinterGuide = () => {
   const html = `
     <div class="modal-header">
-      <span class="modal-title">🖨️ Panduan Setup Printer</span>
+      <span class="modal-title">🖨️ Panduan Setup Printer Thermal 58mm</span>
       <button class="modal-close" id="pg-close">✕</button>
     </div>
     <div class="modal-body" style="font-size:13px;line-height:1.7;color:var(--text-secondary)">
-      <h3 style="color:var(--text-primary);margin-bottom:8px">Langkah Setup:</h3>
-      <ol style="padding-left:20px;display:flex;flex-direction:column;gap:10px">
-        <li><strong style="color:var(--text-primary)">Install App:</strong><br>
-          Download <a href="https://play.google.com/store/apps/details?id=mate.bluetoothprint" target="_blank" rel="noopener noreferrer"
-            style="color:var(--blue-300)">Bluetooth Print App</a> dari Play Store</li>
-        <li><strong style="color:var(--text-primary)">Enable Browser Print:</strong><br>
-          Buka app → Settings → Browser/Website Print → Enable</li>
-        <li><strong style="color:var(--text-primary)">Pair Printer:</strong><br>
-          Pasangkan printer Bluetooth di Settings Android terlebih dahulu</li>
-        <li><strong style="color:var(--text-primary)">Pilih Printer di App:</strong><br>
-          Di Bluetooth Print App, pilih printer yang sudah dipasangkan</li>
-        <li><strong style="color:var(--text-primary)">Buka POS di Chrome Android:</strong><br>
-          Kunjungi URL GitHub Pages ini di browser Chrome Android</li>
-        <li><strong style="color:var(--text-primary)">Klik Cetak Struk:</strong><br>
-          Setelah transaksi, klik "Cetak Struk" → App akan otomatis terbuka dan mencetak</li>
-      </ol>
-      <div style="margin-top:16px;padding:12px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:10px;font-size:12px">
-        💡 <strong style="color:var(--text-primary)">Tips:</strong> Aktifkan "Print+Close" di Bluetooth Print App agar app otomatis kembali ke browser setelah cetak.
+      <div style="padding:12px;background:#dbeafe;border-radius:10px;font-size:12px;color:#1e40af;margin-bottom:14px">
+        💡 <strong>Printer Thermal 58mm didukung 100% via 2 Cara:</strong>
       </div>
+
+      <h4 style="color:var(--text-primary);margin-bottom:6px">Metode 1: Direct Web Print (Universal di Semua PC/Laptop/HP)</h4>
+      <ol style="padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:12px">
+        <li>Sambungkan printer thermal USB / Bluetooth ke PC/Laptop/HP Anda.</li>
+        <li>Saat transaksi selesai, klik tombol hijau <strong>"🖨️ Cetak Struk (58mm)"</strong>.</li>
+        <li>Pilih printer thermal Anda di jendela cetak browser $\rightarrow$ Klik <strong>Print</strong>. Struk akan tercetak rapi sesuai lebar roll 58mm.</li>
+      </ol>
+
+      <h4 style="color:var(--text-primary);margin-top:14px;margin-bottom:6px">Metode 2: Bluetooth Print App / RawBT (Khusus HP Android)</h4>
+      <ol style="padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:12px">
+        <li>Download <a href="https://play.google.com/store/apps/details?id=mate.bluetoothprint" target="_blank" rel="noopener noreferrer" style="color:var(--blue-300)">Bluetooth Print App</a> atau <strong>RawBT</strong> dari Play Store.</li>
+        <li>Pair printer Bluetooth di menu Bluetooth HP Anda (PIN default: <code>0000</code> atau <code>1234</code>).</li>
+        <li>Buka aplikasi printer tersebut $\rightarrow$ Pilih printer yang sudah di-pair.</li>
+        <li>Di POS Kasir, klik tombol <strong>"📲 Bluetooth App"</strong> setelah transaksi selesai. Struk langsung tercetak otomatis tanpa popup dialog.</li>
+      </ol>
     </div>
     <div class="modal-footer">
-      <button class="btn btn--primary" id="pg-close2">Mengerti</button>
+      <button class="btn btn--primary" id="pg-close2">Mengerti 👍</button>
     </div>
   `;
   openModal(html, 'printer-guide');

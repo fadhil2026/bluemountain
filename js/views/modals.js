@@ -258,7 +258,7 @@ export const showPaymentModal = (method = 'cash') => {
         const paidNow   = Math.min(parseFloat(document.getElementById('debt-paid-now')?.value) || 0, total);
         const remaining = total - paidNow;
         const status    = paidNow === 0 ? 'unpaid' : (paidNow < total ? 'partial' : 'paid');
-        const custName  = document.getElementById('debt-customer')?.value?.trim() || '';
+        const custName  = document.getElementById('debt-cust-name')?.value?.trim() || store.state.customerName || '';
         txData = {
           invoiceNo: generateInvoiceNo(), date: now, dateKey: todayKey(),
           items: store.state.cart.map(i => ({ product: { ...i.product }, qty: i.qty })),
@@ -289,9 +289,45 @@ export const showPaymentModal = (method = 'cash') => {
 };
 
 /* ─────────────────────────────────────────
-   Quick Amount Helper
+   Process and Save Transaction
    ───────────────────────────────────────── */
-const generateQuickAmounts = (total) => {
+const processTransaction = async (extraData) => {
+  const btn = document.getElementById('btn-pay-confirm');
+  if (btn) { btn.textContent = 'Menyimpan...'; btn.disabled = true; }
+
+  try {
+    const s = store.state;
+    const txData = {
+      invoiceNo:     generateInvoiceNo(),
+      date:          new Date().toISOString(),
+      dateKey:       todayKey(),
+      items:         s.cart.map(i => ({ ...i })),
+      subtotal:      store.subtotal,
+      discount:      store.discount,
+      tax:           store.tax,
+      total:         store.total,
+      cashier:       s.settings.cashierName || 'Kasir',
+      customerName:  s.customerName || '',
+      ...extraData,
+    };
+
+    const id = await saveTransaction(txData);
+    txData.id = id;
+
+    // Update store state
+    store.addTransaction(txData);
+    store.clearCart();
+
+    closeModal('payment-modal');
+    showSuccessOverlay(txData);
+  } catch (err) {
+    console.error('[transaction]', err);
+    window.showToast('Gagal menyimpan transaksi: ' + err.message, 'error');
+    if (btn) { btn.textContent = 'Coba Lagi'; btn.disabled = false; }
+  }
+};
+
+const getCashSuggestions = (total) => {
   const round      = (n) => Math.ceil(n / 5000) * 5000;
   const base       = round(total);
   const candidates = [base, base + 5000, base + 10000, base + 20000, base + 50000, base + 100000];
@@ -299,13 +335,12 @@ const generateQuickAmounts = (total) => {
 };
 
 /* ─────────────────────────────────────────
-   Success Overlay
+   Success Overlay with Prominent Print Options
    ───────────────────────────────────────── */
 const showSuccessOverlay = (txData) => {
   const json = buildReceiptJSON(txData, store.state.settings);
   sessionStorage.setItem('pendingReceipt', JSON.stringify(json));
 
-  const canPrint    = store.state.settings.printEnabled;
   const printUrl    = getPrintSchemeUrl(txData);
   const receiptHTML = getReceiptPreviewHTML(txData);
 
@@ -330,18 +365,28 @@ const showSuccessOverlay = (txData) => {
         ? `<p style="color:var(--color-danger);font-size:13px;margin-top:4px">📋 Sisa hutang: ${formatRupiah(txData.remainingDebt)}</p>`
         : ''}
     </div>
-    <div class="success-actions">
-      ${canPrint
-        ? `<a class="print-btn" href="${printUrl}" id="btn-print-receipt">🖨️ Cetak Struk</a>`
-        : ''}
-      <button class="btn btn--primary" id="btn-new-tx">🔄 Transaksi Baru</button>
-      <button class="btn btn--secondary" id="btn-close-overlay">✕ Tutup</button>
+
+    <!-- Print & Navigation Actions -->
+    <div class="success-actions" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:380px;margin-top:14px">
+      <button class="btn btn--success" id="btn-print-direct" style="flex:1;min-width:140px;font-weight:700;box-shadow:0 4px 12px rgba(16,185,129,0.3)">
+        🖨️ Cetak Struk (58mm)
+      </button>
+      <a class="btn btn--secondary" href="${printUrl}" id="btn-print-bluetooth" style="text-decoration:none;font-size:12px;display:flex;align-items:center;gap:4px">
+        📲 Bluetooth App
+      </a>
+      <button class="btn btn--primary" id="btn-new-tx" style="flex:1;min-width:140px">
+        🔄 Transaksi Baru
+      </button>
+      <button class="btn btn--secondary" id="btn-close-overlay">
+        ✕ Tutup
+      </button>
     </div>
-    <details style="margin-top:12px;max-width:340px;width:100%">
+
+    <details style="margin-top:14px;max-width:340px;width:100%">
       <summary style="cursor:pointer;font-size:12px;color:var(--text-secondary);text-align:center;margin-bottom:8px;font-weight:600">
-        📄 Preview Struk
+        📄 Preview Struk Thermal
       </summary>
-      <div class="receipt-preview">${receiptHTML}</div>
+      <div class="receipt-preview" style="background:#fff;border-radius:8px;padding:8px">${receiptHTML}</div>
     </details>
   `;
 
@@ -354,6 +399,11 @@ const showSuccessOverlay = (txData) => {
 
   document.getElementById('success-close-btn')?.addEventListener('click', closeOverlay);
   document.getElementById('btn-close-overlay')?.addEventListener('click', closeOverlay);
+
+  // Direct 58mm Thermal Print
+  document.getElementById('btn-print-direct')?.addEventListener('click', () => {
+    printThermalDirect(txData);
+  });
 
   document.getElementById('btn-new-tx')?.addEventListener('click', () => {
     closeOverlay();

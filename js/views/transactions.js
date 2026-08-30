@@ -7,7 +7,7 @@ import { formatRupiah }          from '../utils/currency.js';
 import { formatDateTime }        from '../utils/date.js';
 import { esc }                   from '../utils/sanitize.js';
 import { openModal, closeModal } from './modals.js';
-import { getReceiptPreviewHTML, getPrintSchemeUrl } from '../printer.js';
+import { getReceiptPreviewHTML, getPrintSchemeUrl, printThermalDirect } from '../printer.js';
 import { buildReceiptJSON }      from '../receipt.js';
 import store                     from '../store.js';
 
@@ -380,11 +380,15 @@ const showTxDetail = (tx) => {
       </div>
     </div>
 
-    <div class="modal-footer" style="flex-wrap:wrap;gap:8px">
-      <button class="btn btn--secondary" id="td-close-btn">Tutup</button>
-      <button class="btn btn--secondary" id="btn-save-png">🖼️ PNG</button>
-      <button class="btn btn--secondary" id="btn-save-pdf">📄 PDF</button>
-      ${canPrint ? `<a class="print-btn" href="${printUrl}" style="text-decoration:none">🖨️ Cetak</a>` : ''}
+    <div class="modal-footer" style="flex-wrap:wrap;gap:8px;justify-content:flex-end">
+      <button class="btn btn--secondary" id="td-close-btn">✕ Tutup</button>
+      <button class="btn btn--secondary" id="btn-save-png">🖼️ PNG / Share</button>
+      <a class="btn btn--secondary" href="${printUrl}" style="text-decoration:none;font-size:12px;display:flex;align-items:center;gap:4px">
+        📲 Bluetooth App
+      </a>
+      <button class="btn btn--success" id="btn-tx-print-direct" style="font-weight:700">
+        🖨️ Cetak Struk (58mm)
+      </button>
     </div>
   `;
 
@@ -393,6 +397,11 @@ const showTxDetail = (tx) => {
   setTimeout(() => {
     document.getElementById('td-x')?.addEventListener('click',        () => closeModal('tx-detail'));
     document.getElementById('td-close-btn')?.addEventListener('click', () => closeModal('tx-detail'));
+
+    // Direct 58mm Thermal Print
+    document.getElementById('btn-tx-print-direct')?.addEventListener('click', () => {
+      printThermalDirect(tx);
+    });
 
     // PNG export via npm html2canvas
     document.getElementById('btn-save-png')?.addEventListener('click', async () => {
@@ -413,19 +422,7 @@ const showTxDetail = (tx) => {
           window.showToast('PNG tersimpan!', 'success');
         }
       } catch (err) { console.error('[png]', err); window.showToast('Gagal buat PNG', 'error'); }
-      finally { btn.textContent = '🖼️ PNG'; btn.disabled = false; }
-    });
-
-    // PDF export via print dialog
-    document.getElementById('btn-save-pdf')?.addEventListener('click', () => {
-      const el = document.getElementById('receipt-capture');
-      if (!el) return;
-      const win = window.open('', '_blank', 'width=400,height=700');
-      if (!win) { window.showToast('Popup diblokir browser. Ijinkan popup.', 'warning'); return; }
-      win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Struk ${esc(tx.invoiceNo || '')}</title>
-        <style>@page{size:80mm auto;margin:6mm}body{margin:0;padding:0;font-family:'Courier New',monospace;font-size:12px;color:#111;background:#fff}img{max-width:100%}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>
-      </head><body>${el.innerHTML}<script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}<\/script></body></html>`);
-      win.document.close();
+      finally { btn.textContent = '🖼️ PNG / Share'; btn.disabled = false; }
     });
   }, 0);
 };
