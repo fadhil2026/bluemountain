@@ -179,6 +179,18 @@ const updateCartUI = () => {
   const cartTotal = document.getElementById('cart-total');
   const taxAmount = document.getElementById('tax-amount');
   const taxRow    = document.getElementById('tax-row');
+  const custInput = document.getElementById('customer-name');
+  const discInput = document.getElementById('discount-input');
+
+  // Automatically reset/sync customer name when cart is cleared or updated
+  if (custInput && !custInput.matches(':focus')) {
+    custInput.value = store.state.customerName || '';
+  }
+
+  // Automatically reset/sync discount input when cart is cleared or updated
+  if (discInput && !discInput.matches(':focus')) {
+    discInput.value = store.state.discount || '';
+  }
 
   if (!cartItems) return;
 
