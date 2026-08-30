@@ -6,6 +6,7 @@ import { buildReceiptJSON } from './receipt.js';
 import { formatRupiah }     from './utils/currency.js';
 import { formatDateTime }   from './utils/date.js';
 import store                from './store.js';
+import logoUrl              from '../assets/logo.png';
 
 /**
  * Build receipt endpoint URL (static file for GitHub Pages)
@@ -49,11 +50,10 @@ export const getReceiptPreviewHTML = (txData) => {
   let html = '';
 
   // Logo
-  html += `<div style="text-align:center;margin-bottom:2px;margin-top:6px">
-    <img src="assets/logo.png"
+  html += `<div style="text-align:center;margin-bottom:8px;margin-top:4px">
+    <img src="${logoUrl}"
          alt="Logo"
-         style="width:90px;height:90px;object-fit:contain;display:inline-block"
-         onerror="this.style.display='none'">
+         style="width:85px;height:85px;object-fit:contain;display:inline-block">
   </div>`;
 
   html += line(settings.shopName || 'Blue Mountain Refilling Station', true, 'center');
