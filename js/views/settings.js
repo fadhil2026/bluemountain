@@ -234,25 +234,24 @@ const bindSettingsEvents = () => {
     try {
       const backup = await exportFullBackup();
       const jsonStr = JSON.stringify(backup, null, 2);
-      const blob    = new Blob([jsonStr], { type: 'application/json' });
+      const blob    = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
       const nowStr  = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
       const cleanShop = (backup.shopName || 'KASIR').replace(/[^a-zA-Z0-9]/g, '_');
       const fname   = `Backup-KASIR-${cleanShop}-${nowStr}.json`;
 
-      if (navigator.canShare?.({ files: [new File([blob], fname, { type: 'application/json' })] })) {
-        await navigator.share({ title: `Backup KASIR`, files: [new File([blob], fname, { type: 'application/json' })] });
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a   = document.createElement('a');
-        a.href     = url;
-        a.download = fname;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 2000);
-      }
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement('a');
+      a.href     = url;
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+
       window.showToast('✅ File backup berhasil diunduh!', 'success');
     } catch (err) {
       console.error('[export-backup]', err);
-      window.showToast('Gagal ekspor backup', 'error');
+      window.showToast('Gagal ekspor backup: ' + (err.message || 'Error'), 'error');
     } finally {
       if (btn) { btn.textContent = '📥 Unduh Backup JSON'; btn.disabled = false; }
     }
