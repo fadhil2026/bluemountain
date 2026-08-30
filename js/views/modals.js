@@ -5,7 +5,7 @@ import store                  from '../store.js';
 import { formatRupiah }       from '../utils/currency.js';
 import { esc }                from '../utils/sanitize.js';
 import { saveTransaction }    from '../db.js';
-import { getReceiptPreviewHTML, getPrintSchemeUrl, prepareReceiptForPrint } from '../printer.js';
+import { getReceiptPreviewHTML, getPrintSchemeUrl, printThermalDirect } from '../printer.js';
 import { buildReceiptJSON }   from '../receipt.js';
 import { generateInvoiceNo }  from '../utils/invoice.js';
 import { todayKey }           from '../utils/date.js';
@@ -25,7 +25,6 @@ export const openModal = (html, id = 'generic-modal') => {
     if (e.target === overlay) closeModal(id);
   });
 
-  // Trap focus inside modal
   const focusable = overlay.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
   if (focusable.length) focusable[0].focus();
 
@@ -35,15 +34,25 @@ export const openModal = (html, id = 'generic-modal') => {
 export const closeModal = (id = null) => {
   const selector = id ? `#overlay-${id}` : '.modal-overlay';
   const overlays = id
-    ? [document.querySelector(selector)]
-    : [...document.querySelectorAll(selector)];
+    ? [document.querySelector(selector)].filter(Boolean)
+    : [...document.querySelectorAll('.modal-overlay')];
 
   overlays.forEach(overlay => {
     if (!overlay) return;
     overlay.querySelector('.modal')?.classList.add('closing');
     overlay.classList.add('closing');
-    setTimeout(() => overlay.remove(), 200);
+    setTimeout(() => overlay.remove(), 180);
   });
+};
+
+/* ─────────────────────────────────────────
+   Quick Amount Helper
+   ───────────────────────────────────────── */
+const generateQuickAmounts = (total) => {
+  const round = (n) => Math.ceil(n / 5000) * 5000;
+  const base  = round(total);
+  const candidates = [base, base + 5000, base + 10000, base + 20000, base + 50000, base + 100000];
+  return [...new Set(candidates.filter(a => a >= total))].slice(0, 4);
 };
 
 /* ─────────────────────────────────────────
@@ -52,9 +61,9 @@ export const closeModal = (id = null) => {
 export const showPaymentModal = (method = 'cash') => {
   const total    = store.total;
   const subtotal = store.subtotal;
-  const discount = store.state.discount;
+  const discount = store.state.discount || 0;
   const tax      = store.tax;
-  const s        = store.state.settings;
+  const s        = store.state.settings || {};
 
   const bankName   = esc(s.bankName   || 'BCA');
   const bankNumber = esc(s.bankNumber || '—');
@@ -62,13 +71,13 @@ export const showPaymentModal = (method = 'cash') => {
 
   const html = `
     <div class="modal-header">
-      <span class="modal-title">💳 Pembayaran</span>
+      <span class="modal-title">💳 Pembayaran Transaksi</span>
       <button class="modal-close" id="pay-close-btn" aria-label="Tutup">✕</button>
     </div>
     <div class="modal-body">
 
       <div class="payment-modal-total">
-        <div class="label">Total Pembayaran</div>
+        <div class="label">Total Tagihan</div>
         <div class="amount">${formatRupiah(total)}</div>
         ${discount > 0 ? `<div style="font-size:12px;color:var(--color-success);margin-top:4px;font-weight:600">Diskon: -${formatRupiah(discount)}</div>` : ''}
         ${tax > 0 ? `<div style="font-size:12px;color:var(--color-warning);font-weight:600">Pajak: ${formatRupiah(tax)}</div>` : ''}
@@ -83,54 +92,54 @@ export const showPaymentModal = (method = 'cash') => {
         </button>
         <button class="pay-tab ${method === 'debt' ? 'active' : ''}" data-method="debt"
           style="background:${method === 'debt' ? '#fef3c7' : 'var(--color-warning-bg,#fef9c3)'};border-color:#d97706">
-          <span class="pay-tab__icon">📋</span>Bayar Nanti
+          <span class="pay-tab__icon">📋</span>Hutang / Cicil
         </button>
       </div>
 
-      <!-- Cash section -->
+      <!-- Cash Section -->
       <div id="pay-cash-section" style="${method !== 'cash' ? 'display:none' : ''}">
         <div class="input-group">
-          <label class="input-label" for="cash-received">💰 Jumlah Bayar (Rp)</label>
+          <label class="input-label" for="cash-received">💰 Jumlah Uang Diterima (Rp)</label>
           <input type="number" class="input" id="cash-received"
             value="${total}" min="${total}" max="999999999" step="1000"
-            inputmode="numeric" pattern="[0-9]*">
+            inputmode="numeric" placeholder="${total}">
         </div>
         <div class="quick-amounts" id="quick-amounts" style="margin-top:8px">
           ${generateQuickAmounts(total).map(a =>
             `<button class="quick-amt-btn" data-amount="${a}">${formatRupiah(a)}</button>`
           ).join('')}
         </div>
-        <div class="change-row" id="change-row" style="margin-top:8px">
-          <span class="label">💰 Kembalian</span>
-          <span class="value" id="change-amount">${formatRupiah(0)}</span>
+        <div class="change-row" id="change-row" style="margin-top:8px;padding:10px 14px;background:var(--color-success-bg);border:1.5px solid var(--color-success-border);border-radius:10px;display:flex;justify-content:space-between;align-items:center">
+          <span class="label" style="font-weight:700;color:var(--color-success)">💰 Kembalian</span>
+          <span class="value" id="change-amount" style="font-size:18px;font-weight:900;color:var(--color-success)">${formatRupiah(0)}</span>
         </div>
       </div>
 
-      <!-- Transfer section -->
+      <!-- Transfer Section -->
       <div id="pay-transfer-section" style="${method !== 'transfer' ? 'display:none' : ''}">
-        <div class="transfer-info">
-          <div style="font-size:32px;margin-bottom:8px">📲</div>
-          <div style="font-size:13px;color:var(--text-secondary)">Transfer ke rekening:</div>
-          <div style="font-size:18px;font-weight:800;color:var(--text-primary);margin:6px 0">${bankName}: ${bankNumber}</div>
-          <div style="font-size:13px;color:var(--text-secondary)">a/n ${bankHolder}</div>
-          <div style="margin-top:10px;padding:8px 12px;background:white;border-radius:8px;font-size:13px;font-weight:700;color:var(--blue-700);border:1.5px solid var(--blue-200)">
-            Nominal: ${formatRupiah(total)}
-          </div>
-          <div style="margin-top:8px;padding:8px 12px;background:#fef3c7;border-radius:8px;font-size:12px;color:#92400e;border:1.5px solid #fcd34d">
-            ⚠️ Status: <strong>Menunggu Konfirmasi</strong> — kas baru tercatat setelah dikonfirmasi diterima
+        <div class="transfer-info" style="text-align:center;padding:12px;background:var(--bg-elevated);border-radius:12px;border:1px solid var(--border-subtle)">
+          <div style="font-size:32px;margin-bottom:4px">📲</div>
+          <div style="font-size:13px;color:var(--text-secondary)">Silakan transfer nominal berikut:</div>
+          <div style="font-size:22px;font-weight:900;color:var(--blue-600);margin:6px 0">${formatRupiah(total)}</div>
+          <div style="margin-top:8px;padding:10px;background:#fff;border-radius:8px;border:1.5px dashed var(--blue-300);text-align:left">
+            <div style="font-size:12px;color:var(--text-secondary)">Bank: <strong>${bankName}</strong></div>
+            <div style="font-size:14px;font-weight:800;color:var(--text-primary);margin:2px 0">
+              No. Rek: <span id="trans-acc-num">${bankNumber}</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary)">Atas Nama: <strong>${bankHolder}</strong></div>
           </div>
         </div>
       </div>
 
-      <!-- Bayar Nanti / Hutang section -->
+      <!-- Hutang / Cicil Section -->
       <div id="pay-debt-section" style="${method !== 'debt' ? 'display:none' : ''}">
         <div style="padding:10px 14px;background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;font-size:12px;color:#92400e;margin-bottom:12px">
-          📋 <strong>Hutang Piutang</strong> — dicatat sebagai piutang usaha. Wajib isi nama pelanggan.
+          📋 <strong>Pencatatan Piutang Usaha</strong> — Wajib masukkan nama pelanggan.
         </div>
         <div class="input-group">
           <label class="input-label" for="debt-customer">👤 Nama Pelanggan <span style="color:red">*</span></label>
           <input type="text" class="input" id="debt-customer"
-            placeholder="Nama wajib diisi untuk hutang"
+            placeholder="Ketik nama pelanggan"
             value="${esc(store.state.customerName || '')}"
             maxlength="80" autocomplete="off">
         </div>
@@ -141,14 +150,14 @@ export const showPaymentModal = (method = 'cash') => {
         </div>
         <div style="margin-top:8px;padding:10px 14px;background:var(--bg-elevated);border-radius:10px;border:1.5px solid var(--border-subtle)">
           <div style="display:flex;justify-content:space-between;font-size:13px">
-            <span>Total</span><strong>${formatRupiah(total)}</strong>
+            <span>Total Tagihan</span><strong>${formatRupiah(total)}</strong>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:4px">
-            <span>Dibayar sekarang</span><strong id="debt-paid-display">${formatRupiah(0)}</strong>
+            <span>DP Dibayar Sekarang</span><strong id="debt-paid-display" style="color:var(--color-success)">${formatRupiah(0)}</strong>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:14px;margin-top:6px;border-top:1.5px dashed var(--border-subtle);padding-top:6px">
-            <span style="font-weight:700;color:var(--color-danger)">Sisa Hutang</span>
-            <strong id="debt-remaining-display" style="color:var(--color-danger)">${formatRupiah(total)}</strong>
+            <span style="font-weight:700;color:var(--color-danger)">Sisa Hutang Berjalan</span>
+            <strong id="debt-remaining-display" style="color:var(--color-danger);font-size:16px">${formatRupiah(total)}</strong>
           </div>
         </div>
       </div>
@@ -157,7 +166,7 @@ export const showPaymentModal = (method = 'cash') => {
 
     <div class="modal-footer">
       <button class="btn btn--secondary" id="pay-cancel-btn">Batal</button>
-      <button class="btn btn--success btn--lg" id="pay-confirm-btn">
+      <button class="btn btn--success btn--lg" id="pay-confirm-btn" style="font-weight:700;box-shadow:0 4px 12px rgba(16,185,129,0.3)">
         ✅ Proses Pembayaran
       </button>
     </div>
@@ -181,24 +190,27 @@ export const showPaymentModal = (method = 'cash') => {
       });
     });
 
-    // Cash input → update change
-    const cashInput   = document.getElementById('cash-received');
+    // Cash calculation
+    const cashInput    = document.getElementById('cash-received');
+    const changeAmount = document.getElementById('change-amount');
     const updateChange = () => {
-      const received = parseFloat(cashInput?.value) || 0;
+      const received = parseFloat(cashInput?.value) || total;
       const change   = Math.max(0, received - total);
-      const el = document.getElementById('change-amount');
-      if (el) el.textContent = formatRupiah(change);
+      if (changeAmount) changeAmount.textContent = formatRupiah(change);
     };
     cashInput?.addEventListener('input', updateChange);
     updateChange();
 
-    // Quick amounts
+    // Quick cash buttons
     document.getElementById('quick-amounts')?.addEventListener('click', (e) => {
       const btn = e.target.closest('.quick-amt-btn');
-      if (btn && cashInput) { cashInput.value = btn.dataset.amount; updateChange(); }
+      if (btn && cashInput) {
+        cashInput.value = btn.dataset.amount;
+        updateChange();
+      }
     });
 
-    // Debt input → update remaining display
+    // Debt calculation
     const debtPaidInput = document.getElementById('debt-paid-now');
     const updateDebt = () => {
       const paid      = Math.min(parseFloat(debtPaidInput?.value) || 0, total);
@@ -210,132 +222,122 @@ export const showPaymentModal = (method = 'cash') => {
     };
     debtPaidInput?.addEventListener('input', updateDebt);
 
-    // Confirm payment
+    // Confirm Payment
     document.getElementById('pay-confirm-btn')?.addEventListener('click', async () => {
       const activeTab = document.querySelector('.pay-tab.active');
       const payMethod = activeTab?.dataset.method || 'cash';
       const btn       = document.getElementById('pay-confirm-btn');
 
       if (payMethod === 'cash') {
-        const paid = parseFloat(cashInput?.value) || 0;
-        if (paid < total) { window.showToast('Jumlah bayar kurang dari total!', 'warning'); return; }
+        const paid = parseFloat(cashInput?.value) || total;
+        if (paid < total) {
+          window.showToast('Jumlah uang tunai kurang dari total tagihan!', 'warning');
+          cashInput?.focus();
+          return;
+        }
       }
+
       if (payMethod === 'debt') {
         const custName = document.getElementById('debt-customer')?.value?.trim();
-        if (!custName) { window.showToast('Nama pelanggan wajib diisi untuk hutang!', 'warning'); return; }
+        if (!custName) {
+          window.showToast('Nama pelanggan wajib diisi untuk transaksi hutang/cicil!', 'warning');
+          document.getElementById('debt-customer')?.focus();
+          return;
+        }
       }
 
       if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
 
       const now = new Date().toISOString();
-
       let txData;
+
       if (payMethod === 'cash') {
         const paid   = parseFloat(cashInput?.value) || total;
         const change = Math.max(0, paid - total);
         txData = {
-          invoiceNo: generateInvoiceNo(), date: now, dateKey: todayKey(),
-          items: store.state.cart.map(i => ({ product: { ...i.product }, qty: i.qty })),
-          subtotal, discount, tax, total,
-          paymentMethod: 'cash', paymentStatus: 'paid',
-          paid, change,
-          paidAmount: total, remainingDebt: 0, debtPayments: [],
-          customerName: store.state.customerName || '',
-          cashier: store.state.settings.cashierName || 'Admin',
+          invoiceNo:     generateInvoiceNo(),
+          date:          now,
+          dateKey:       todayKey(),
+          items:         store.state.cart.map(i => ({ product: { ...i.product }, qty: i.qty })),
+          subtotal,
+          discount,
+          tax,
+          total,
+          paymentMethod: 'cash',
+          paymentStatus: 'paid',
+          paid,
+          change,
+          paidAmount:    total,
+          remainingDebt: 0,
+          debtPayments:  [],
+          customerName:  store.state.customerName || '',
+          cashier:       store.state.settings.cashierName || 'Kasir',
         };
       } else if (payMethod === 'transfer') {
         txData = {
-          invoiceNo: generateInvoiceNo(), date: now, dateKey: todayKey(),
-          items: store.state.cart.map(i => ({ product: { ...i.product }, qty: i.qty })),
-          subtotal, discount, tax, total,
-          paymentMethod: 'transfer', paymentStatus: 'transfer_pending',
-          paid: 0, change: 0,
-          paidAmount: 0, remainingDebt: 0, debtPayments: [],
-          customerName: store.state.customerName || '',
-          cashier: store.state.settings.cashierName || 'Admin',
+          invoiceNo:     generateInvoiceNo(),
+          date:          now,
+          dateKey:       todayKey(),
+          items:         store.state.cart.map(i => ({ product: { ...i.product }, qty: i.qty })),
+          subtotal,
+          discount,
+          tax,
+          total,
+          paymentMethod: 'transfer',
+          paymentStatus: 'transfer_confirmed',
+          paid:          total,
+          change:        0,
+          paidAmount:    total,
+          remainingDebt: 0,
+          debtPayments:  [],
+          customerName:  store.state.customerName || '',
+          cashier:       store.state.settings.cashierName || 'Kasir',
         };
       } else {
         const paidNow   = Math.min(parseFloat(document.getElementById('debt-paid-now')?.value) || 0, total);
         const remaining = total - paidNow;
-        const status    = paidNow === 0 ? 'unpaid' : (paidNow < total ? 'partial' : 'paid');
-        const custName  = document.getElementById('debt-cust-name')?.value?.trim() || store.state.customerName || '';
+        const status    = remaining === 0 ? 'paid' : (paidNow > 0 ? 'partial' : 'unpaid');
+        const custName  = document.getElementById('debt-customer')?.value?.trim() || store.state.customerName || 'Pelanggan';
+
         txData = {
-          invoiceNo: generateInvoiceNo(), date: now, dateKey: todayKey(),
-          items: store.state.cart.map(i => ({ product: { ...i.product }, qty: i.qty })),
-          subtotal, discount, tax, total,
-          paymentMethod: 'debt', paymentStatus: status,
-          paid: paidNow, change: 0,
-          paidAmount: paidNow, remainingDebt: remaining,
-          debtPayments: paidNow > 0 ? [{ date: now, amount: paidNow, note: 'DP / Uang muka awal' }] : [],
-          customerName: custName,
-          cashier: store.state.settings.cashierName || 'Admin',
+          invoiceNo:     generateInvoiceNo(),
+          date:          now,
+          dateKey:       todayKey(),
+          items:         store.state.cart.map(i => ({ product: { ...i.product }, qty: i.qty })),
+          subtotal,
+          discount,
+          tax,
+          total,
+          paymentMethod: 'debt',
+          paymentStatus: status,
+          paid:          paidNow,
+          change:        0,
+          paidAmount:    paidNow,
+          remainingDebt: remaining,
+          debtPayments:  paidNow > 0 ? [{ date: now, amount: paidNow, note: 'DP / Uang muka awal' }] : [],
+          customerName:  custName,
+          cashier:       store.state.settings.cashierName || 'Kasir',
         };
       }
 
       try {
-        const saved = await saveTransaction(txData);
-        txData.id = saved;
+        const savedId = await saveTransaction(txData);
+        txData.id = savedId;
         store.addTransaction(txData);
         closeModal('payment-modal');
         store.clearCart();
         showSuccessOverlay(txData);
       } catch (err) {
-        window.showToast('Gagal menyimpan transaksi!', 'error');
-        console.error('[payment]', err);
-        if (btn) { btn.disabled = false; btn.innerHTML = '✅ Proses Pembayaran'; }
+        console.error('[payment-save]', err);
+        window.showToast('Gagal menyimpan transaksi: ' + (err.message || 'Error'), 'error');
+        if (btn) { btn.disabled = false; btn.textContent = '✅ Proses Pembayaran'; }
       }
     });
   }, 0);
 };
 
 /* ─────────────────────────────────────────
-   Process and Save Transaction
-   ───────────────────────────────────────── */
-const processTransaction = async (extraData) => {
-  const btn = document.getElementById('btn-pay-confirm');
-  if (btn) { btn.textContent = 'Menyimpan...'; btn.disabled = true; }
-
-  try {
-    const s = store.state;
-    const txData = {
-      invoiceNo:     generateInvoiceNo(),
-      date:          new Date().toISOString(),
-      dateKey:       todayKey(),
-      items:         s.cart.map(i => ({ ...i })),
-      subtotal:      store.subtotal,
-      discount:      store.discount,
-      tax:           store.tax,
-      total:         store.total,
-      cashier:       s.settings.cashierName || 'Kasir',
-      customerName:  s.customerName || '',
-      ...extraData,
-    };
-
-    const id = await saveTransaction(txData);
-    txData.id = id;
-
-    // Update store state
-    store.addTransaction(txData);
-    store.clearCart();
-
-    closeModal('payment-modal');
-    showSuccessOverlay(txData);
-  } catch (err) {
-    console.error('[transaction]', err);
-    window.showToast('Gagal menyimpan transaksi: ' + err.message, 'error');
-    if (btn) { btn.textContent = 'Coba Lagi'; btn.disabled = false; }
-  }
-};
-
-const getCashSuggestions = (total) => {
-  const round      = (n) => Math.ceil(n / 5000) * 5000;
-  const base       = round(total);
-  const candidates = [base, base + 5000, base + 10000, base + 20000, base + 50000, base + 100000];
-  return [...new Set(candidates.filter(a => a >= total))].slice(0, 4);
-};
-
-/* ─────────────────────────────────────────
-   Success Overlay with Prominent Print Options
+   Success Overlay with Prominent 58mm Print Options
    ───────────────────────────────────────── */
 const showSuccessOverlay = (txData) => {
   const json = buildReceiptJSON(txData, store.state.settings);
@@ -359,10 +361,10 @@ const showSuccessOverlay = (txData) => {
         ? `<p style="color:var(--color-success);font-weight:800;margin-top:6px;font-size:18px">Kembalian: ${formatRupiah(txData.change)}</p>`
         : ''}
       ${txData.paymentMethod === 'transfer'
-        ? `<p style="color:#d97706;font-size:13px;margin-top:4px">⏳ Transfer menunggu konfirmasi</p>`
+        ? `<p style="color:var(--blue-600);font-size:13px;margin-top:4px">📲 Transfer Terkonfirmasi ✅</p>`
         : ''}
       ${txData.remainingDebt > 0
-        ? `<p style="color:var(--color-danger);font-size:13px;margin-top:4px">📋 Sisa hutang: ${formatRupiah(txData.remainingDebt)}</p>`
+        ? `<p style="color:var(--color-danger);font-size:13px;margin-top:4px">📋 Sisa Piutang: ${formatRupiah(txData.remainingDebt)}</p>`
         : ''}
     </div>
 
