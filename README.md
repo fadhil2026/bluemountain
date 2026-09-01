@@ -62,24 +62,39 @@ KASIR/
 │   ├── store.js            # State management (Reactive UI Pattern)
 │   ├── db.js               # IndexedDB local cache (Dexie.js)
 │   ├── supabase.js         # Cloud sync engine & WebSocket listener
-│   ├── printer.js          # Integrasi native intent print Bluetooth
-│   ├── receipt.js          # Pembuat payload JSON untuk struk
+│   ├── printer.js          # Universal Thermal POS Engine (48mm/58mm/80mm, WebBLE, WebUSB, RawBT)
+│   ├── receipt.js          # Pembuat payload JSON & ESC/POS untuk struk
 │   ├── views/              # Logika UI per halaman
 │   │   ├── pos.js          # Modul kasir utama
-│   │   ├── products.js     # Modul master data produk
-│   │   ├── transactions.js # Modul riwayat penjualan
-│   │   ├── reports.js      # Modul analitik & Chart.js
-│   │   ├── finance.js      # Modul pengeluaran & hutang
-│   │   ├── settings.js     # Modul konfigurasi sistem
-│   │   └── modals.js       # Kontrol pop-up global
+│   │   ├── products.js     # Modul master data produk & upload foto/SKU
+│   │   ├── transactions.js # Modul riwayat penjualan & filter tanggal range + pagination
+│   │   ├── reports.js      # Modul analitik & Chart.js + pagination
+│   │   ├── finance.js      # Modul pengeluaran, piutang, & jurnal + pagination
+│   │   ├── settings.js     # Modul konfigurasi sistem & hardware printer
+│   │   └── modals.js       # Kontrol pop-up global & multi-protocol print
 │   └── utils/
 │       ├── currency.js     # Pemformatan nilai Rupiah
 │       ├── date.js         # Pemformatan tanggal lokal Indonesia
+│       ├── image.js        # Kompresi gambar client-side WebP/JPEG & SKU generator
 │       ├── invoice.js      # Generator nomor resi
 │       └── sanitize.js     # Proteksi Anti-XSS
 └── scripts/
-    └── verify.js           # Skrip audit CI/CD Quality Gate
+    └── verify.js           # Skrip audit CI/CD Quality Gate & sinkronisasi versi otomatis
 ```
+
+## 🖨️ Arsitektur Universal Thermal Printing
+
+Sistem mendukung semua standar printer thermal kasir (open-source & zero-driver dependency):
+
+1. **Format Kertas Roll**:
+   - **48 mm** (30 karakter/baris): EDC POS & printer mobile mini.
+   - **58 mm** (32 karakter/baris): Standar POS Bluetooth portable.
+   - **80 mm** (48 karakter/baris): Desktop POS / printer thermal kasir besar & resto.
+2. **Koneksi Multi-Protokol**:
+   - **Universal Direct Print**: Driver OS (Windows/macOS/Linux/Android/iOS) via CSS `@page` zero-margin.
+   - **Web Bluetooth (BLE)**: Komunikasi binary ESC/POS langsung dari browser Chrome/Edge tanpa aplikasi pihak ketiga.
+   - **WebUSB**: Komunikasi binary ESC/POS kabel USB / konverter OTG berkecepatan tinggi.
+   - **Android Intent**: Integrasi background protocol `rawbt:` dan `my.bluetoothprint.scheme://`.
 
 ## 🔒 Keamanan & Hardening
 
