@@ -1,72 +1,79 @@
 /* ============================================================
-   BLUE MOUNTAIN POS — macOS Dock (Premium, Smooth, GPU-accelerated)
-   Real macOS magnification: neighbor icons scale based on distance
+   BLUE MOUNTAIN POS — macOS Sonoma/Sequoia Dock
+   Physics-driven Gaussian Wave Magnification, Apple Squircles,
+   Ultra-pure Glassmorphism, 120 FPS GPU Acceleration
    ============================================================ */
 
 /* ── Dock Container ── */
 .dock-container {
   position: fixed;
-  bottom: 10px;
+  bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
-  max-width: calc(100vw - 20px);
-  /* Prevent layout shift */
-  padding-bottom: 0;
+  max-width: calc(100vw - 24px);
+  padding: 0;
+  margin: 0;
+  pointer-events: none; /* Container ignores events, shelf captures */
 }
 
-/* ── Dock Shelf ── */
+/* ── Dock Shelf (Glassmorphism macOS) ── */
 .dock {
+  pointer-events: auto;
   display: flex;
   align-items: flex-end;
-  gap: 8px;
-  padding: 10px 16px 8px;
-  background: rgba(255,255,255,0.72);
-  backdrop-filter: blur(40px) saturate(2.2) brightness(1.05);
-  -webkit-backdrop-filter: blur(40px) saturate(2.2) brightness(1.05);
-  border: 1px solid rgba(255,255,255,0.9);
-  border-radius: 22px;
+  gap: 10px;
+  padding: 10px 18px 8px;
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(36px) saturate(210%) brightness(1.08);
+  -webkit-backdrop-filter: blur(36px) saturate(210%) brightness(1.08);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 24px;
   box-shadow:
-    0 0 0 0.5px rgba(30,58,138,0.08),
-    0 2px 4px rgba(30,58,138,0.06),
-    0 8px 24px rgba(30,58,138,0.12),
-    0 24px 48px rgba(30,58,138,0.08),
-    inset 0 1px 0 rgba(255,255,255,1);
+    0 0 0 0.5px rgba(255, 255, 255, 0.6),
+    0 4px 12px rgba(15, 23, 42, 0.06),
+    0 16px 36px rgba(15, 23, 42, 0.12),
+    0 32px 64px rgba(15, 23, 42, 0.10),
+    inset 0 1px 1.5px rgba(255, 255, 255, 1),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.03);
   position: relative;
   white-space: nowrap;
-  /* Critical: will-change for GPU layer */
+  touch-action: none;
+  transform: translateZ(0);
   will-change: transform;
 }
 
-/* Reflection line */
+/* Top Specular Edge Highlight */
 .dock::before {
   content: '';
   position: absolute;
-  top: 0; left: 16px; right: 16px;
+  top: 0;
+  left: 20px;
+  right: 20px;
   height: 1px;
   background: linear-gradient(90deg,
-    transparent,
-    rgba(255,255,255,0.95) 30%,
-    rgba(255,255,255,0.95) 70%,
-    transparent
+    transparent 0%,
+    rgba(255, 255, 255, 0.95) 25%,
+    rgba(255, 255, 255, 1) 50%,
+    rgba(255, 255, 255, 0.95) 75%,
+    transparent 100%
   );
   border-radius: 1px;
+  pointer-events: none;
 }
 
-/* Shadow shelf */
+/* Bottom Floor Reflection / Ambient Depth */
 .dock::after {
   content: '';
   position: absolute;
-  bottom: -14px;
-  left: 15%;
-  right: 15%;
-  height: 1px;
-  background: linear-gradient(90deg,
-    transparent,
-    rgba(37,99,235,0.1) 40%,
-    rgba(37,99,235,0.1) 60%,
-    transparent
-  );
+  bottom: -16px;
+  left: 10%;
+  right: 10%;
+  height: 12px;
+  background: radial-gradient(ellipse 60% 100% at 50% 0%, rgba(37, 99, 235, 0.12) 0%, transparent 80%);
+  filter: blur(6px);
+  pointer-events: none;
+  z-index: -1;
 }
 
 /* ── Dock Item ── */
@@ -74,224 +81,322 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  justify-content: flex-end;
+  gap: 5px;
   cursor: pointer;
   position: relative;
-  /* GPU layer, smooth spring */
   transform-origin: bottom center;
-  transition:
-    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Crucial: No CSS transform transition while JS physics engine runs */
+  transition: opacity 180ms ease;
   will-change: transform;
   -webkit-user-select: none;
   user-select: none;
-  /* Prevent blurry scaling */
-  -webkit-font-smoothing: subpixel-antialiased;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
 }
 
-/* macOS-style magnification states set via JS */
-/* macOS magnification: JS sets transform via rAF — no CSS hover needed */
-.dock-item:hover .dock-icon {
-  box-shadow:
-    0 0 0 1.5px rgba(37,99,235,0.18),
-    0 8px 28px rgba(37,99,235,0.25),
-    0 16px 40px rgba(30,58,138,0.12),
-    inset 0 1px 0 rgba(255,255,255,1);
-  border-color: rgba(37,99,235,0.2);
-}
-
+/* ── Apple Squircle App Icons ── */
 .dock-icon {
-  width: var(--dock-icon-size);
-  height: var(--dock-icon-size);
-  border-radius: calc(var(--dock-icon-size) * 0.225);
-  background: white;
-  border: 1px solid rgba(30,58,138,0.10);
+  width: var(--dock-icon-size, 52px);
+  height: var(--dock-icon-size, 52px);
+  /* Apple Continuous Curvature Squircle */
+  border-radius: calc(var(--dock-icon-size, 52px) * 0.225);
+  background: linear-gradient(145deg, #ffffff 0%, #f1f5f9 100%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
   overflow: hidden;
-  /* Smooth shadow transition */
   box-shadow:
-    0 1px 3px rgba(30,58,138,0.08),
-    0 4px 12px rgba(30,58,138,0.06),
-    inset 0 0.5px 0 rgba(255,255,255,1);
+    0 1px 3px rgba(15, 23, 42, 0.08),
+    0 6px 16px rgba(15, 23, 42, 0.08),
+    inset 0 1px 1px rgba(255, 255, 255, 1),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.08);
   transition:
-    box-shadow 200ms ease,
-    border-color 200ms ease,
-    background 200ms ease;
+    box-shadow 240ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 240ms ease,
+    filter 240ms ease;
   will-change: transform;
-  /* Crisp icon rendering */
-  image-rendering: -webkit-optimize-contrast;
+  transform: translateZ(0);
 }
 
-/* Glass sheen on icon */
+/* Gloss Specular Sheen (Top Diagonal) */
 .dock-icon::before {
   content: '';
   position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 50%;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 52%;
   background: linear-gradient(180deg,
-    rgba(255,255,255,0.7) 0%,
-    rgba(255,255,255,0.15) 100%
+    rgba(255, 255, 255, 0.75) 0%,
+    rgba(255, 255, 255, 0.25) 60%,
+    rgba(255, 255, 255, 0.0) 100%
   );
   border-radius: inherit;
   pointer-events: none;
   z-index: 2;
 }
 
-/* Emoji / Icon */
-.dock-icon span {
-  font-size: calc(var(--dock-icon-size) * 0.5);
+/* Subtle Rim Light (Bottom Inset) */
+.dock-icon::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 -1px 2px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Emoji / Glyph Visual Styling */
+.dock-icon-inner,
+.dock-icon span,
+.dock-icon {
+  font-size: calc(var(--dock-icon-size, 52px) * 0.52);
   line-height: 1;
   position: relative;
   z-index: 3;
-  transition: none;
-  /* GPU text */
-  transform: translateZ(0);
+  transition: transform 180ms ease, filter 180ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* Active state */
+/* Distinct App Squircle Gradient Personalities */
+.dock-item[data-view="pos"] .dock-icon {
+  background: linear-gradient(145deg, #3b82f6 0%, #2563eb 55%, #1d4ed8 100%);
+  border-color: rgba(147, 197, 253, 0.6);
+  box-shadow:
+    0 2px 6px rgba(37, 99, 235, 0.25),
+    0 8px 20px rgba(37, 99, 235, 0.25),
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.6);
+}
+
+.dock-item[data-view="products"] .dock-icon {
+  background: linear-gradient(145deg, #38bdf8 0%, #0284c7 55%, #0369a1 100%);
+  border-color: rgba(186, 230, 253, 0.6);
+  box-shadow:
+    0 2px 6px rgba(2, 132, 199, 0.25),
+    0 8px 20px rgba(2, 132, 199, 0.25),
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.6);
+}
+
+.dock-item[data-view="transactions"] .dock-icon {
+  background: linear-gradient(145deg, #818cf8 0%, #6366f1 55%, #4338ca 100%);
+  border-color: rgba(199, 210, 254, 0.6);
+  box-shadow:
+    0 2px 6px rgba(99, 102, 241, 0.25),
+    0 8px 20px rgba(99, 102, 241, 0.25),
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.6);
+}
+
+.dock-item[data-view="reports"] .dock-icon {
+  background: linear-gradient(145deg, #34d399 0%, #059669 55%, #047857 100%);
+  border-color: rgba(167, 243, 208, 0.6);
+  box-shadow:
+    0 2px 6px rgba(5, 150, 105, 0.25),
+    0 8px 20px rgba(5, 150, 105, 0.25),
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.6);
+}
+
+.dock-item[data-view="settings"] .dock-icon {
+  background: linear-gradient(145deg, #94a3b8 0%, #64748b 55%, #334155 100%);
+  border-color: rgba(226, 232, 240, 0.6);
+  box-shadow:
+    0 2px 6px rgba(100, 116, 139, 0.25),
+    0 8px 20px rgba(100, 116, 139, 0.25),
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.6);
+}
+
+.dock-item[data-view="finance"] .dock-icon {
+  background: linear-gradient(145deg, #fbbf24 0%, #d97706 55%, #92400e 100%);
+  border-color: rgba(254, 240, 138, 0.6);
+  box-shadow:
+    0 2px 6px rgba(217, 119, 6, 0.25),
+    0 8px 20px rgba(217, 119, 6, 0.25),
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.6);
+}
+
+/* Hover & Focus Glow Overlay */
+.dock-item:hover .dock-icon,
+.dock-item:focus-visible .dock-icon {
+  filter: brightness(1.08) contrast(1.04);
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.7),
+    0 12px 28px rgba(15, 23, 42, 0.22),
+    0 4px 10px rgba(15, 23, 42, 0.12),
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.9);
+}
+
+/* Active Dock Item Rim */
 .dock-item.active .dock-icon {
-  background: linear-gradient(145deg, #1e40af 0%, #2563eb 50%, #3b82f6 100%);
-  border-color: rgba(37,99,235,0.4);
   box-shadow:
-    0 0 0 2.5px rgba(37,99,235,0.25),
-    0 4px 16px rgba(37,99,235,0.45),
-    0 8px 24px rgba(37,99,235,0.2),
-    inset 0 1px 0 rgba(255,255,255,0.25);
+    0 0 0 2px rgba(255, 255, 255, 0.85),
+    0 8px 24px rgba(37, 99, 235, 0.35),
+    inset 0 1px 2px rgba(255, 255, 255, 0.8);
 }
 
-.dock-item.active .dock-icon span {
-  filter: brightness(0) invert(1);
-}
-
-/* Hover glow */
-.dock-item:hover .dock-icon {
-  box-shadow:
-    0 0 0 1.5px rgba(37,99,235,0.18),
-    0 8px 28px rgba(37,99,235,0.25),
-    0 16px 40px rgba(30,58,138,0.12),
-    inset 0 1px 0 rgba(255,255,255,1);
-  border-color: rgba(37,99,235,0.2);
-}
-
-/* ── Dock Label (tooltip) ── */
-.dock-label {
-  position: absolute;
-  bottom: calc(100% + 12px);
-  left: 50%;
-  transform: translateX(-50%) translateY(4px) scale(0.9);
-  background: rgba(15,23,42,0.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: white;
-  font-size: 11px;
-  font-weight: 600;
-  font-family: var(--font-sans);
-  padding: 5px 10px;
-  border-radius: 8px;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transition:
-    opacity 120ms ease,
-    transform 180ms cubic-bezier(0.34,1.56,0.64,1);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-  border: 0.5px solid rgba(255,255,255,0.12);
-  z-index: 100;
-}
-
-/* Arrow */
-.dock-label::after {
-  content: '';
-  position: absolute;
-  top: 100%; left: 50%;
-  transform: translateX(-50%);
-  border: 5px solid transparent;
-  border-top-color: rgba(15,23,42,0.88);
-}
-
-.dock-item:hover .dock-label {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0) scale(1);
-}
-
-/* ── Active dot indicator ── */
+/* ── Active Indicator Dot (macOS Style) ── */
 .dock-dot {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: var(--blue-600);
+  background: #1e40af;
   opacity: 0;
-  transition: opacity 200ms ease, transform 200ms ease;
+  transform: scale(0.4);
+  transition: opacity 220ms ease, transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1), background 220ms ease;
   flex-shrink: 0;
-  margin-top: -2px;
-  box-shadow: 0 0 4px rgba(37,99,235,0.5);
+  box-shadow: 0 0 6px rgba(37, 99, 235, 0.8);
 }
 
 .dock-item.active .dock-dot {
   opacity: 1;
-  transform: scale(1.1);
+  transform: scale(1.15);
+  background: #2563eb;
 }
 
-/* ── Separator ── */
+/* ── Dock Separator (macOS Glass Divider) ── */
 .dock-separator {
   width: 1px;
-  height: 32px;
+  height: 34px;
   background: linear-gradient(180deg,
-    transparent,
-    rgba(30,58,138,0.12) 30%,
-    rgba(30,58,138,0.12) 70%,
-    transparent
+    transparent 0%,
+    rgba(15, 23, 42, 0.14) 25%,
+    rgba(15, 23, 42, 0.14) 75%,
+    transparent 100%
   );
-  margin: 0 2px;
+  margin: 0 3px;
   align-self: center;
   flex-shrink: 0;
+  pointer-events: none;
 }
 
-/* ── Click bounce animation ── */
-@keyframes dock-bounce {
-  0%   { transform: translateY(-14px) scale(1.35); }
-  25%  { transform: translateY(-22px) scale(1.42); }
-  50%  { transform: translateY(-16px) scale(1.37); }
-  75%  { transform: translateY(-20px) scale(1.40); }
-  100% { transform: translateY(-14px) scale(1.35); }
+/* ── macOS Floating Tooltip (Label) ── */
+.dock-label {
+  position: absolute;
+  bottom: calc(100% + 14px);
+  left: 50%;
+  transform: translateX(-50%) translateY(6px) scale(0.92);
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, sans-serif);
+  padding: 5px 11px;
+  border-radius: 9px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 140ms ease,
+    transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    0 1px 3px rgba(0, 0, 0, 0.2);
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  z-index: 1000;
+}
+
+/* Tooltip Downward Arrow */
+.dock-label::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgba(15, 23, 42, 0.82);
+}
+
+.dock-item:hover .dock-label,
+.dock-item:focus-visible .dock-label {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+/* ── macOS App Launch Spring Bounce Animation ── */
+@keyframes macos-dock-bounce {
+  0%   { transform: translateY(0); }
+  18%  { transform: translateY(-30px); }
+  38%  { transform: translateY(0); }
+  56%  { transform: translateY(-15px); }
+  74%  { transform: translateY(0); }
+  88%  { transform: translateY(-6px); }
+  100% { transform: translateY(0); }
 }
 
 .dock-item.bouncing {
-  animation: dock-bounce 500ms cubic-bezier(0.34,1.56,0.64,1);
+  animation: macos-dock-bounce 650ms cubic-bezier(0.28, 0.84, 0.42, 1);
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   RESPONSIVE
+   RESPONSIVE OPTIMIZATIONS
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
-/* Tablet */
+/* Tablet (600px – 1024px) */
 @media (min-width: 600px) and (max-width: 1024px) {
-  .dock { gap: 6px; padding: 9px 14px 7px; }
-  .dock-item:hover { transform: translateY(-12px) scale(1.28); }
+  .dock {
+    gap: 8px;
+    padding: 9px 14px 7px;
+    border-radius: 20px;
+  }
 }
 
-/* Mobile */
+/* Mobile Devices (< 600px) */
 @media (max-width: 599px) {
-  .dock-container { bottom: 8px; }
-  .dock { gap: 4px; padding: 8px 10px 7px; border-radius: 18px; }
-  .dock-item:hover { transform: translateY(-8px) scale(1.18); }
-  .dock-label { display: none; }
-  .dock-separator { height: 24px; margin: 0 1px; }
+  .dock-container {
+    bottom: 8px;
+    max-width: calc(100vw - 12px);
+  }
+  .dock {
+    gap: 6px;
+    padding: 7px 10px 6px;
+    border-radius: 18px;
+  }
+  .dock-label {
+    display: none; /* Hide tooltips on touch devices */
+  }
+  .dock-separator {
+    height: 24px;
+    margin: 0 1px;
+  }
+  .dock-dot {
+    width: 3.5px;
+    height: 3.5px;
+  }
 }
 
-/* Very small */
+/* Very Small Mobile (< 360px) */
 @media (max-width: 360px) {
-  .dock { gap: 2px; padding: 7px 8px 6px; }
-  .dock-separator { display: none; }
+  .dock {
+    gap: 4px;
+    padding: 6px 8px 5px;
+  }
+  .dock-separator {
+    display: none;
+  }
 }
 
-/* Landscape mobile */
+/* Landscape Mobile */
 @media (max-height: 499px) and (orientation: landscape) {
-  .dock-container { bottom: 4px; }
-  .dock { padding: 6px 12px 5px; gap: 4px; }
-  .dock-item:hover { transform: translateY(-6px) scale(1.12); }
-  .dock-label { bottom: calc(100% + 6px); font-size: 10px; }
-  .dock::after { display: none; }
+  .dock-container {
+    bottom: 4px;
+  }
+  .dock {
+    padding: 5px 12px 4px;
+    gap: 6px;
+    border-radius: 16px;
+  }
+  .dock-label {
+    bottom: calc(100% + 8px);
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+  .dock::after {
+    display: none;
+  }
 }
