@@ -22,8 +22,10 @@ jobs:
     name: 🔍 Syntax, Integrity & Build Verification
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout Repository
+      - name: 📥 Checkout Repository (Full History for Versioning)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # WAJIB: ambil full history agar git rev-list --count HEAD akurat
 
       - name: ⚙️ Setup Node.js 20
         uses: actions/setup-node@v4
