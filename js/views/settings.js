@@ -131,33 +131,38 @@ export const renderSettings = async () => {
 
     <!-- Printer -->
     <div class="settings-section">
-      <div class="settings-section-header">🖨️ Thermal Printer &amp; Struk Kasir (58mm / 80mm)</div>
+      <div class="settings-section-header">🖨️ Thermal Printer Universal (48mm / 58mm / 80mm)</div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Ukuran Kertas Thermal</div>
-          <div class="settings-row__desc">Pilih ukuran roll kertas printer thermal Anda</div>
+          <div class="settings-row__label">Ukuran Kertas Roll Thermal</div>
+          <div class="settings-row__desc">Pilih ukuran roll kertas sesuai hardware printer kasir Anda</div>
         </div>
-        <select class="input" id="set-printerPaper" style="max-width:220px">
-          <option value="58mm" ${s.printerPaper !== '80mm' ? 'selected' : ''}>58mm (Standar Mini Bluetooth Kasir)</option>
-          <option value="80mm" ${s.printerPaper === '80mm' ? 'selected' : ''}>80mm (Thermal Besar / Desktop)</option>
+        <select class="input" id="set-printerPaper" style="max-width:260px">
+          <option value="48mm" ${s.printerPaper === '48mm' ? 'selected' : ''}>48mm (EDC / Mini Portable Bluetooth)</option>
+          <option value="58mm" ${!s.printerPaper || s.printerPaper === '58mm' ? 'selected' : ''}>58mm (Standar Mini POS Bluetooth)</option>
+          <option value="80mm" ${s.printerPaper === '80mm' ? 'selected' : ''}>80mm (Thermal Besar / Kasir Desktop / Resto)</option>
         </select>
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Uji Coba Cetak (Test Print)</div>
-          <div class="settings-row__desc">Cetak struk dummy untuk cek kerapian format 58mm di printer Anda</div>
+          <div class="settings-row__label">Uji Coba Cetak (Test Print Sesuai Ukuran)</div>
+          <div class="settings-row__desc">Cetak struk sample untuk validasi kerapian format dan font margin</div>
         </div>
-        <button class="btn btn--secondary btn--sm" id="btn-test-print" style="font-weight:700">🧪 Test Cetak Struk</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn--secondary btn--sm" id="btn-test-48" style="font-weight:700">🧪 Test 48mm</button>
+          <button class="btn btn--secondary btn--sm" id="btn-test-58" style="font-weight:700">🧪 Test 58mm</button>
+          <button class="btn btn--secondary btn--sm" id="btn-test-80" style="font-weight:700">🧪 Test 80mm</button>
+        </div>
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Panduan Setup Printer Bluetooth</div>
-          <div class="settings-row__desc">Cara menghubungkan printer 58mm di HP Android, PC &amp; Laptop</div>
+          <div class="settings-row__label">Panduan Koneksi Hardware</div>
+          <div class="settings-row__desc">Petunjuk setup Bluetooth (BLE), Kabel USB (OTG), dan WiFi/LAN</div>
         </div>
-        <button class="btn btn--secondary btn--sm" id="btn-printer-guide">📖 Lihat Panduan</button>
+        <button class="btn btn--secondary btn--sm" id="btn-printer-guide">📖 Lihat Panduan Hardware</button>
       </div>
     </div>
 
@@ -450,8 +455,16 @@ const bindSettingsEvents = () => {
     window.showToast('Pengaturan berhasil disimpan', 'success');
   });
 
-  document.getElementById('btn-test-print')?.addEventListener('click', () => {
-    printTestReceipt();
+  document.getElementById('btn-test-48')?.addEventListener('click', () => {
+    printTestReceipt('48mm');
+  });
+
+  document.getElementById('btn-test-58')?.addEventListener('click', () => {
+    printTestReceipt('58mm');
+  });
+
+  document.getElementById('btn-test-80')?.addEventListener('click', () => {
+    printTestReceipt('80mm');
   });
 
   document.getElementById('btn-printer-guide')?.addEventListener('click', () => {
@@ -504,28 +517,25 @@ const bindSettingsEvents = () => {
 const showPrinterGuide = () => {
   const html = `
     <div class="modal-header">
-      <span class="modal-title">🖨️ Panduan Setup Printer Thermal 58mm</span>
+      <span class="modal-title">🖨️ Panduan Lengkap Koneksi Printer Thermal (48/58/80mm)</span>
       <button class="modal-close" id="pg-close">✕</button>
     </div>
     <div class="modal-body" style="font-size:13px;line-height:1.7;color:var(--text-secondary)">
       <div style="padding:12px;background:#dbeafe;border-radius:10px;font-size:12px;color:#1e40af;margin-bottom:14px">
-        💡 <strong>Printer Thermal 58mm didukung 100% via 2 Cara:</strong>
+        💡 <strong>Sistem Mendukung 4 Jalur Koneksi Hardware Sekaligus:</strong>
       </div>
 
-      <h4 style="color:var(--text-primary);margin-bottom:6px">Metode 1: Direct Web Print (Universal di Semua PC/Laptop/HP)</h4>
-      <ol style="padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:12px">
-        <li>Sambungkan printer thermal USB / Bluetooth ke PC/Laptop/HP Anda.</li>
-        <li>Saat transaksi selesai, klik tombol hijau <strong>"🖨️ Cetak Struk (58mm)"</strong>.</li>
-        <li>Pilih printer thermal Anda di jendela cetak browser $\rightarrow$ Klik <strong>Print</strong>. Struk akan tercetak rapi sesuai lebar roll 58mm.</li>
-      </ol>
+      <h4 style="color:var(--text-primary);margin-bottom:6px">1. 🖨️ Universal Direct Print (Driver OS / Kabel USB / Spooler / AirPrint)</h4>
+      <p style="font-size:12px;margin-bottom:6px">Metode paling universal untuk Windows, macOS, Android &amp; iOS. Otomatis menyesuaikan margin 0mm dan lebar roll (48mm/58mm/80mm).</p>
 
-      <h4 style="color:var(--text-primary);margin-top:14px;margin-bottom:6px">Metode 2: Bluetooth Print App / RawBT (Khusus HP Android)</h4>
-      <ol style="padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:12px">
-        <li>Download <a href="https://play.google.com/store/apps/details?id=mate.bluetoothprint" target="_blank" rel="noopener noreferrer" style="color:var(--blue-300)">Bluetooth Print App</a> atau <strong>RawBT</strong> dari Play Store.</li>
-        <li>Pair printer Bluetooth di menu Bluetooth HP Anda (PIN default: <code>0000</code> atau <code>1234</code>).</li>
-        <li>Buka aplikasi printer tersebut $\rightarrow$ Pilih printer yang sudah di-pair.</li>
-        <li>Di POS Kasir, klik tombol <strong>"📲 Bluetooth App"</strong> setelah transaksi selesai. Struk langsung tercetak otomatis tanpa popup dialog.</li>
-      </ol>
+      <h4 style="color:var(--text-primary);margin-top:12px;margin-bottom:6px">2. 📲 Web Bluetooth (BLE Direct ESC/POS Tanpa Aplikasi)</h4>
+      <p style="font-size:12px;margin-bottom:6px">Langsung mengirim binary ESC/POS ke printer Bluetooth dari browser Chrome / Edge di Android &amp; Laptop.</p>
+
+      <h4 style="color:var(--text-primary);margin-top:12px;margin-bottom:6px">3. 🔌 WebUSB (Kabel USB OTG Direct)</h4>
+      <p style="font-size:12px;margin-bottom:6px">Hubungkan kabel printer USB ke laptop atau HP via konverter OTG untuk cetak super cepat tanpa dialog spooler.</p>
+
+      <h4 style="color:var(--text-primary);margin-top:12px;margin-bottom:6px">4. 🌐 Background Intent (RawBT &amp; Bluetooth Print App)</h4>
+      <p style="font-size:12px;margin-bottom:6px">Khusus Android, struk dapat dilempar otomatis ke aplikasi background <strong>RawBT</strong> atau <strong>Bluetooth Print App</strong> untuk auto-cut dan cetak senyap.</p>
     </div>
     <div class="modal-footer">
       <button class="btn btn--primary" id="pg-close2">Mengerti 👍</button>

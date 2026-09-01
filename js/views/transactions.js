@@ -6,7 +6,14 @@ import { formatRupiah }          from '../utils/currency.js';
 import { formatDateTime }        from '../utils/date.js';
 import { esc }                   from '../utils/sanitize.js';
 import { openModal, closeModal } from './modals.js';
-import { getReceiptPreviewHTML, getPrintSchemeUrl, printThermalDirect } from '../printer.js';
+import {
+  getReceiptPreviewHTML,
+  getPrintSchemeUrl,
+  getRawBTSchemeUrl,
+  printThermalDirect,
+  printViaWebBluetooth,
+  printViaWebUSB
+} from '../printer.js';
 import { buildReceiptJSON }      from '../receipt.js';
 import store                     from '../store.js';
 
@@ -408,7 +415,9 @@ const showPayDebtModal = (tx) => {
 const showTxDetail = (tx) => {
   const json     = buildReceiptJSON(tx, store.state.settings);
   sessionStorage.setItem('pendingReceipt', JSON.stringify(json));
-  const printUrl = getPrintSchemeUrl(tx);
+  const printUrl  = getPrintSchemeUrl(tx);
+  const rawbtUrl  = getRawBTSchemeUrl(tx);
+  const paperSize = store.state.settings?.printerPaper || '58mm';
 
   const html = `
     <div class="modal-header">
@@ -435,7 +444,7 @@ const showTxDetail = (tx) => {
         </div>
       </div>
 
-      <div class="receipt-preview" id="receipt-capture">${getReceiptPreviewHTML(tx)}</div>
+      <div class="receipt-preview" id="receipt-capture">${getReceiptPreviewHTML(tx, paperSize)}</div>
 
       ${(tx.remainingDebt || 0) > 0 ? `
       <div style="padding:12px;background:#fee2e2;border:1.5px solid #fca5a5;border-radius:10px;text-align:center">
@@ -459,11 +468,16 @@ const showTxDetail = (tx) => {
     <div class="modal-footer" style="flex-wrap:wrap;gap:8px;justify-content:flex-end">
       <button class="btn btn--secondary" id="td-close-btn">✕ Tutup</button>
       <button class="btn btn--secondary" id="btn-save-png">🖼️ PNG / Share</button>
-      <a class="btn btn--secondary" href="${printUrl}" style="text-decoration:none;font-size:12px;display:flex;align-items:center;gap:4px">
-        📲 Bluetooth App
+      <button class="btn btn--secondary" id="btn-td-ble" style="font-size:11px">📲 Web BLE</button>
+      <button class="btn btn--secondary" id="btn-td-usb" style="font-size:11px">🔌 USB</button>
+      <a class="btn btn--secondary" href="${printUrl}" style="text-decoration:none;font-size:11px;display:flex;align-items:center;gap:4px">
+        🌐 BT App
+      </a>
+      <a class="btn btn--secondary" href="${rawbtUrl}" style="text-decoration:none;font-size:11px;display:flex;align-items:center;gap:4px">
+        ⚡ RawBT
       </a>
       <button class="btn btn--success" id="btn-tx-print-direct" style="font-weight:700">
-        🖨️ Cetak Struk (58mm)
+        🖨️ Cetak (${paperSize})
       </button>
     </div>
   `;
@@ -474,9 +488,27 @@ const showTxDetail = (tx) => {
     document.getElementById('td-x')?.addEventListener('click',        () => closeModal('tx-detail'));
     document.getElementById('td-close-btn')?.addEventListener('click', () => closeModal('tx-detail'));
 
-    // Direct 58mm Thermal Print
+    // Direct Universal Thermal Print
     document.getElementById('btn-tx-print-direct')?.addEventListener('click', () => {
       printThermalDirect(tx);
+    });
+
+    // Web BLE
+    document.getElementById('btn-td-ble')?.addEventListener('click', async () => {
+      try {
+        window.showToast('Koneksi Bluetooth...', 'info');
+        await printViaWebBluetooth(tx);
+        window.showToast('Struk terkirim ke printer Bluetooth!', 'success');
+      } catch (e) { window.showToast(e.message || 'Gagal Bluetooth', 'error'); }
+    });
+
+    // WebUSB
+    document.getElementById('btn-td-usb')?.addEventListener('click', async () => {
+      try {
+        window.showToast('Koneksi USB...', 'info');
+        await printViaWebUSB(tx);
+        window.showToast('Struk terkirim ke printer USB!', 'success');
+      } catch (e) { window.showToast(e.message || 'Gagal USB', 'error'); }
     });
 
     // PNG export via npm html2canvas

@@ -1,16 +1,26 @@
 /**
- * printer.js — High-End Thermal Bluetooth & Universal 58mm/80mm POS Printing Engine
+ * printer.js — Universal Thermal POS Printing Engine (48mm / 58mm / 80mm)
  *
  * Supported Protocols:
- * 1. Direct Web Thermal Print (Universal for Windows / macOS / Android / iOS via 58mm CSS)
- * 2. Web Bluetooth Direct ESC/POS (Zero App Required on Chrome/Edge/Android)
- * 3. Bluetooth Print App Android (my.bluetoothprint.scheme://) & RawBT (rawbt:)
+ * 1. Universal Direct Thermal Print (Zero Margin CSS @page: 48mm / 58mm / 80mm)
+ * 2. Web Bluetooth Direct ESC/POS (Zero-app BLE on Chrome/Android/Edge)
+ * 3. WebUSB Direct ESC/POS (USB Cable / OTG on Chrome/Edge/Android)
+ * 4. Android App Intents (RawBT & Bluetooth Print App)
  */
 import { buildReceiptJSON } from './receipt.js';
 import { formatRupiah }     from './utils/currency.js';
 import { formatDateTime }   from './utils/date.js';
 import store                from './store.js';
 import logoUrl              from '../assets/logo.png';
+
+/**
+ * Paper Configs by Width
+ */
+export const PAPER_SPECS = {
+  '48mm': { width: '48mm', widthPx: '185px', colWidth: 30, fontSize: '10px', logoWidth: '55px' },
+  '58mm': { width: '58mm', widthPx: '220px', colWidth: 32, fontSize: '11px', logoWidth: '70px' },
+  '80mm': { width: '80mm', widthPx: '300px', colWidth: 48, fontSize: '12px', logoWidth: '85px' },
+};
 
 /**
  * Build receipt endpoint URL (static file for GitHub Pages / PWA)
@@ -30,7 +40,7 @@ export const prepareReceiptForPrint = (txData) => {
 };
 
 /**
- * Get full scheme URL for Bluetooth Print App / RawBT
+ * Get full scheme URL for Bluetooth Print App
  */
 export const getPrintSchemeUrl = (txData) => {
   prepareReceiptForPrint(txData);
@@ -40,30 +50,39 @@ export const getPrintSchemeUrl = (txData) => {
 };
 
 /**
- * Generate 58mm/80mm HTML Receipt for Direct Print & Modal Preview
+ * Get RawBT scheme URL for direct Android printing
  */
-export const getReceiptPreviewHTML = (txData, paperWidth = '58mm') => {
-  const settings = store.state.settings || {};
-  const items    = txData.items || [];
-  const is58     = (settings.printerPaper || paperWidth) === '58mm';
-  const widthPx  = is58 ? '220px' : '300px';
+export const getRawBTSchemeUrl = (txData) => {
+  prepareReceiptForPrint(txData);
+  const receiptUrl = getReceiptUrl();
+  return `rawbt:data:application/json;base64,${btoa(unescape(encodeURIComponent(JSON.stringify(buildReceiptJSON(txData, store.state.settings)))))}`;
+};
 
-  const line = (t, bold = false, align = 'left', size = '11px') =>
+/**
+ * Generate 48mm / 58mm / 80mm HTML Receipt for Direct Print & Modal Preview
+ */
+export const getReceiptPreviewHTML = (txData, paperWidth = null) => {
+  const settings = store.state.settings || {};
+  const sizeKey  = paperWidth || settings.printerPaper || '58mm';
+  const spec     = PAPER_SPECS[sizeKey] || PAPER_SPECS['58mm'];
+  const items    = txData.items || [];
+
+  const line = (t, bold = false, align = 'left', size = spec.fontSize) =>
     `<div style="text-align:${align};font-weight:${bold ? '700' : '400'};font-size:${size};line-height:1.35;word-break:break-word">${t}</div>`;
   const sep = () => '<div style="border-top:1px dashed #444;margin:4px 0"></div>';
   const empty = () => '<div style="height:4px"></div>';
 
-  let html = `<div class="thermal-receipt" style="width:${widthPx};margin:0 auto;font-family:'Courier New',Consolas,monospace;color:#000;background:#fff;padding:4px">`;
+  let html = `<div class="thermal-receipt" style="width:${spec.widthPx};margin:0 auto;font-family:'Courier New',Consolas,monospace;color:#000;background:#fff;padding:4px">`;
 
   // Logo
   html += `<div style="text-align:center;margin-bottom:6px;margin-top:2px">
     <img src="${logoUrl}"
          alt="Logo"
-         style="width:${is58 ? '70px' : '85px'};height:${is58 ? '70px' : '85px'};object-fit:contain;display:inline-block">
+         style="width:${spec.logoWidth};height:${spec.logoWidth};object-fit:contain;display:inline-block">
   </div>`;
 
   // Shop Info
-  html += line(settings.shopName || 'Blue Mountain Refilling Station', true, 'center', is58 ? '12px' : '14px');
+  html += line(settings.shopName || 'Blue Mountain Refilling Station', true, 'center', sizeKey === '80mm' ? '14px' : '12px');
   if (settings.shopAddress) html += line(settings.shopAddress, false, 'center', '10px');
   if (settings.shopPhone)   html += line(`Telp: ${settings.shopPhone}`, false, 'center', '10px');
   
@@ -107,7 +126,7 @@ export const getReceiptPreviewHTML = (txData, paperWidth = '58mm') => {
   }
 
   // Grand Total
-  html += `<div style="display:flex;justify-content:space-between;font-size:${is58 ? '12px' : '13px'};font-weight:900;margin-top:2px">
+  html += `<div style="display:flex;justify-content:space-between;font-size:${sizeKey === '80mm' ? '14px' : '12px'};font-weight:900;margin-top:2px">
     <span>TOTAL</span><span>${formatRupiah(txData.total)}</span>
   </div>`;
 
@@ -144,11 +163,12 @@ export const getReceiptPreviewHTML = (txData, paperWidth = '58mm') => {
 };
 
 /**
- * Universal Direct Thermal Print (58mm/80mm) via Browser Print Dialog
+ * Universal Direct Thermal Print (48mm / 58mm / 80mm) via Browser Print Dialog
  */
-export const printThermalDirect = (txData) => {
+export const printThermalDirect = (txData, customPaper = null) => {
   const settings   = store.state.settings || {};
-  const paperSize  = settings.printerPaper || '58mm';
+  const paperSize  = customPaper || settings.printerPaper || '58mm';
+  const spec       = PAPER_SPECS[paperSize] || PAPER_SPECS['58mm'];
   const receiptHTML = getReceiptPreviewHTML(txData, paperSize);
 
   const printFrame = document.createElement('iframe');
@@ -169,12 +189,12 @@ export const printThermalDirect = (txData) => {
   <title>Struk-${txData.invoiceNo || 'KASIR'}</title>
   <style>
     @page {
-      size: ${paperSize === '58mm' ? '58mm auto' : '80mm auto'};
+      size: ${spec.width} auto;
       margin: 0mm;
     }
     @media print {
       html, body {
-        width: ${paperSize === '58mm' ? '58mm' : '80mm'};
+        width: ${spec.width};
         margin: 0 !important;
         padding: 1mm 2mm !important;
         background: #fff !important;
@@ -187,7 +207,7 @@ export const printThermalDirect = (txData) => {
         padding: 0 !important;
       }
       img {
-        max-width: 65px !important;
+        max-width: ${spec.logoWidth} !important;
         height: auto !important;
         -webkit-filter: grayscale(100%);
         filter: grayscale(100%);
@@ -229,63 +249,14 @@ export const printThermalDirect = (txData) => {
 };
 
 /**
- * Direct Web Bluetooth ESC/POS Direct Print (Zero App Required)
+ * Build Raw ESC/POS Binary Buffer for 48mm, 58mm, or 80mm
  */
-export const printViaWebBluetooth = async (txData) => {
-  if (!navigator.bluetooth) {
-    throw new Error('Web Bluetooth tidak didukung pada browser ini. Gunakan Chrome di Android/PC atau gunakan opsi Cetak Direct.');
-  }
-
-  // Request Bluetooth Printer Device
-  const device = await navigator.bluetooth.requestDevice({
-    filters: [
-      { services: ['000018f0-0000-1000-8000-00805f9b34fb'] },
-      { services: ['e7810a71-73ae-499d-8c15-faa9aef0c3f2'] },
-      { namePrefix: 'MPT' },
-      { namePrefix: 'RP' },
-      { namePrefix: 'POS' },
-      { namePrefix: 'Thermal' },
-      { namePrefix: 'Bluetooth' },
-      { namePrefix: 'Printer' },
-    ],
-    optionalServices: [
-      '000018f0-0000-1000-8000-00805f9b34fb',
-      'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
-      '49535343-fe7d-4ae5-8fa9-9fafd205e455',
-    ]
-  });
-
-  const server = await device.gatt.connect();
-  const services = await server.getPrimaryServices();
-  let writeChar = null;
-
-  for (const service of services) {
-    const chars = await service.getCharacteristics();
-    for (const c of chars) {
-      if (c.properties.write || c.properties.writeWithoutResponse) {
-        writeChar = c;
-        break;
-      }
-    }
-    if (writeChar) break;
-  }
-
-  if (!writeChar) {
-    throw new Error('Karakteristik printer Bluetooth tidak ditemukan.');
-  }
-
-  // Build ESC/POS Byte Buffer
-  const encoder = new TextEncoder();
+export const buildESCPOSBuffer = (txData, paperSize = null) => {
+  const encoder  = new TextEncoder();
   const settings = store.state.settings || {};
-  const is58 = (settings.printerPaper || '58mm') === '58mm';
-  const colWidth = is58 ? 32 : 48;
-
-  const padBoth = (txt, width = colWidth) => {
-    const space = Math.max(0, width - txt.length);
-    const left = Math.floor(space / 2);
-    const right = space - left;
-    return ' '.repeat(left) + txt + ' '.repeat(right);
-  };
+  const sizeKey  = paperSize || settings.printerPaper || '58mm';
+  const spec     = PAPER_SPECS[sizeKey] || PAPER_SPECS['58mm'];
+  const colWidth = spec.colWidth;
 
   const padLR = (left, right, width = colWidth) => {
     const space = Math.max(1, width - left.length - right.length);
@@ -368,8 +339,55 @@ export const printViaWebBluetooth = async (txData) => {
   // Feed 3 lines and cut
   pushCmd([0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x42, 0x00]);
 
-  // Send in 64-byte chunks to avoid buffer overflow
-  const data = new Uint8Array(buffer);
+  return new Uint8Array(buffer);
+};
+
+/**
+ * Direct Web Bluetooth ESC/POS Direct Print (Zero App Required)
+ */
+export const printViaWebBluetooth = async (txData) => {
+  if (!navigator.bluetooth) {
+    throw new Error('Web Bluetooth tidak didukung pada browser ini. Gunakan Chrome di Android/PC atau gunakan opsi Cetak Direct.');
+  }
+
+  const device = await navigator.bluetooth.requestDevice({
+    filters: [
+      { services: ['000018f0-0000-1000-8000-00805f9b34fb'] },
+      { services: ['e7810a71-73ae-499d-8c15-faa9aef0c3f2'] },
+      { namePrefix: 'MPT' },
+      { namePrefix: 'RP' },
+      { namePrefix: 'POS' },
+      { namePrefix: 'Thermal' },
+      { namePrefix: 'Bluetooth' },
+      { namePrefix: 'Printer' },
+    ],
+    optionalServices: [
+      '000018f0-0000-1000-8000-00805f9b34fb',
+      'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+      '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+    ]
+  });
+
+  const server = await device.gatt.connect();
+  const services = await server.getPrimaryServices();
+  let writeChar = null;
+
+  for (const service of services) {
+    const chars = await service.getCharacteristics();
+    for (const c of chars) {
+      if (c.properties.write || c.properties.writeWithoutResponse) {
+        writeChar = c;
+        break;
+      }
+    }
+    if (writeChar) break;
+  }
+
+  if (!writeChar) {
+    throw new Error('Karakteristik printer Bluetooth tidak ditemukan.');
+  }
+
+  const data = buildESCPOSBuffer(txData);
   const chunkSize = 64;
   for (let i = 0; i < data.length; i += chunkSize) {
     const chunk = data.slice(i, i + chunkSize);
@@ -384,11 +402,30 @@ export const printViaWebBluetooth = async (txData) => {
 };
 
 /**
- * Instant 58mm Test Receipt
+ * Direct WebUSB ESC/POS Printing (USB Cable / OTG)
  */
-export const printTestReceipt = () => {
+export const printViaWebUSB = async (txData) => {
+  if (!navigator.usb) {
+    throw new Error('WebUSB tidak didukung pada browser ini. Gunakan Chrome/Edge.');
+  }
+
+  const device = await navigator.usb.requestDevice({ filters: [] });
+  await device.open();
+  await device.selectConfiguration(1);
+  await device.claimInterface(0);
+
+  const data = buildESCPOSBuffer(txData);
+  // Endpoint 1 is standard for USB thermal printers
+  await device.transferOut(1, data);
+  await device.close();
+};
+
+/**
+ * Instant Multi-Size Test Receipt
+ */
+export const printTestReceipt = (paperSize = '58mm') => {
   const dummyTx = {
-    invoiceNo: 'TEST-58MM-' + Math.floor(Math.random() * 8999 + 1000),
+    invoiceNo: `TEST-${paperSize.toUpperCase()}-` + Math.floor(Math.random() * 8999 + 1000),
     date: new Date().toISOString(),
     customerName: 'Pelanggan Uji Coba',
     cashier: store.state.settings.cashierName || 'Kasir',
@@ -404,5 +441,5 @@ export const printTestReceipt = () => {
       { product: { name: 'Pembersihan Galon', price: 15000 }, qty: 1 },
     ]
   };
-  printThermalDirect(dummyTx);
+  printThermalDirect(dummyTx, paperSize);
 };

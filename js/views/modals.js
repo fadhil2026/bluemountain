@@ -5,7 +5,14 @@ import store                  from '../store.js';
 import { formatRupiah }       from '../utils/currency.js';
 import { esc }                from '../utils/sanitize.js';
 import { saveTransaction }    from '../db.js';
-import { getReceiptPreviewHTML, getPrintSchemeUrl, printThermalDirect } from '../printer.js';
+import {
+  getReceiptPreviewHTML,
+  getPrintSchemeUrl,
+  getRawBTSchemeUrl,
+  printThermalDirect,
+  printViaWebBluetooth,
+  printViaWebUSB
+} from '../printer.js';
 import { buildReceiptJSON }   from '../receipt.js';
 import { generateInvoiceNo }  from '../utils/invoice.js';
 import { todayKey }           from '../utils/date.js';
@@ -337,14 +344,16 @@ export const showPaymentModal = (method = 'cash') => {
 };
 
 /* ─────────────────────────────────────────
-   Success Overlay with Prominent 58mm Print Options
+   Success Overlay with Universal Multi-Protocol Printing
    ───────────────────────────────────────── */
 const showSuccessOverlay = (txData) => {
   const json = buildReceiptJSON(txData, store.state.settings);
   sessionStorage.setItem('pendingReceipt', JSON.stringify(json));
 
   const printUrl    = getPrintSchemeUrl(txData);
-  const receiptHTML = getReceiptPreviewHTML(txData);
+  const rawbtUrl    = getRawBTSchemeUrl(txData);
+  const paperSize   = store.state.settings?.printerPaper || '58mm';
+  const receiptHTML = getReceiptPreviewHTML(txData, paperSize);
 
   const overlay = document.createElement('div');
   overlay.className = 'success-overlay';
@@ -369,12 +378,21 @@ const showSuccessOverlay = (txData) => {
     </div>
 
     <!-- Print & Navigation Actions -->
-    <div class="success-actions" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:380px;margin-top:14px">
-      <button class="btn btn--success" id="btn-print-direct" style="flex:1;min-width:140px;font-weight:700;box-shadow:0 4px 12px rgba(16,185,129,0.3)">
-        🖨️ Cetak Struk (58mm)
+    <div class="success-actions" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:420px;margin-top:14px">
+      <button class="btn btn--success" id="btn-print-direct" style="flex:1;min-width:150px;font-weight:700;box-shadow:0 4px 12px rgba(16,185,129,0.3)">
+        🖨️ Cetak Struk (${paperSize})
       </button>
-      <a class="btn btn--secondary" href="${printUrl}" id="btn-print-bluetooth" style="text-decoration:none;font-size:12px;display:flex;align-items:center;gap:4px">
-        📲 Bluetooth App
+      <button class="btn btn--secondary" id="btn-print-ble" style="font-size:12px;display:flex;align-items:center;gap:4px">
+        📲 Web Bluetooth
+      </button>
+      <button class="btn btn--secondary" id="btn-print-usb" style="font-size:12px;display:flex;align-items:center;gap:4px">
+        🔌 WebUSB (Kabel)
+      </button>
+      <a class="btn btn--secondary" href="${printUrl}" style="text-decoration:none;font-size:12px;display:flex;align-items:center;gap:4px">
+        🌐 BT App
+      </a>
+      <a class="btn btn--secondary" href="${rawbtUrl}" style="text-decoration:none;font-size:12px;display:flex;align-items:center;gap:4px">
+        ⚡ RawBT
       </a>
       <button class="btn btn--primary" id="btn-new-tx" style="flex:1;min-width:140px">
         🔄 Transaksi Baru
@@ -386,7 +404,7 @@ const showSuccessOverlay = (txData) => {
 
     <details style="margin-top:14px;max-width:340px;width:100%">
       <summary style="cursor:pointer;font-size:12px;color:var(--text-secondary);text-align:center;margin-bottom:8px;font-weight:600">
-        📄 Preview Struk Thermal
+        📄 Preview Struk (${paperSize})
       </summary>
       <div class="receipt-preview" style="background:#fff;border-radius:8px;padding:8px">${receiptHTML}</div>
     </details>
@@ -402,9 +420,33 @@ const showSuccessOverlay = (txData) => {
   document.getElementById('success-close-btn')?.addEventListener('click', closeOverlay);
   document.getElementById('btn-close-overlay')?.addEventListener('click', closeOverlay);
 
-  // Direct 58mm Thermal Print
+  // Direct Universal Thermal Print
   document.getElementById('btn-print-direct')?.addEventListener('click', () => {
     printThermalDirect(txData);
+  });
+
+  // Web Bluetooth
+  document.getElementById('btn-print-ble')?.addEventListener('click', async () => {
+    try {
+      window.showToast('Menghubungkan ke printer Bluetooth...', 'info');
+      await printViaWebBluetooth(txData);
+      window.showToast('Struk terkirim ke printer Bluetooth!', 'success');
+    } catch (err) {
+      console.warn('[ble-print]', err);
+      window.showToast(err.message || 'Gagal koneksi Bluetooth', 'error');
+    }
+  });
+
+  // WebUSB
+  document.getElementById('btn-print-usb')?.addEventListener('click', async () => {
+    try {
+      window.showToast('Menghubungkan ke printer USB...', 'info');
+      await printViaWebUSB(txData);
+      window.showToast('Struk terkirim ke printer USB!', 'success');
+    } catch (err) {
+      console.warn('[usb-print]', err);
+      window.showToast(err.message || 'Gagal koneksi WebUSB', 'error');
+    }
   });
 
   document.getElementById('btn-new-tx')?.addEventListener('click', () => {
@@ -412,5 +454,5 @@ const showSuccessOverlay = (txData) => {
     window.showToast('Siap transaksi baru! 👍', 'success');
   });
 
-  setTimeout(() => { if (overlay.parentNode) closeOverlay(); }, 15000);
+  setTimeout(() => { if (overlay.parentNode) closeOverlay(); }, 20000);
 };
