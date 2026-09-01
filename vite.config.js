@@ -51,8 +51,6 @@ export default defineConfig({
       injectRegister: 'auto',
       includeAssets: [
         'assets/logo.png',
-        'assets/logo.jpeg',
-        'assets/logo_icon.png',
         'assets/icons/icon-192.png',
         'assets/icons/icon-512.png',
         'favicon.ico',
