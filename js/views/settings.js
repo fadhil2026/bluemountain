@@ -32,8 +32,23 @@ export const renderSettings = async () => {
   const view = document.getElementById('view-settings');
   const s    = store.state.settings;
 
-  // __APP_VERSION__ is injected by vite.config.js define
-  const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.0.0';
+  // Real dynamic version & build metadata injected by Vite build engine
+  const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.0.0';
+  const gitHash    = typeof __GIT_HASH__ !== 'undefined' && __GIT_HASH__ ? __GIT_HASH__ : '';
+  const buildTime  = typeof __BUILD_TIMESTAMP__ !== 'undefined' ? __BUILD_TIMESTAMP__ : new Date().toISOString();
+
+  const buildDateObj = new Date(buildTime);
+  const formattedBuildDate = new Intl.DateTimeFormat('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(buildDateObj);
+  const formattedBuildClock = new Intl.DateTimeFormat('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(buildDateObj);
 
   // Check if app is running in standalone mode (PWA installed)
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
@@ -163,11 +178,15 @@ export const renderSettings = async () => {
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">Versi Aplikasi</div>
-          <div class="settings-row__desc">Dukungan Otomatis via package.json &amp; Vite Engine</div>
+          <div class="settings-row__desc">Otomatis &amp; Real-time via Git CI/CD Build Engine</div>
         </div>
         <div style="text-align:right">
-          <span class="badge badge--blue" style="font-size:12px;padding:6px 12px;font-weight:800">v${esc(appVersion)} High-End</span>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">Build: ${new Date().toLocaleDateString('id-ID')}</div>
+          <span class="badge badge--blue" style="font-size:12px;padding:6px 12px;font-weight:800;letter-spacing:0.02em">
+            v${esc(appVersion)}${gitHash ? ` (${esc(gitHash)})` : ''}
+          </span>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">
+            Build: ${esc(formattedBuildDate)} • ${esc(formattedBuildClock)}
+          </div>
         </div>
       </div>
 

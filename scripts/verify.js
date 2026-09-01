@@ -8,6 +8,22 @@ import path from 'path';
 
 console.log('🔍 [CI/CD Verification] Memulai audit pra-deploy...');
 
+// 0. Auto-sync dynamic package.json version with Git revision
+try {
+  const gitCount = execSync('git rev-list --count HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  if (gitCount && gitCount !== '0') {
+    const pkgPath = './package.json';
+    const pkgData = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    const base = pkgData.version.split('.').slice(0, 2).join('.');
+    const nextVer = `${base}.${gitCount}`;
+    if (pkgData.version !== nextVer) {
+      pkgData.version = nextVer;
+      fs.writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2) + '\n', 'utf8');
+      console.log(`  ✓ Sinkronisasi versi dinamis package.json -> v${nextVer}`);
+    }
+  }
+} catch (_) {}
+
 // 1. Scan and verify syntax for all JavaScript files
 const getJsFiles = (dir) => {
   let results = [];
