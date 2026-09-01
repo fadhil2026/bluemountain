@@ -23,18 +23,19 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 
 /* ── Network Status ── */
+// Only handles the OFFLINE state — online/cloud label is managed by supabase.js syncBadge
 const updateNetworkStatus = () => {
   const badge = document.getElementById('status-badge');
   if (!badge) return;
-  if (navigator.onLine) {
-    badge.textContent = 'Sistem Online';
-    badge.classList.remove('status-badge--offline');
-  } else {
-    badge.textContent = 'Mode Offline';
+  if (!navigator.onLine) {
+    badge.textContent = '⚡ Mode Offline';
     badge.classList.add('status-badge--offline');
+    badge.style.background    = 'rgba(239, 68, 68, 0.12)';
+    badge.style.borderColor   = 'rgba(239, 68, 68, 0.3)';
+    badge.style.color         = '#dc2626';
   }
+  // When online: Supabase sync will update the badge to '🟢 Cloud Realtime'
 };
-window.addEventListener('online',  updateNetworkStatus);
 window.addEventListener('offline', updateNetworkStatus);
 
 /* ── Toast System ── */

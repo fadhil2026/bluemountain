@@ -225,6 +225,26 @@ export const syncInitialData = async () => {
   } finally {
     isSyncing = false;
   }
+
+  // 4. Sync Settings (pull cloud → local, seed local → cloud if empty)
+  try {
+    const { data: cloudSettings, error: setErr } = await getSupabase().from('settings').select('*');
+    const localSettingsArr = await db.settings.toArray();
+
+    if (!setErr && cloudSettings) {
+      if (cloudSettings.length === 0 && localSettingsArr.length > 0) {
+        // Seed local settings to cloud
+        await getSupabase().from('settings').upsert(
+          localSettingsArr.map(s => ({ key: s.key, value: String(s.value ?? ''), updated_at: new Date().toISOString() }))
+        );
+      } else if (cloudSettings.length > 0) {
+        // Merge cloud settings into local Dexie
+        for (const cs of cloudSettings) {
+          await db.settings.put({ key: cs.key, value: cs.value ?? '' });
+        }
+      }
+    }
+  } catch (_) {}
 };
 
 /**
@@ -369,5 +389,17 @@ export const deleteExpenseFromCloud = async (id) => {
   try {
     const supabase = getSupabase();
     await supabase.from('expenses').delete().eq('id', String(id));
+  } catch (_) {}
+};
+
+export const pushSettingToCloud = async (key, value) => {
+  if (!navigator.onLine) return;
+  try {
+    const supabase = getSupabase();
+    await supabase.from('settings').upsert({
+      key: String(key),
+      value: String(value ?? ''),
+      updated_at: new Date().toISOString(),
+    });
   } catch (_) {}
 };

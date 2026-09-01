@@ -10,6 +10,7 @@ import {
   deleteTransactionFromCloud,
   pushExpenseToCloud,
   deleteExpenseFromCloud,
+  pushSettingToCloud,
 } from './supabase.js';
 
 export const db = new Dexie('BlueMountainPOS');
@@ -77,7 +78,10 @@ export const getSetting = async (key) => {
   const row = await db.settings.get(key);
   return row?.value ?? null;
 };
-export const setSetting = (key, value) => db.settings.put({ key, value });
+export const setSetting = async (key, value) => {
+  await db.settings.put({ key, value });
+  pushSettingToCloud(key, value).catch(() => {});
+};
 
 // ── Seed Default Products (only if empty) ──
 export const seedDefaultProducts = async () => {
