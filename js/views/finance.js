@@ -1,6 +1,6 @@
 /**
  * views/finance.js — Keuangan / Arus Kas Profesional
- * FIX: double-render guard, XSS sanitize, transfer daily cashflow corrected
+ * Features: Multi-table pagination (10/page), Date range cashflow, Modal Awal
  */
 import { getAllTransactions, getAllExpenses, saveExpense, deleteExpense, updateTransaction } from '../db.js';
 import { getSetting, setSetting } from '../db.js';
@@ -10,12 +10,15 @@ import { esc }                    from '../utils/sanitize.js';
 import { openModal, closeModal }  from './modals.js';
 import store                      from '../store.js';
 
-let _unsubTx  = null;
-let _unsubExp = null;
-let _rendering = false; // FIX: guard against double-render
+let _unsubTx      = null;
+let _unsubExp     = null;
+let _rendering    = false;
+let _piutangPage  = 1;
+let _expensePage  = 1;
+let _journalPage  = 1;
+const PAGE_SIZE   = 10;
 
 export const initFinance = async () => {
-  // FIX: subscribe FIRST, then render once
   if (_unsubTx)  _unsubTx();
   if (_unsubExp) _unsubExp();
   _unsubTx  = store.on('transactions:change', () => { if (!_rendering) renderFinance(); });
@@ -42,7 +45,7 @@ export const renderFinance = async () => {
 
     const modalAwal = parseFloat(modalAwalRaw) || 0;
 
-    // ── Kas Masuk Calculation (Cash Basis, Confirmed only) ──
+    // ── Kas Masuk Calculation ──
     let kasmasukTunai      = 0;
     let kasmasukTransfer   = 0;
     let kasmasukCicilan    = 0;
@@ -79,6 +82,22 @@ export const renderFinance = async () => {
       ...txs.filter(t => t.paymentStatus === 'transfer_pending'),
       ...txs.filter(t => (t.paymentMethod === 'debt' || t.paymentStatus === 'partial' || t.paymentStatus === 'unpaid') && (t.remainingDebt || 0) > 0),
     ].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Pagination for Piutang (10/page)
+    const piutangTotalPages = Math.max(1, Math.ceil(outstanding.length / PAGE_SIZE));
+    if (_piutangPage > piutangTotalPages) _piutangPage = piutangTotalPages;
+    const piutangPageItems = outstanding.slice((_piutangPage - 1) * PAGE_SIZE, _piutangPage * PAGE_SIZE);
+
+    // Pagination for Expenses (10/page)
+    const sortedExpenses = [...expenses].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const expTotalPages  = Math.max(1, Math.ceil(sortedExpenses.length / PAGE_SIZE));
+    if (_expensePage > expTotalPages) _expensePage = expTotalPages;
+    const expPageItems = sortedExpenses.slice((_expensePage - 1) * PAGE_SIZE, _expensePage * PAGE_SIZE);
+
+    // Pagination for Journal (10/page)
+    const journalTotalPages = Math.max(1, Math.ceil(journal.length / PAGE_SIZE));
+    if (_journalPage > journalTotalPages) _journalPage = journalTotalPages;
+    const journalPageItems = journal.slice((_journalPage - 1) * PAGE_SIZE, _journalPage * PAGE_SIZE);
 
     view.innerHTML = `
       <div class="section-header">
@@ -137,10 +156,12 @@ export const renderFinance = async () => {
         </div>
       </div>
 
-      <!-- Piutang Outstanding -->
+      <!-- Piutang Outstanding Table with Pagination (10/page) -->
       ${outstanding.length > 0 ? `
-      <div class="card" style="margin-bottom:16px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:12px">⚠️ Daftar Piutang &amp; Cicilan Berjalan (${outstanding.length})</div>
+      <div class="card card--elevated" style="margin-bottom:16px;overflow:hidden;padding:0">
+        <div style="padding:14px 16px;border-bottom:1.5px solid var(--border-subtle);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text-primary)">
+          ⚠️ Daftar Piutang &amp; Cicilan Berjalan (${outstanding.length} transaksi)
+        </div>
         <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
           <table class="data-table" id="piutang-table">
             <thead>
@@ -156,7 +177,7 @@ export const renderFinance = async () => {
               </tr>
             </thead>
             <tbody>
-              ${outstanding.map(t => {
+              ${piutangPageItems.map(t => {
                 const totalAmt = t.total || 0;
                 const remAmt   = t.paymentStatus === 'transfer_pending' ? totalAmt : (t.remainingDebt || 0);
                 const paidAmt  = totalAmt - remAmt;
@@ -195,16 +216,23 @@ export const renderFinance = async () => {
             </tbody>
           </table>
         </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:white;border-top:1px solid var(--border-subtle);flex-wrap:wrap;gap:8px">
+          <div style="font-size:12px;color:var(--text-muted)">Hal ${_piutangPage} dari ${piutangTotalPages}</div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn--secondary btn--sm" id="piutang-prev" ${_piutangPage <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>◀ Sebelumnya</button>
+            <button class="btn btn--secondary btn--sm" id="piutang-next" ${_piutangPage >= piutangTotalPages ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>Berikutnya ▶</button>
+          </div>
+        </div>
       </div>` : ''}
 
-      <!-- Pengeluaran -->
-      <div class="card" style="margin-bottom:16px">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">📤 Pengeluaran Operasional</div>
-          <button class="btn btn--secondary btn--sm" id="btn-add-expense">+ Tambah Pengeluaran</button>
+      <!-- Pengeluaran Operasional Table with Pagination (10/page) -->
+      <div class="card card--elevated" style="margin-bottom:16px;overflow:hidden;padding:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1.5px solid var(--border-subtle);flex-wrap:wrap;gap:8px">
+          <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text-primary)">📤 Pengeluaran Operasional (${expenses.length} entri)</div>
+          <button class="btn btn--primary btn--sm" id="btn-add-expense">+ Tambah Pengeluaran</button>
         </div>
         ${expenses.length === 0 ? `
-          <div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Belum ada pengeluaran tercatat</div>
+          <div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">Belum ada pengeluaran tercatat</div>
         ` : `
           <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
             <table class="data-table" id="expense-table">
@@ -212,7 +240,7 @@ export const renderFinance = async () => {
                 <tr><th>Tanggal</th><th>Kategori</th><th>Keterangan</th><th>Jumlah</th><th>Aksi</th></tr>
               </thead>
               <tbody>
-                ${[...expenses].sort((a, b) => new Date(b.date) - new Date(a.date)).map(exp => `
+                ${expPageItems.map(exp => `
                 <tr>
                   <td style="font-size:11px;white-space:nowrap">${new Date(exp.date).toLocaleDateString('id-ID')}</td>
                   <td><span class="badge badge--blue">${esc(exp.category || 'Lainnya')}</span></td>
@@ -227,6 +255,13 @@ export const renderFinance = async () => {
                 </tr>`).join('')}
               </tbody>
             </table>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:white;border-top:1px solid var(--border-subtle);flex-wrap:wrap;gap:8px">
+            <div style="font-size:12px;color:var(--text-muted)">Hal ${_expensePage} dari ${expTotalPages}</div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn--secondary btn--sm" id="exp-prev" ${_expensePage <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>◀ Sebelumnya</button>
+              <button class="btn btn--secondary btn--sm" id="exp-next" ${_expensePage >= expTotalPages ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>Berikutnya ▶</button>
+            </div>
           </div>
         `}
       </div>
@@ -246,16 +281,18 @@ export const renderFinance = async () => {
         </div>
       </div>
 
-      <!-- Jurnal Entri -->
-      <div class="card">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:12px">📒 Jurnal Entri (20 Terbaru)</div>
+      <!-- Jurnal Entri with Pagination (10/page) -->
+      <div class="card card--elevated" style="overflow:hidden;padding:0">
+        <div style="padding:14px 16px;border-bottom:1.5px solid var(--border-subtle);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text-primary)">
+          📒 Jurnal Entri Akuntansi (${journal.length} baris)
+        </div>
         <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
           <table class="data-table">
             <thead>
               <tr><th>Tanggal</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Akun</th></tr>
             </thead>
             <tbody>
-              ${journal.slice(0, 20).map(j => `
+              ${journalPageItems.map(j => `
               <tr>
                 <td style="font-size:11px;white-space:nowrap">${new Date(j.date).toLocaleDateString('id-ID')}</td>
                 <td style="font-size:12px">${esc(j.desc)}</td>
@@ -266,6 +303,13 @@ export const renderFinance = async () => {
               </tr>`).join('')}
             </tbody>
           </table>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:white;border-top:1px solid var(--border-subtle);flex-wrap:wrap;gap:8px">
+          <div style="font-size:12px;color:var(--text-muted)">Hal ${_journalPage} dari ${journalTotalPages}</div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn--secondary btn--sm" id="journal-prev" ${_journalPage <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>◀ Sebelumnya</button>
+            <button class="btn btn--secondary btn--sm" id="journal-next" ${_journalPage >= journalTotalPages ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>Berikutnya ▶</button>
+          </div>
         </div>
       </div>
     `;
@@ -296,7 +340,6 @@ const buildDailyCashFlow = (txs, expenses) => {
       map[key].masuk += tx.total;
     }
     if (tx.paymentMethod === 'transfer' && tx.paymentStatus === 'transfer_confirmed') {
-      // Use confirmedAt date for cash basis correctness
       const confDate = tx.confirmedAt ? tx.confirmedAt.split('T')[0] : key;
       if (!map[confDate]) map[confDate] = { masuk: 0, keluar: 0 };
       map[confDate].masuk += tx.total;
@@ -382,17 +425,15 @@ const buildJournal = (txs, expenses) => {
         });
       }
     } else if (tx.paymentMethod === 'debt') {
-      // 1. Initial Credit Sale Recognition Entry
       entries.push({
         date: tx.date,
-        desc: `Penjualan Piutang Usaha — ${tx.invoiceNo} (${cust}) [Total Tagihan: ${formatRupiah(tx.total)}]`,
+        desc: `Penjualan Piutang Usaha — ${tx.invoiceNo} (${cust}) [Total: ${formatRupiah(tx.total)}]`,
         debit: tx.total,
         credit: tx.total,
         account: 'Piutang / Penjualan',
         type: 'piutang',
       });
 
-      // 2. Step-by-step payment timeline entries
       const payments = tx.debtPayments || [];
       let cumulativePaid = 0;
 
@@ -436,6 +477,30 @@ const buildJournal = (txs, expenses) => {
 
 const bindFinanceEvents = (txs) => {
   document.getElementById('btn-refresh-finance')?.addEventListener('click', renderFinance);
+
+  // Piutang Pagination
+  document.getElementById('piutang-prev')?.addEventListener('click', () => {
+    if (_piutangPage > 1) { _piutangPage--; renderFinance(); }
+  });
+  document.getElementById('piutang-next')?.addEventListener('click', () => {
+    _piutangPage++; renderFinance();
+  });
+
+  // Expense Pagination
+  document.getElementById('exp-prev')?.addEventListener('click', () => {
+    if (_expensePage > 1) { _expensePage--; renderFinance(); }
+  });
+  document.getElementById('exp-next')?.addEventListener('click', () => {
+    _expensePage++; renderFinance();
+  });
+
+  // Journal Pagination
+  document.getElementById('journal-prev')?.addEventListener('click', () => {
+    if (_journalPage > 1) { _journalPage--; renderFinance(); }
+  });
+  document.getElementById('journal-next')?.addEventListener('click', () => {
+    _journalPage++; renderFinance();
+  });
 
   // Set Modal Awal
   document.getElementById('btn-set-modal-awal')?.addEventListener('click', () => {

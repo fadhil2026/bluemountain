@@ -1,6 +1,5 @@
 /**
- * views/transactions.js — Full CRUD + Realtime + Hutang/Piutang + Transfer Konfirmasi
- * FIX: todayKas now uses paidAmount for debt transactions, not total
+ * views/transactions.js — Full CRUD + Realtime + Date Range Filter + Pagination (10/page)
  */
 import { getAllTransactions, deleteTransaction, updateTransaction } from '../db.js';
 import { formatRupiah }          from '../utils/currency.js';
@@ -12,6 +11,10 @@ import { buildReceiptJSON }      from '../receipt.js';
 import store                     from '../store.js';
 
 let _unsubscribe = null;
+let _startDate   = new Date().toISOString().split('T')[0]; // Default: Hari Ini
+let _endDate     = new Date().toISOString().split('T')[0]; // Default: Hari Ini
+let _currentPage = 1;
+const PAGE_SIZE  = 10;
 
 export const initTransactions = async () => {
   if (_unsubscribe) _unsubscribe();
@@ -53,21 +56,34 @@ const methodLabel = (tx) => {
 const canDelete = (tx) =>
   !(tx.paymentMethod === 'debt' && (tx.remainingDebt || 0) > 0);
 
+/* ── Filter Helper ── */
+const getFilteredTransactions = (allTxs) => {
+  const sorted = [...allTxs].sort((a, b) => new Date(b.date) - new Date(a.date));
+  return sorted.filter(tx => {
+    const d = tx.dateKey || (tx.date ? tx.date.split('T')[0] : '');
+    if (_startDate && _endDate) {
+      return d >= _startDate && d <= _endDate;
+    }
+    if (_startDate) return d >= _startDate;
+    if (_endDate)   return d <= _endDate;
+    return true;
+  });
+};
+
 /* ── Render ── */
 const renderTransactionsUI = (allTxs) => {
   const view = document.getElementById('view-transactions');
   if (!view) return;
 
-  const sorted = [...allTxs].sort((a, b) => new Date(b.date) - new Date(a.date));
-  const today  = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().split('T')[0];
+  const filtered = getFilteredTransactions(allTxs);
 
+  // Stats calculation
   const todayTxs = allTxs.filter(t => t.dateKey === today);
-
-  // FIX: kas hari ini pakai paidAmount untuk debt, total untuk paid/confirmed
   const todayKas = todayTxs.reduce((s, t) => {
     if (t.paymentStatus === 'paid' && t.paymentMethod === 'cash') return s + t.total;
     if (t.paymentStatus === 'transfer_confirmed') return s + t.total;
-    if (t.paymentMethod === 'debt') return s + (t.paidAmount || 0); // hanya cicilan yang masuk
+    if (t.paymentMethod === 'debt') return s + (t.paidAmount || 0);
     return s;
   }, 0);
 
@@ -76,12 +92,32 @@ const renderTransactionsUI = (allTxs) => {
     .filter(t => t.paymentStatus === 'transfer_pending')
     .reduce((s, t) => s + t.total, 0);
 
+  // Pagination calculation
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  if (_currentPage > totalPages) _currentPage = totalPages;
+  if (_currentPage < 1) _currentPage = 1;
+
+  const startIdx = (filtered.length === 0) ? 0 : (_currentPage - 1) * PAGE_SIZE + 1;
+  const endIdx   = Math.min(_currentPage * PAGE_SIZE, filtered.length);
+  const pageItems = filtered.slice((_currentPage - 1) * PAGE_SIZE, _currentPage * PAGE_SIZE);
+
   view.innerHTML = `
-    <div class="section-header">
-      <h2 class="section-title">Riwayat Transaksi <span>${allTxs.length} transaksi</span></h2>
+    <div class="section-header" style="flex-wrap:wrap;gap:12px">
+      <h2 class="section-title">Riwayat Transaksi <span>${allTxs.length} total (${filtered.length} terfilter)</span></h2>
+      
+      <!-- Date Range Filter Toolbar -->
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input type="date" class="input" id="tx-filter-date" style="width:auto" value="${today}">
-        <button class="btn btn--secondary btn--sm" id="tx-clear-filter">Tampil Semua</button>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;color:var(--text-secondary);font-weight:600">Dari:</span>
+          <input type="date" class="input" id="tx-filter-start" style="width:auto;padding:6px 10px;font-size:12px" value="${_startDate}">
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;color:var(--text-secondary);font-weight:600">s/d</span>
+          <input type="date" class="input" id="tx-filter-end" style="width:auto;padding:6px 10px;font-size:12px" value="${_endDate}">
+        </div>
+        <button class="btn btn--primary btn--sm" id="tx-btn-apply" style="padding:6px 14px;font-weight:700">Tampilkan</button>
+        <button class="btn btn--secondary btn--sm" id="tx-btn-today" style="padding:6px 10px;font-size:11px">Hari Ini</button>
+        <button class="btn btn--secondary btn--sm" id="tx-btn-all" style="padding:6px 10px;font-size:11px">Semua</button>
       </div>
     </div>
 
@@ -102,7 +138,7 @@ const renderTransactionsUI = (allTxs) => {
       </div>` : ''}
     </div>
 
-    ${sorted.length === 0 ? `
+    ${allTxs.length === 0 ? `
       <div class="card" style="padding:40px">
         <div class="empty-state">
           <div class="empty-state__icon">📋</div>
@@ -126,20 +162,38 @@ const renderTransactionsUI = (allTxs) => {
               </tr>
             </thead>
             <tbody id="tx-tbody">
-              ${renderTxRows(sorted)}
+              ${renderTxRows(pageItems)}
             </tbody>
           </table>
+        </div>
+
+        <!-- Pagination Controls (10 rows/page) -->
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:white;border-top:1.5px solid var(--border-subtle);flex-wrap:wrap;gap:8px">
+          <div style="font-size:12px;color:var(--text-muted)">
+            Menampilkan <strong>${startIdx}-${endIdx}</strong> dari <strong>${filtered.length}</strong> transaksi
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="btn btn--secondary btn--sm" id="tx-prev-page" ${_currentPage <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>
+              ◀ Sebelumnya
+            </button>
+            <span style="font-size:12px;font-weight:700;padding:0 8px;color:var(--blue-700)">
+              Hal ${_currentPage} / ${totalPages}
+            </span>
+            <button class="btn btn--secondary btn--sm" id="tx-next-page" ${_currentPage >= totalPages ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>
+              Berikutnya ▶
+            </button>
+          </div>
         </div>
       </div>
     `}
   `;
 
-  bindTxEvents(allTxs, sorted);
+  bindTxEvents(allTxs);
 };
 
 const renderTxRows = (txs) => {
   if (!txs.length) {
-    return `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:32px;font-size:13px">Tidak ada transaksi untuk filter ini</td></tr>`;
+    return `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:32px;font-size:13px">Tidak ada transaksi untuk rentang tanggal ini</td></tr>`;
   }
   return txs.map(tx => `
     <tr>
@@ -179,23 +233,46 @@ const renderTxRows = (txs) => {
   `).join('');
 };
 
-const bindTxEvents = (allTxs, sortedAll) => {
-  document.getElementById('tx-filter-date')?.addEventListener('change', (e) => {
-    const key      = e.target.value;
-    const filtered = key
-      ? [...allTxs].filter(tx => tx.dateKey === key).sort((a, b) => new Date(b.date) - new Date(a.date))
-      : sortedAll;
-    const tbody = document.getElementById('tx-tbody');
-    if (tbody) tbody.innerHTML = renderTxRows(filtered);
+const bindTxEvents = (allTxs) => {
+  // Apply Filter button
+  document.getElementById('tx-btn-apply')?.addEventListener('click', () => {
+    _startDate = document.getElementById('tx-filter-start')?.value || '';
+    _endDate   = document.getElementById('tx-filter-end')?.value || '';
+    _currentPage = 1;
+    renderTransactionsUI(allTxs);
   });
 
-  document.getElementById('tx-clear-filter')?.addEventListener('click', () => {
-    const tbody     = document.getElementById('tx-tbody');
-    const dateInput = document.getElementById('tx-filter-date');
-    if (tbody) tbody.innerHTML = renderTxRows(sortedAll);
-    if (dateInput) dateInput.value = '';
+  // Reset to Today
+  document.getElementById('tx-btn-today')?.addEventListener('click', () => {
+    const today = new Date().toISOString().split('T')[0];
+    _startDate = today;
+    _endDate   = today;
+    _currentPage = 1;
+    renderTransactionsUI(allTxs);
   });
 
+  // Show All
+  document.getElementById('tx-btn-all')?.addEventListener('click', () => {
+    _startDate = '';
+    _endDate   = '';
+    _currentPage = 1;
+    renderTransactionsUI(allTxs);
+  });
+
+  // Pagination Prev & Next
+  document.getElementById('tx-prev-page')?.addEventListener('click', () => {
+    if (_currentPage > 1) {
+      _currentPage--;
+      renderTransactionsUI(allTxs);
+    }
+  });
+
+  document.getElementById('tx-next-page')?.addEventListener('click', () => {
+    _currentPage++;
+    renderTransactionsUI(allTxs);
+  });
+
+  // Table actions
   document.getElementById('tx-table')?.addEventListener('click', async (e) => {
     const btn    = e.target.closest('[data-action]');
     if (!btn) return;
@@ -332,7 +409,6 @@ const showTxDetail = (tx) => {
   const json     = buildReceiptJSON(tx, store.state.settings);
   sessionStorage.setItem('pendingReceipt', JSON.stringify(json));
   const printUrl = getPrintSchemeUrl(tx);
-  const canPrint = store.state.settings.printEnabled;
 
   const html = `
     <div class="modal-header">

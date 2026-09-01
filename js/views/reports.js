@@ -74,6 +74,19 @@ const renderReportsUI = (txs) => {
   if (_barChart)   { _barChart.destroy();   _barChart   = null; }
   if (_donutChart) { _donutChart.destroy(); _donutChart = null; }
 
+  // Pagination for Report Table (10/page)
+  let filtered = [...txs];
+  if (_tableFilter === 'cash')     filtered = filtered.filter(t => t.paymentMethod === 'cash');
+  if (_tableFilter === 'transfer') filtered = filtered.filter(t => t.paymentMethod === 'transfer');
+  if (_tableFilter === 'debt')     filtered = filtered.filter(t => t.paymentMethod === 'debt');
+  const sorted = filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / 10));
+  if (typeof _reportPage === 'undefined') window._reportPage = 1;
+  if (window._reportPage > totalPages) window._reportPage = totalPages;
+  if (window._reportPage < 1) window._reportPage = 1;
+  const pageItems = sorted.slice((window._reportPage - 1) * 10, window._reportPage * 10);
+
   view.innerHTML = `
     <div class="section-header">
       <div>
@@ -220,10 +233,10 @@ const renderReportsUI = (txs) => {
     </div>
 
     <!-- Detailed Ledger & Transaction Analysis Table -->
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+    <div class="card card--elevated" style="overflow:hidden;padding:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:14px 16px;border-bottom:1.5px solid var(--border-subtle)">
         <div style="font-size:12px;color:var(--text-secondary);font-weight:800;text-transform:uppercase;letter-spacing:.05em">
-          📋 Analisis Detail Penjualan &amp; Status Pelunasan
+          📋 Analisis Detail Penjualan &amp; Status Pelunasan (${sorted.length} data)
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="cat-pill ${_tableFilter === 'semua' ? 'active' : ''}" data-rpt-filter="semua">Semua</button>
@@ -248,9 +261,17 @@ const renderReportsUI = (txs) => {
             </tr>
           </thead>
           <tbody>
-            ${renderReportTableRows(txs, _tableFilter)}
+            ${renderReportTableRows(pageItems)}
           </tbody>
         </table>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:white;border-top:1px solid var(--border-subtle);flex-wrap:wrap;gap:8px">
+        <div style="font-size:12px;color:var(--text-muted)">Hal ${window._reportPage} dari ${totalPages}</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn--secondary btn--sm" id="rpt-prev" ${window._reportPage <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>◀ Sebelumnya</button>
+          <button class="btn btn--secondary btn--sm" id="rpt-next" ${window._reportPage >= totalPages ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>Berikutnya ▶</button>
+        </div>
       </div>
     </div>
   `;
@@ -259,10 +280,18 @@ const renderReportsUI = (txs) => {
   document.getElementById('btn-refresh-reports')?.addEventListener('click', renderReports);
   document.getElementById('btn-export-pdf-report')?.addEventListener('click', () => exportReportPDF(txs, today, month));
 
+  document.getElementById('rpt-prev')?.addEventListener('click', () => {
+    if (window._reportPage > 1) { window._reportPage--; renderReportsUI(txs); }
+  });
+  document.getElementById('rpt-next')?.addEventListener('click', () => {
+    window._reportPage++; renderReportsUI(txs);
+  });
+
   // Table filter clicks
   document.querySelectorAll('[data-rpt-filter]').forEach(btn => {
     btn.addEventListener('click', () => {
       _tableFilter = btn.dataset.rptFilter;
+      window._reportPage = 1;
       renderReportsUI(txs);
     });
   });
@@ -272,19 +301,12 @@ const renderReportsUI = (txs) => {
 };
 
 /* ── Render Report Table Rows ── */
-const renderReportTableRows = (txs, filter) => {
-  let filtered = [...txs];
-  if (filter === 'cash')     filtered = filtered.filter(t => t.paymentMethod === 'cash');
-  if (filter === 'transfer') filtered = filtered.filter(t => t.paymentMethod === 'transfer');
-  if (filter === 'debt')     filtered = filtered.filter(t => t.paymentMethod === 'debt');
-
-  const sorted = filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-  if (!sorted.length) {
+const renderReportTableRows = (pageItems) => {
+  if (!pageItems.length) {
     return `<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-muted)">Tidak ada transaksi untuk filter ini</td></tr>`;
   }
 
-  return sorted.slice(0, 50).map(t => {
+  return pageItems.map(t => {
     const totalAmt = t.total || 0;
     let paidAmt    = 0;
     let remAmt     = 0;
