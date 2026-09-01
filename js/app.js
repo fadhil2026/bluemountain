@@ -11,6 +11,7 @@ import { initTransactions, renderTransactions }      from './views/transactions.
 import { initReports, renderReports }                from './views/reports.js';
 import { initSettings, renderSettings }              from './views/settings.js';
 import { initFinance, renderFinance }                from './views/finance.js';
+import { syncInitialData, setupRealtimeSubscription } from './supabase.js';
 
 /* ── PWA: Register Service Worker (handled by vite-plugin-pwa) ── */
 // vite-plugin-pwa injects registration automatically via registerType: 'autoUpdate'
@@ -193,6 +194,10 @@ const init = async () => {
   // Start clock
   updateClock();
   setInterval(updateClock, 1000);
+
+  // ── Supabase Cloud Realtime Multi-Device Sync ──
+  syncInitialData().catch(() => {});
+  setupRealtimeSubscription();
 
   // ── macOS Dock Engine (Ultra-Smooth FLIP Reorder + Gaussian Wave Magnification) ──
   const dockEl         = document.querySelector('.dock');

@@ -3,6 +3,14 @@
  * Replaces manual IndexedDB with reactive, typed, clean API.
  */
 import Dexie from 'dexie';
+import {
+  pushProductToCloud,
+  deleteProductFromCloud,
+  pushTransactionToCloud,
+  deleteTransactionFromCloud,
+  pushExpenseToCloud,
+  deleteExpenseFromCloud,
+} from './supabase.js';
 
 export const db = new Dexie('BlueMountainPOS');
 
@@ -15,22 +23,54 @@ db.version(2).stores({
 
 // ── Products ──
 export const getAllProducts    = ()        => db.products.toArray();
-export const addProduct        = (p)       => db.products.add(p);
-export const updateProduct     = (p)       => db.products.put(p);
-export const deleteProduct     = (id)      => db.products.delete(id);
+export const addProduct        = async (p) => {
+  const id = await db.products.add(p);
+  pushProductToCloud({ ...p, id }).catch(() => {});
+  return id;
+};
+export const updateProduct     = async (p) => {
+  const res = await db.products.put(p);
+  pushProductToCloud(p).catch(() => {});
+  return res;
+};
+export const deleteProduct     = async (id) => {
+  const res = await db.products.delete(id);
+  deleteProductFromCloud(id).catch(() => {});
+  return res;
+};
 
 // ── Transactions ──
-export const saveTransaction   = (tx)      => db.transactions.add(tx);
+export const saveTransaction   = async (tx) => {
+  const id = await db.transactions.add(tx);
+  pushTransactionToCloud({ ...tx, id }).catch(() => {});
+  return id;
+};
 export const getAllTransactions = ()        => db.transactions.toArray();
-export const deleteTransaction = (id)      => db.transactions.delete(id);
-export const updateTransaction = (tx)      => db.transactions.put(tx);
+export const deleteTransaction = async (id) => {
+  const res = await db.transactions.delete(id);
+  deleteTransactionFromCloud(id).catch(() => {});
+  return res;
+};
+export const updateTransaction = async (tx) => {
+  const res = await db.transactions.put(tx);
+  pushTransactionToCloud(tx).catch(() => {});
+  return res;
+};
 export const getTransactionsByDateKey = (dateKey) =>
   db.transactions.where('dateKey').equals(dateKey).toArray();
 
 // ── Expenses ──
-export const saveExpense   = (exp) => db.expenses.add(exp);
+export const saveExpense   = async (exp) => {
+  const id = await db.expenses.add(exp);
+  pushExpenseToCloud({ ...exp, id }).catch(() => {});
+  return id;
+};
 export const getAllExpenses = ()    => db.expenses.toArray();
-export const deleteExpense = (id)  => db.expenses.delete(id);
+export const deleteExpense = async (id) => {
+  const res = await db.expenses.delete(id);
+  deleteExpenseFromCloud(id).catch(() => {});
+  return res;
+};
 
 // ── Settings ──
 export const getSetting = async (key) => {

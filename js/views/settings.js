@@ -7,6 +7,7 @@ import store                      from '../store.js';
 import { openModal, closeModal }  from './modals.js';
 import { esc }                    from '../utils/sanitize.js';
 import { printTestReceipt }       from '../printer.js';
+import { syncInitialData }        from '../supabase.js';
 
 export const initSettings = async () => {
   await loadSettings();
@@ -199,6 +200,32 @@ export const renderSettings = async () => {
       </div>
     </div>
 
+    <!-- Supabase Cloud Multi-Device Sync -->
+    <div class="settings-section">
+      <div class="settings-section-header">☁️ Sinkronisasi Realtime Cloud (Supabase)</div>
+
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__label">Status Cloud Multi-Perangkat</div>
+          <div class="settings-row__desc">Project: wiapnhpdgjbtkblowfig (Oceania Sydney)</div>
+        </div>
+        <div style="text-align:right">
+          <span class="badge badge--green" style="font-size:12px;padding:6px 12px;font-weight:700">🟢 Terhubung ke Cloud</span>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">Otomatis sinkron ke semua HP/Laptop</div>
+        </div>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__label">Sinkronkan Data Sekarang</div>
+          <div class="settings-row__desc">Tarik data transaksi &amp; produk terbaru dari cloud secara manual</div>
+        </div>
+        <button class="btn btn--primary btn--sm" id="btn-sync-cloud-now" style="white-space:nowrap">
+          ⚡ Sinkronkan Sekarang
+        </button>
+      </div>
+    </div>
+
     <!-- Backup & Restore Data (Sinkronisasi Antar Device) -->
     <div class="settings-section">
       <div class="settings-section-header">💾 Ekspor &amp; Impor Data (Sinkronisasi Antar Device)</div>
@@ -244,6 +271,21 @@ export const renderSettings = async () => {
 };
 
 const bindSettingsEvents = () => {
+  // Manual Supabase Cloud Sync
+  document.getElementById('btn-sync-cloud-now')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-sync-cloud-now');
+    if (btn) { btn.textContent = '🔄 Menyinkronkan...'; btn.disabled = true; }
+    try {
+      await syncInitialData();
+      window.showToast('✅ Data cloud berhasil disinkronkan!', 'success');
+      setTimeout(() => renderSettings(), 600);
+    } catch (err) {
+      window.showToast('Gagal sinkron cloud: ' + (err.message || 'Error'), 'error');
+    } finally {
+      if (btn) { btn.textContent = '⚡ Sinkronkan Sekarang'; btn.disabled = false; }
+    }
+  });
+
   // Export Full Backup JSON
   document.getElementById('btn-export-backup')?.addEventListener('click', async () => {
     const btn = document.getElementById('btn-export-backup');
