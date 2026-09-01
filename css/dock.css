@@ -1,7 +1,7 @@
 /* ============================================================
    BLUE MOUNTAIN POS — macOS Sonoma/Sequoia Dock
    Physics-driven Gaussian Wave Magnification, Apple Squircles,
-   Ultra-pure Glassmorphism, 120 FPS GPU Acceleration
+   Ultra-pure Glassmorphism, 120 FPS FLIP Drag Reorder
    ============================================================ */
 
 /* ── Dock Container ── */
@@ -14,7 +14,7 @@
   max-width: calc(100vw - 24px);
   padding: 0;
   margin: 0;
-  pointer-events: none; /* Container ignores events, shelf captures */
+  pointer-events: none;
 }
 
 /* ── Dock Shelf (Glassmorphism macOS) ── */
@@ -86,33 +86,34 @@
   cursor: grab;
   position: relative;
   transform-origin: bottom center;
-  /* Crucial: No CSS transform transition while JS physics engine runs */
   transition: opacity 180ms ease;
   will-change: transform;
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   outline: none;
+  touch-action: none;
 }
 
-/* ── Drag & Drop Reordering States ── */
+/* ── Smooth FLIP Drag Reordering ── */
 .dock.is-reordering .dock-item:not(.is-dragging) {
-  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.4, 1);
+  transition: transform 260ms cubic-bezier(0.2, 0.9, 0.3, 1) !important;
 }
 
 .dock-item.is-dragging {
   cursor: grabbing !important;
-  z-index: 1200 !important;
-  opacity: 0.94;
+  z-index: 1500 !important;
+  opacity: 0.96;
   pointer-events: none;
-  filter: drop-shadow(0 16px 32px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 18px 36px rgba(0, 0, 0, 0.38));
+  transition: none !important;
 }
 
 .dock-item.is-dragging .dock-icon {
-  transform: scale(1.16);
+  transform: scale(1.18);
   box-shadow:
     0 0 0 2.5px rgba(255, 255, 255, 0.95),
-    0 18px 36px rgba(15, 23, 42, 0.35),
+    0 20px 40px rgba(15, 23, 42, 0.4),
     inset 0 1px 2px rgba(255, 255, 255, 1);
 }
 
@@ -120,12 +121,10 @@
   display: none !important;
 }
 
-
 /* ── Apple Squircle App Icons ── */
 .dock-icon {
   width: var(--dock-icon-size, 52px);
   height: var(--dock-icon-size, 52px);
-  /* Apple Continuous Curvature Squircle */
   border-radius: calc(var(--dock-icon-size, 52px) * 0.225);
   background: linear-gradient(145deg, #ffffff 0%, #f1f5f9 100%);
   border: 1px solid rgba(255, 255, 255, 0.9);
@@ -283,22 +282,6 @@
   background: #2563eb;
 }
 
-/* ── Dock Separator (macOS Glass Divider) ── */
-.dock-separator {
-  width: 1px;
-  height: 34px;
-  background: linear-gradient(180deg,
-    transparent 0%,
-    rgba(15, 23, 42, 0.14) 25%,
-    rgba(15, 23, 42, 0.14) 75%,
-    transparent 100%
-  );
-  margin: 0 3px;
-  align-self: center;
-  flex-shrink: 0;
-  pointer-events: none;
-}
-
 /* ── macOS Floating Tooltip (Label) ── */
 .dock-label {
   position: absolute;
@@ -384,11 +367,7 @@
     border-radius: 18px;
   }
   .dock-label {
-    display: none; /* Hide tooltips on touch devices */
-  }
-  .dock-separator {
-    height: 24px;
-    margin: 0 1px;
+    display: none;
   }
   .dock-dot {
     width: 3.5px;
@@ -401,9 +380,6 @@
   .dock {
     gap: 4px;
     padding: 6px 8px 5px;
-  }
-  .dock-separator {
-    display: none;
   }
 }
 

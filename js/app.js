@@ -194,13 +194,15 @@ const init = async () => {
   updateClock();
   setInterval(updateClock, 1000);
 
-  // ── macOS Dock Reordering & Continuous Magnification Engine ──
+  // ── macOS Dock Engine (Ultra-Smooth FLIP Reorder + Gaussian Wave Magnification) ──
   const dockEl         = document.querySelector('.dock');
-  const DOCK_ORDER_KEY = 'bm_dock_order_v2';
+  const DOCK_ORDER_KEY = 'bm_dock_order_v3';
 
-  // 1. Restore saved order from localStorage
+  // 1. Clean legacy separators & restore saved order from localStorage
   const restoreDockOrder = () => {
     try {
+      dockEl?.querySelectorAll('.dock-separator').forEach(s => s.remove());
+
       const saved = localStorage.getItem(DOCK_ORDER_KEY);
       if (!saved) return;
       const order = JSON.parse(saved);
@@ -218,7 +220,6 @@ const init = async () => {
           itemMap.delete(viewName);
         }
       });
-      // Append any items not in saved list
       itemMap.forEach(item => {
         if (dockEl) dockEl.appendChild(item);
       });
@@ -229,27 +230,23 @@ const init = async () => {
 
   let dockItems = dockEl ? [...dockEl.querySelectorAll('.dock-item')] : [];
 
-  const updateDockItemsRef = () => {
-    if (dockEl) dockItems = [...dockEl.querySelectorAll('.dock-item')];
-  };
-
   const isMobile = () => window.innerWidth < 600;
   const isTablet = () => window.innerWidth >= 600 && window.innerWidth <= 1024;
 
-  const getMaxScale = () => (isMobile() ? 1.25 : isTablet() ? 1.38 : 1.52);
+  const getMaxScale = () => (isMobile() ? 1.22 : isTablet() ? 1.36 : 1.50);
   const getMaxLift  = () => (isMobile() ? 8 : isTablet() ? 12 : 18);
   const getRadius   = () => (isMobile() ? 90 : 140);
 
   let current        = dockItems.map(() => 1);
   let target         = dockItems.map(() => 1);
   let rafId          = null;
-  let isDraggingItem = false;
+  let isDragging     = false;
 
   const lerp  = (a, b, t) => a + (b - a) * t;
   const SPEED = 0.24;
 
   const animate = () => {
-    if (isDraggingItem) return;
+    if (isDragging) return;
     let dirty = false;
     const maxScale = getMaxScale();
     const maxLift  = getMaxLift();
@@ -272,12 +269,11 @@ const init = async () => {
   };
 
   const startAnim = () => {
-    if (!isDraggingItem && !rafId) rafId = requestAnimationFrame(animate);
+    if (!isDragging && !rafId) rafId = requestAnimationFrame(animate);
   };
 
-  // Continuous Wave Distance Function (Cosine Bell Curve)
   const calculateWaveTargets = (pointerX) => {
-    if (isDraggingItem) return;
+    if (isDragging) return;
     const maxScale = getMaxScale();
     const radius   = getRadius();
 
@@ -299,168 +295,201 @@ const init = async () => {
     dockItems.forEach((_, i) => { target[i] = 1; });
   };
 
-  // Mousemove continuous wave
   dockEl?.addEventListener('mousemove', (e) => {
-    if (!isDraggingItem) {
+    if (!isDragging) {
       calculateWaveTargets(e.clientX);
       startAnim();
     }
   }, { passive: true });
 
-  // Mouseleave smooth spring return
   dockEl?.addEventListener('mouseleave', () => {
-    if (!isDraggingItem) {
+    if (!isDragging) {
       resetTargets();
       startAnim();
     }
   });
 
-  // ── Drag & Drop Reordering Logic (Pointer Events) ──
-  let draggedEl     = null;
-  let dragStartX    = 0;
-  let dragStartY    = 0;
-  let hasMoved      = false;
-  let suppressClick = false;
+  // ── Precision Slot-Based FLIP Drag Engine ──
+  let activeDragItem   = null;
+  let dragOriginIndex  = -1;
+  let currentDropIndex = -1;
+  let startX           = 0;
+  let startY           = 0;
+  let slotMetrics      = [];
+  let hasDragTriggered = false;
 
-  const onPointerDown = (e) => {
-    const item = e.target.closest('.dock-item');
-    if (!item || !dockEl) return;
-
-    draggedEl     = item;
-    dragStartX    = e.clientX;
-    dragStartY    = e.clientY;
-    hasMoved      = false;
-    suppressClick = false;
-
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup',   onPointerUp);
-    window.addEventListener('pointercancel', onPointerUp);
-  };
-
-  const onPointerMove = (e) => {
-    if (!draggedEl || !dockEl) return;
-
-    const dx = e.clientX - dragStartX;
-    const dy = e.clientY - dragStartY;
-
-    if (!hasMoved && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) {
-      hasMoved       = true;
-      isDraggingItem = true;
-      suppressClick  = true;
-      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-
-      dockEl.classList.add('is-reordering');
-      draggedEl.classList.add('is-dragging');
-    }
-
-    if (hasMoved && isDraggingItem) {
-      draggedEl.style.transform = `translate3d(${dx}px, ${dy - 12}px, 0) scale(1.16)`;
-
-      const siblings = [...dockEl.querySelectorAll('.dock-item:not(.is-dragging)')];
-      for (const sib of siblings) {
-        const rect = sib.getBoundingClientRect();
-        const midX = rect.left + rect.width / 2;
-
-        if (e.clientX < midX && (draggedEl.compareDocumentPosition(sib) & Node.DOCUMENT_POSITION_FOLLOWING)) {
-          dockEl.insertBefore(draggedEl, sib);
-          break;
-        } else if (e.clientX > midX && (draggedEl.compareDocumentPosition(sib) & Node.DOCUMENT_POSITION_PRECEDING)) {
-          dockEl.insertBefore(draggedEl, sib.nextSibling);
-          break;
-        }
-      }
-    }
-  };
-
-  const onPointerUp = () => {
-    window.removeEventListener('pointermove', onPointerMove);
-    window.removeEventListener('pointerup',   onPointerUp);
-    window.removeEventListener('pointercancel', onPointerUp);
-
-    if (draggedEl && hasMoved && dockEl) {
-      draggedEl.classList.remove('is-dragging');
-      draggedEl.style.transform = '';
-      dockEl.classList.remove('is-reordering');
-
-      updateDockItemsRef();
-      const newOrder = dockItems.map(it => it.dataset.view).filter(Boolean);
-      try {
-        localStorage.setItem(DOCK_ORDER_KEY, JSON.stringify(newOrder));
-      } catch (_) {}
-
-      current        = dockItems.map(() => 1);
-      target         = dockItems.map(() => 1);
-      isDraggingItem = false;
-      setTimeout(() => { suppressClick = false; }, 80);
-      resetTargets();
-      startAnim();
-    } else {
-      isDraggingItem = false;
-      if (draggedEl) draggedEl.style.transform = '';
-    }
-
-    draggedEl = null;
-    hasMoved  = false;
-  };
-
-  dockEl?.addEventListener('pointerdown', onPointerDown);
-
-  // Keyboard navigation & accessibility focus preview
-  const setupKeyNav = () => {
-    dockItems.forEach((item, idx) => {
-      item.addEventListener('focus', () => {
-        dockItems.forEach((_, i) => {
-          const d = Math.abs(i - idx);
-          target[i] = d === 0 ? 1.35 : d === 1 ? 1.12 : 1;
-        });
-        startAnim();
-      });
-
-      item.addEventListener('blur', () => {
-        resetTargets();
-        startAnim();
-      });
-
-      item.addEventListener('keydown', (e) => {
-        updateDockItemsRef();
-        const curIdx = dockItems.indexOf(item);
-        if (e.key === 'ArrowRight') {
-          e.preventDefault();
-          const next = dockItems[curIdx + 1] || dockItems[0];
-          next?.focus();
-        } else if (e.key === 'ArrowLeft') {
-          e.preventDefault();
-          const prev = dockItems[curIdx - 1] || dockItems[dockItems.length - 1];
-          prev?.focus();
-        } else if (e.key === 'Home') {
-          e.preventDefault();
-          dockItems[0]?.focus();
-        } else if (e.key === 'End') {
-          e.preventDefault();
-          dockItems[dockItems.length - 1]?.focus();
-        }
-      });
+  const getSlotMetrics = () => {
+    return dockItems.map((el, idx) => {
+      const r = el.getBoundingClientRect();
+      return {
+        idx,
+        el,
+        x: r.left,
+        cx: r.left + r.width / 2,
+        width: r.width,
+      };
     });
   };
 
-  setupKeyNav();
+  dockItems.forEach((item) => {
+    item.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
 
-  // Dock Click & App Launch Bounce
-  dockEl?.addEventListener('click', async (e) => {
-    if (suppressClick) return;
-    const item = e.target.closest('.dock-item');
-    if (!item) return;
+      activeDragItem    = item;
+      dragOriginIndex   = dockItems.indexOf(item);
+      currentDropIndex  = dragOriginIndex;
+      startX            = e.clientX;
+      startY            = e.clientY;
+      hasDragTriggered  = false;
+      slotMetrics       = getSlotMetrics();
 
-    const view = item.dataset.view;
-    if (!view) return;
+      try { item.setPointerCapture(e.pointerId); } catch (_) {}
+    });
 
-    item.classList.remove('bouncing');
-    void item.offsetWidth; // Force reflow
-    item.classList.add('bouncing');
-    item.addEventListener('animationend', () => item.classList.remove('bouncing'), { once: true });
+    item.addEventListener('pointermove', (e) => {
+      if (!activeDragItem || activeDragItem !== item) return;
 
-    addRipple(item.querySelector('.dock-icon'), e);
-    await navigateTo(view);
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if (!hasDragTriggered && Math.hypot(dx, dy) > 5) {
+        hasDragTriggered = true;
+        isDragging       = true;
+        if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+
+        dockEl?.classList.add('is-reordering');
+        item.classList.add('is-dragging');
+        dockItems.forEach((it) => {
+          if (it !== item) it.style.zIndex = '';
+        });
+      }
+
+      if (hasDragTriggered && isDragging) {
+        item.style.transform = `translate3d(${dx}px, ${dy - 12}px, 0) scale(1.18)`;
+
+        let targetSlot = dragOriginIndex;
+        for (let i = 0; i < slotMetrics.length; i++) {
+          if (i === 0 && e.clientX < slotMetrics[0].cx) {
+            targetSlot = 0;
+            break;
+          } else if (i === slotMetrics.length - 1 && e.clientX >= slotMetrics[i].cx) {
+            targetSlot = slotMetrics.length - 1;
+            break;
+          } else if (e.clientX >= slotMetrics[i].cx && e.clientX < slotMetrics[i + 1]?.cx) {
+            const mid = (slotMetrics[i].cx + slotMetrics[i + 1].cx) / 2;
+            targetSlot = e.clientX < mid ? i : i + 1;
+            break;
+          }
+        }
+        currentDropIndex = Math.max(0, Math.min(dockItems.length - 1, targetSlot));
+
+        slotMetrics.forEach(({ el, idx, x }) => {
+          if (el === item) return;
+          let shift = 0;
+          if (idx > dragOriginIndex && idx <= currentDropIndex) {
+            const prevSlot = slotMetrics[idx - 1];
+            shift = prevSlot ? prevSlot.x - x : -58;
+          } else if (idx < dragOriginIndex && idx >= currentDropIndex) {
+            const nextSlot = slotMetrics[idx + 1];
+            shift = nextSlot ? nextSlot.x - x : 58;
+          }
+          el.style.transform = `translate3d(${shift}px, 0, 0)`;
+        });
+      }
+    });
+
+    const handlePointerEnd = (e) => {
+      if (!activeDragItem || activeDragItem !== item) return;
+
+      try { item.releasePointerCapture(e.pointerId); } catch (_) {}
+
+      if (hasDragTriggered && isDragging) {
+        dockEl?.classList.remove('is-reordering');
+        item.classList.remove('is-dragging');
+        dockItems.forEach((it) => { it.style.transform = ''; });
+
+        if (currentDropIndex !== dragOriginIndex && currentDropIndex >= 0) {
+          const remaining = dockItems.filter((it) => it !== item);
+          if (currentDropIndex >= remaining.length) {
+            dockEl?.appendChild(item);
+          } else {
+            dockEl?.insertBefore(item, remaining[currentDropIndex]);
+          }
+
+          dockItems = dockEl ? [...dockEl.querySelectorAll('.dock-item')] : [];
+          const newOrder = dockItems.map((it) => it.dataset.view).filter(Boolean);
+          try {
+            localStorage.setItem(DOCK_ORDER_KEY, JSON.stringify(newOrder));
+          } catch (_) {}
+        }
+
+        current    = dockItems.map(() => 1);
+        target     = dockItems.map(() => 1);
+        isDragging = false;
+        resetTargets();
+        startAnim();
+      } else {
+        isDragging = false;
+        item.style.transform = '';
+        const view = item.dataset.view;
+        if (view) {
+          item.classList.remove('bouncing');
+          void item.offsetWidth;
+          item.classList.add('bouncing');
+          item.addEventListener('animationend', () => item.classList.remove('bouncing'), { once: true });
+          addRipple(item.querySelector('.dock-icon'), e);
+          navigateTo(view);
+        }
+      }
+
+      activeDragItem   = null;
+      dragOriginIndex  = -1;
+      currentDropIndex = -1;
+      hasDragTriggered = false;
+    };
+
+    item.addEventListener('pointerup',     handlePointerEnd);
+    item.addEventListener('pointercancel', handlePointerEnd);
+  });
+
+  // Keyboard navigation & accessibility focus preview
+  dockItems.forEach((item) => {
+    item.addEventListener('focus', () => {
+      const idx = dockItems.indexOf(item);
+      dockItems.forEach((_, i) => {
+        const d = Math.abs(i - idx);
+        target[i] = d === 0 ? 1.35 : d === 1 ? 1.12 : 1;
+      });
+      startAnim();
+    });
+
+    item.addEventListener('blur', () => {
+      resetTargets();
+      startAnim();
+    });
+
+    item.addEventListener('keydown', (e) => {
+      const curIdx = dockItems.indexOf(item);
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        const next = dockItems[curIdx + 1] || dockItems[0];
+        next?.focus();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const prev = dockItems[curIdx - 1] || dockItems[dockItems.length - 1];
+        prev?.focus();
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        dockItems[0]?.focus();
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        dockItems[dockItems.length - 1]?.focus();
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        const view = item.dataset.view;
+        if (view) navigateTo(view);
+      }
+    });
   });
 
   // Navigate to saved active view or fallback to 'pos' on start
