@@ -1,12 +1,15 @@
 {
   "name": "blue-mountain-pos",
   "version": "3.0.0",
+  "type": "module",
   "private": true,
   "description": "Sistem Kasir POS — Blue Mountain Refilling Station",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify": "node scripts/verify.js",
+    "test": "npm run verify"
   },
   "dependencies": {
     "chart.js": "^4.4.4",

@@ -1,7 +1,9 @@
-name: Deploy to GitHub Pages
+name: CI/CD Quality Gate & Deploy to GitHub Pages
 
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -15,35 +17,60 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  # ── STAGE 1: Automated Verification & Build Audit ──
+  audit-and-verify:
+    name: 🔍 Syntax, Integrity & Build Verification
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: ⚙️ Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      - name: Install dependencies
+      - name: 📦 Install Dependencies (Clean)
         run: npm ci
 
-      - name: Build with Vite
+      - name: 🛡️ Audit Kode & Syntax Verification
+        run: npm run verify
+
+      - name: 🏗️ Production Vite Build
         run: npm run build
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
+      - name: 🧪 Verify Build Artifacts
+        run: |
+          if [ ! -f "dist/index.html" ]; then
+            echo "❌ Fatal: dist/index.html tidak ditemukan!"
+            exit 1
+          fi
+          if [ ! -f "dist/sw.js" ]; then
+            echo "❌ Fatal: dist/sw.js (Service Worker PWA) tidak ditemukan!"
+            exit 1
+          fi
+          echo "✅ Semua artefak build berhasil diverifikasi."
 
-      - name: Upload artifact
+      - name: 📤 Upload Pages Artifact
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: './dist'
 
-      - name: Deploy to GitHub Pages
+  # ── STAGE 2: Automated Deployment to GitHub Pages ──
+  deploy:
+    name: 🚀 Deploy to GitHub Pages
+    needs: audit-and-verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🌐 Setup GitHub Pages
+        uses: actions/configure-pages@v4
+
+      - name: 🚀 Deploy Artifact to Live URL
         id: deployment
         uses: actions/deploy-pages@v4
