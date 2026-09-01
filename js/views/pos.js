@@ -136,7 +136,10 @@ const renderProductGrid = () => {
   }
   if (_searchQuery) {
     const q = _searchQuery.toLowerCase();
-    products = products.filter(p => p.name.toLowerCase().includes(q));
+    products = products.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      (p.sku && p.sku.toLowerCase().includes(q))
+    );
   }
 
   if (!products.length) {
@@ -147,15 +150,22 @@ const renderProductGrid = () => {
     return;
   }
 
-  grid.innerHTML = products.map(p => `
-    <div class="product-card" data-id="${p.id}" role="button" tabindex="0"
-      aria-label="${esc(p.name)} — ${formatRupiah(p.price)}">
-      <div class="product-card__emoji">${p.emoji || '📦'}</div>
-      <div class="product-card__name">${esc(p.name)}</div>
-      <div class="product-card__price">${formatRupiah(p.price)}</div>
-      <div class="product-card__unit">per ${esc(p.unit)}</div>
-    </div>
-  `).join('');
+  grid.innerHTML = products.map(p => {
+    const thumb = p.image
+      ? `<img src="${p.image}" class="product-card__thumb" alt="${esc(p.name)}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;margin-bottom:2px">`
+      : `<div class="product-card__emoji">${p.emoji || '📦'}</div>`;
+
+    return `
+      <div class="product-card" data-id="${p.id}" role="button" tabindex="0"
+        aria-label="${esc(p.name)} — ${formatRupiah(p.price)}">
+        <span class="product-card__sku" style="font-size:9px;font-weight:700;color:var(--text-muted);background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:4px;padding:1px 4px;margin-bottom:2px">${esc(p.sku || `BM-${p.id}`)}</span>
+        ${thumb}
+        <div class="product-card__name">${esc(p.name)}</div>
+        <div class="product-card__price">${formatRupiah(p.price)}</div>
+        <div class="product-card__unit">per ${esc(p.unit)}</div>
+      </div>
+    `;
+  }).join('');
 
   grid.querySelectorAll('.product-card').forEach(card => {
     const addFn = () => {
@@ -226,23 +236,29 @@ const updateCartUI = () => {
     return;
   }
 
-  cartItems.innerHTML = cart.map(item => `
-    <div class="cart-item" data-pid="${item.product.id}">
-      <div class="cart-item__info">
-        <div class="cart-item__name">${item.product.emoji || ''} ${esc(item.product.name)}</div>
-        <div class="cart-item__price">${formatRupiah(item.product.price)} / ${esc(item.product.unit)}</div>
-      </div>
-      <div class="cart-item__controls">
-        <div class="cart-item__subtotal">${formatRupiah(item.product.price * item.qty)}</div>
-        <div class="qty-controls">
-          <button class="qty-btn remove" data-action="remove" data-pid="${item.product.id}" title="Hapus">🗑</button>
-          <button class="qty-btn" data-action="dec" data-pid="${item.product.id}">−</button>
-          <span class="qty-value">${item.qty}</span>
-          <button class="qty-btn" data-action="inc" data-pid="${item.product.id}">+</button>
+  cartItems.innerHTML = cart.map(item => {
+    const itemThumb = item.product.image
+      ? `<img src="${item.product.image}" style="width:20px;height:20px;object-fit:cover;border-radius:4px;vertical-align:middle;margin-right:4px">`
+      : `${item.product.emoji || ''} `;
+
+    return `
+      <div class="cart-item" data-pid="${item.product.id}">
+        <div class="cart-item__info">
+          <div class="cart-item__name">${itemThumb}${esc(item.product.name)} <span style="font-size:10px;color:var(--text-muted)">(${esc(item.product.sku || `BM-${item.product.id}`)})</span></div>
+          <div class="cart-item__price">${formatRupiah(item.product.price)} / ${esc(item.product.unit)}</div>
+        </div>
+        <div class="cart-item__controls">
+          <div class="cart-item__subtotal">${formatRupiah(item.product.price * item.qty)}</div>
+          <div class="qty-controls">
+            <button class="qty-btn remove" data-action="remove" data-pid="${item.product.id}" title="Hapus">🗑</button>
+            <button class="qty-btn" data-action="dec" data-pid="${item.product.id}">−</button>
+            <span class="qty-value">${item.qty}</span>
+            <button class="qty-btn" data-action="inc" data-pid="${item.product.id}">+</button>
+          </div>
         </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   cartItems.querySelectorAll('[data-action]').forEach(btn => {
     btn.addEventListener('click', () => {

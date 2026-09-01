@@ -62,11 +62,13 @@ const updateSyncBadge = (status, label) => {
  */
 const formatProductForCloud = (p) => ({
   id: String(p.id),
+  sku: p.sku || `BM-${p.id}`,
   name: p.name || '',
   category: p.category || 'Umum',
   price: Number(p.price) || 0,
   unit: p.unit || 'buah',
   emoji: p.emoji || '📦',
+  image: p.image || null,
   stock: Number(p.stock) || 0,
   updated_at: new Date().toISOString(),
 });
@@ -139,11 +141,13 @@ export const syncInitialData = async () => {
         for (const cp of cloudProds) {
           const formatted = {
             id: isNaN(Number(cp.id)) ? cp.id : Number(cp.id),
+            sku: cp.sku || `BM-${cp.id}`,
             name: cp.name,
             category: cp.category,
             price: Number(cp.price),
             unit: cp.unit,
             emoji: cp.emoji,
+            image: cp.image || null,
             stock: Number(cp.stock),
           };
           await db.products.put(formatted);
@@ -267,11 +271,13 @@ export const setupRealtimeSubscription = () => {
         const row = payload.new;
         await db.products.put({
           id: isNaN(Number(row.id)) ? row.id : Number(row.id),
+          sku: row.sku || `BM-${row.id}`,
           name: row.name,
           category: row.category,
           price: Number(row.price),
           unit: row.unit,
           emoji: row.emoji,
+          image: row.image || null,
           stock: Number(row.stock),
         });
       }
