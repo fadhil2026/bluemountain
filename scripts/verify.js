@@ -11,11 +11,14 @@ console.log('🔍 [CI/CD Verification] Memulai audit pra-deploy...');
 // 0. Auto-sync dynamic package.json version with Git revision
 try {
   const gitCount = execSync('git rev-list --count HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  const statusOut = execSync('git status --porcelain', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  const isDirty = statusOut.length > 0;
   if (gitCount && gitCount !== '0') {
     const pkgPath = './package.json';
     const pkgData = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
     const base = pkgData.version.split('.').slice(0, 2).join('.');
-    const nextVer = `${base}.${gitCount}`;
+    const targetRev = Number(gitCount) + (isDirty ? 1 : 0);
+    const nextVer = `${base}.${targetRev}`;
     if (pkgData.version !== nextVer) {
       pkgData.version = nextVer;
       fs.writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2) + '\n', 'utf8');

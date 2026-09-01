@@ -1,6 +1,6 @@
 /**
  * app.js — Main application bootstrap
- * Blue Mountain Refilling Station POS v2.0
+ * Blue Mountain Refilling Station POS
  */
 import { openDB, seedDefaultProducts, getSetting } from './db.js';
 import store                                         from './store.js';
