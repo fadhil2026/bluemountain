@@ -1,5 +1,5 @@
 # 📈 04 — ROADMAP BISNIS & TIMELINE EVOLUSI FITUR
-**Blue Mountain Refilling Station POS — 2026 Strategy**
+**Blue Mountain Refilling Station POS & CRM — 2026 Strategy**
 
 ---
 
@@ -9,11 +9,11 @@
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        ROADMAP EVOLUSI FITUR                           │
 ├─────────────────┬──────────────────┬─────────────────┬─────────────────┤
-│ FASE 1 (LIVE)   │ FASE 2 (STABLE)  │ FASE 3 (SCALE)  │ FASE 4 (ENTERP) │
+│ FASE 1 (LIVE)   │ FASE 2 (LIVE)    │ FASE 3 (NEXT)   │ FASE 4 (ENTERP) │
 ├─────────────────┼──────────────────┼─────────────────┼─────────────────┤
-│ - POS Checkout  │ - Date Range Fltr│ - Opname Stok   │ - Multi-Cabang  │
-│ - Supabase Sync │ - Pagination 10x │ - Mutasi Galon  │ - QRIS Dinamis  │
-│ - 58mm Thermal  │ - Universal 48/80│ - Notifikasi WA │ - API Akuntansi │
+│ - POS Checkout  │ - Date Range Fltr│ - Customer CRM  │ - Multi-Cabang  │
+│ - Supabase Sync │ - Pagination 10x │ - WA Invoicing  │ - QRIS Dinamis  │
+│ - 58mm Thermal  │ - Universal 48/80│ - Galon Tracking│ - API Eksternal │
 └─────────────────┴──────────────────┴─────────────────┴─────────────────┘
 ```
 
@@ -35,11 +35,20 @@
 - Dukungan multi-protokol: Web Bluetooth BLE, WebUSB, RawBT, dan OS Spooler.
 - Jurnal entri akuntansi debit-kredit otomatis dan arus kas 30 hari.
 
-### 🟡 FASE 3: Inventory Control & WhatsApp Notification (Target Berikutnya)
-- **Manajemen Stok Galon Kosong vs Isi**: Pelacakan kuantitas galon fisik yang dipinjamkan ke pelanggan.
-- **WhatsApp Direct Invoice**: Pengiriman invoice/struk digital otomatis ke nomor WhatsApp pelanggan.
-- **Export Laporan Excel (.xlsx)**: Selain PDF, sediakan download file Excel untuk pelaporan pajak.
+### 🟡 FASE 3: Customer CRM 360°, WhatsApp Invoicing & Galon Tracking (Target Fokus)
+- **Modul Master Pelanggan (CRM)**:
+  - CRUD master pelanggan dengan segmentasi: *Rumah Tangga, Kantor/Instansi, Warung/Reseller, VIP*.
+  - Riwayat belanja individual (LTV), batas kredit piutang (*Credit Limit*), dan catatan alamat pengantaran.
+- **Smart POS Autocomplete**:
+  - Pencarian instan nama / nomor HP pelanggan di kasir + tombol *Quick-Add Customer*.
+- **WhatsApp Direct Invoicing & Debt Reminder**:
+  - Tombol 1-klik kirim format struk digital resmi ke nomor WhatsApp pelanggan (`https://wa.me/62xxx?text=...`).
+  - Tombol 1-klik kirim rincian sisa tagihan piutang dan rekening transfer.
+- **Pelacakan Fisik Galon (Loaned Bottle Tracking)**:
+  - Pelacakan kuantitas galon fisik kosong vs isi yang sedang dipinjam oleh pelanggan langganan.
+- **Export Laporan Excel (.xlsx / .csv)**:
+  - Unduh rekapitulasi data penjualan, pelanggan, dan piutang dalam format spreadsheet.
 
-### 🔵 FASE 4: Multi-Outlet & Advanced Analytics (Evolusi Jangka Panjang)
+### 🔵 FASE 4: Multi-Outlet & Advanced Payments (Evolusi Jangka Panjang)
 - **Multi-Branch Aggregation**: Penggabungan omzet dan stok dari beberapa stasiun depot air minum.
-- **Dynamic QRIS Payment**: Pembuatan QRIS dinamis per invoice dengan auto-cek status pembayaran.
+- **Dynamic QRIS Payment**: Pembuatan QRIS dinamis per invoice dengan auto-cek status pembayaran via library `qrcode`.
