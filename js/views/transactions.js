@@ -10,6 +10,7 @@ import {
   getReceiptPreviewHTML,
   getPrintSchemeUrl,
   getRawBTSchemeUrl,
+  getWhatsAppReceiptUrl,
   printThermalDirect,
   printViaWebBluetooth,
   printViaWebUSB
@@ -468,6 +469,9 @@ const showTxDetail = (tx) => {
     <div class="modal-footer" style="flex-wrap:wrap;gap:8px;justify-content:flex-end">
       <button class="btn btn--secondary" id="td-close-btn">✕ Tutup</button>
       <button class="btn btn--secondary" id="btn-save-png">🖼️ PNG / Share</button>
+      <a class="btn btn--secondary" href="${getWhatsAppReceiptUrl(tx)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;font-size:11px;display:flex;align-items:center;gap:4px;background:#dcfce7;border:1.5px solid #86efac;color:#166534;font-weight:700">
+        💬 WhatsApp
+      </a>
       <button class="btn btn--secondary" id="btn-td-ble" style="font-size:11px">📲 Web BLE</button>
       <button class="btn btn--secondary" id="btn-td-usb" style="font-size:11px">🔌 USB</button>
       <a class="btn btn--secondary" href="${printUrl}" style="text-decoration:none;font-size:11px;display:flex;align-items:center;gap:4px">

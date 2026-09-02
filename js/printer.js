@@ -6,12 +6,40 @@
  * 2. Web Bluetooth Direct ESC/POS (Zero-app BLE on Chrome/Android/Edge)
  * 3. WebUSB Direct ESC/POS (USB Cable / OTG on Chrome/Edge/Android)
  * 4. Android App Intents (RawBT & Bluetooth Print App)
+ * 5. WhatsApp Digital Receipt (Direct wa.me Text Invoice)
  */
 import { buildReceiptJSON } from './receipt.js';
 import { formatRupiah }     from './utils/currency.js';
 import { formatDateTime }   from './utils/date.js';
 import store                from './store.js';
 import logoUrl              from '../assets/logo.png';
+
+/**
+ * Preload and cache logo as Data URI for 100% reliable zero-delay print rendering
+ */
+let _cachedLogoDataUrl = null;
+
+export const initLogoData = async () => {
+  if (_cachedLogoDataUrl) return _cachedLogoDataUrl;
+  try {
+    const res  = await fetch(logoUrl);
+    const blob = await res.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (reader.result) _cachedLogoDataUrl = reader.result;
+        resolve(_cachedLogoDataUrl || logoUrl);
+      };
+      reader.onerror = () => resolve(logoUrl);
+      reader.readAsDataURL(blob);
+    });
+  } catch (e) {
+    return logoUrl;
+  }
+};
+
+// Immediate pre-fetch
+initLogoData();
 
 /**
  * Paper Configs by Width
@@ -59,26 +87,75 @@ export const getRawBTSchemeUrl = (txData) => {
 };
 
 /**
+ * Generate WhatsApp Text Invoice Link (wa.me)
+ */
+export const getWhatsAppReceiptUrl = (txData, targetPhone = '') => {
+  const s = store.state.settings || {};
+  const phone = (targetPhone || txData.customerPhone || '').replace(/\D/g, '');
+  const cleanPhone = phone.startsWith('08') ? '62' + phone.slice(1) : (phone.startsWith('8') ? '62' + phone : phone);
+  
+  let msg = `*STRUK PEMBELIAN — ${s.shopName || 'BLUE MOUNTAIN'}*\n`;
+  msg += `--------------------------------\n`;
+  msg += `No. Invoice : ${txData.invoiceNo || '-'}\n`;
+  msg += `Tanggal     : ${formatDateTime(new Date(txData.date || Date.now()))}\n`;
+  if (txData.customerName) msg += `Pelanggan   : ${txData.customerName}\n`;
+  msg += `Kasir       : ${txData.cashier || 'Kasir'}\n`;
+  msg += `--------------------------------\n`;
+
+  for (const item of (txData.items || [])) {
+    if (!item?.product) continue;
+    const pName = item.product.name;
+    const pQty = item.qty;
+    const pPrice = item.product.price;
+    msg += `${pName}\n  ${pQty} x ${formatRupiah(pPrice)} = ${formatRupiah(pPrice * pQty)}\n`;
+  }
+
+  msg += `--------------------------------\n`;
+  if (txData.discount > 0) msg += `Diskon      : -${formatRupiah(txData.discount)}\n`;
+  if (txData.tax > 0)      msg += `Pajak       : ${formatRupiah(txData.tax)}\n`;
+  msg += `*TOTAL       : ${formatRupiah(txData.total)}*\n`;
+  
+  if (txData.paymentMethod === 'cash') {
+    msg += `Bayar Tunai : ${formatRupiah(txData.paid || txData.total)}\n`;
+    if (txData.change > 0) msg += `Kembalian   : ${formatRupiah(txData.change)}\n`;
+  } else if (txData.paymentMethod === 'transfer') {
+    msg += `Metode      : Transfer Bank (Lunas ✅)\n`;
+  } else if (txData.paymentMethod === 'debt') {
+    msg += `DP Dibayar  : ${formatRupiah(txData.paidAmount || 0)}\n`;
+    msg += `*Sisa Hutang : ${formatRupiah(txData.remainingDebt || 0)}*\n`;
+  }
+
+  msg += `--------------------------------\n`;
+  msg += `Terima kasih atas kunjungan Anda!\n`;
+  if (s.shopAddress) msg += `${s.shopAddress}\n`;
+  if (s.shopPhone)   msg += `Telp: ${s.shopPhone}\n`;
+
+  const encoded = encodeURIComponent(msg);
+  return cleanPhone ? `https://wa.me/${cleanPhone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+};
+
+/**
  * Generate 48mm / 58mm / 80mm HTML Receipt for Direct Print & Modal Preview
  */
 export const getReceiptPreviewHTML = (txData, paperWidth = null) => {
-  const settings = store.state.settings || {};
-  const sizeKey  = paperWidth || settings.printerPaper || '58mm';
-  const spec     = PAPER_SPECS[sizeKey] || PAPER_SPECS['58mm'];
-  const items    = txData.items || [];
+  const settings   = store.state.settings || {};
+  const sizeKey    = paperWidth || settings.printerPaper || '58mm';
+  const spec       = PAPER_SPECS[sizeKey] || PAPER_SPECS['58mm'];
+  const items      = txData.items || [];
+  const currentLogo = _cachedLogoDataUrl || (new URL(logoUrl, window.location.href).href);
 
   const line = (t, bold = false, align = 'left', size = spec.fontSize) =>
     `<div style="text-align:${align};font-weight:${bold ? '700' : '400'};font-size:${size};line-height:1.35;word-break:break-word">${t}</div>`;
-  const sep = () => '<div style="border-top:1px dashed #444;margin:4px 0"></div>';
+  const sep = () => '<div style="border-top:1px dashed #333;margin:5px 0"></div>';
   const empty = () => '<div style="height:4px"></div>';
 
   let html = `<div class="thermal-receipt" style="width:${spec.widthPx};margin:0 auto;font-family:'Courier New',Consolas,monospace;color:#000;background:#fff;padding:4px">`;
 
-  // Logo
+  // Logo (Center aligned, high-contrast, responsive)
   html += `<div style="text-align:center;margin-bottom:6px;margin-top:2px">
-    <img src="${logoUrl}"
+    <img src="${currentLogo}"
          alt="Logo"
-         style="width:${spec.logoWidth};height:${spec.logoWidth};object-fit:contain;display:inline-block">
+         style="width:${spec.logoWidth};max-width:100%;height:auto;object-fit:contain;display:block;margin:0 auto 4px auto">
   </div>`;
 
   // Shop Info
@@ -186,6 +263,7 @@ export const printThermalDirect = (txData, customPaper = null) => {
 <html>
 <head>
   <meta charset="UTF-8">
+  <base href="${window.location.origin}${window.location.pathname}">
   <title>Struk-${txData.invoiceNo || 'KASIR'}</title>
   <style>
     @page {
@@ -199,8 +277,8 @@ export const printThermalDirect = (txData, customPaper = null) => {
         padding: 1mm 2mm !important;
         background: #fff !important;
         color: #000 !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
       .thermal-receipt {
         width: 100% !important;
@@ -208,9 +286,14 @@ export const printThermalDirect = (txData, customPaper = null) => {
       }
       img {
         max-width: ${spec.logoWidth} !important;
+        width: ${spec.logoWidth} !important;
         height: auto !important;
-        -webkit-filter: grayscale(100%);
-        filter: grayscale(100%);
+        display: block !important;
+        margin: 0 auto 4px auto !important;
+        -webkit-filter: grayscale(100%) contrast(140%) !important;
+        filter: grayscale(100%) contrast(140%) !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
     }
     body {
@@ -228,24 +311,33 @@ export const printThermalDirect = (txData, customPaper = null) => {
 </html>`);
   doc.close();
 
-  setTimeout(() => {
+  const triggerPrint = () => {
     try {
       printFrame.contentWindow.focus();
       printFrame.contentWindow.print();
     } catch (e) {
-      console.warn('[print-frame] Direct iframe print failed, falling back to popup', e);
+      console.warn('[print-frame] Direct iframe print fallback to popup', e);
       const win = window.open('', '_blank', 'width=350,height=600');
       if (win) {
         win.document.write(doc.documentElement.outerHTML);
         win.document.close();
         win.focus();
-        win.print();
-        setTimeout(() => win.close(), 1000);
+        setTimeout(() => { win.print(); setTimeout(() => win.close(), 1000); }, 300);
       }
     } finally {
-      setTimeout(() => printFrame.remove(), 1500);
+      setTimeout(() => printFrame.remove(), 2500);
     }
-  }, 350);
+  };
+
+  // Ensure image is fully loaded before triggering print dialog
+  const img = doc.querySelector('img');
+  if (img && !img.complete) {
+    img.onload = () => setTimeout(triggerPrint, 100);
+    img.onerror = () => setTimeout(triggerPrint, 100);
+    setTimeout(triggerPrint, 800);
+  } else {
+    setTimeout(triggerPrint, 250);
+  }
 };
 
 /**
@@ -415,7 +507,6 @@ export const printViaWebUSB = async (txData) => {
   await device.claimInterface(0);
 
   const data = buildESCPOSBuffer(txData);
-  // Endpoint 1 is standard for USB thermal printers
   await device.transferOut(1, data);
   await device.close();
 };

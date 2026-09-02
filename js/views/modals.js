@@ -9,6 +9,7 @@ import {
   getReceiptPreviewHTML,
   getPrintSchemeUrl,
   getRawBTSchemeUrl,
+  getWhatsAppReceiptUrl,
   printThermalDirect,
   printViaWebBluetooth,
   printViaWebUSB
@@ -378,15 +379,18 @@ const showSuccessOverlay = (txData) => {
     </div>
 
     <!-- Print & Navigation Actions -->
-    <div class="success-actions" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:420px;margin-top:14px">
+    <div class="success-actions" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:440px;margin-top:14px">
       <button class="btn btn--success" id="btn-print-direct" style="flex:1;min-width:150px;font-weight:700;box-shadow:0 4px 12px rgba(16,185,129,0.3)">
         🖨️ Cetak Struk (${paperSize})
       </button>
+      <a class="btn btn--secondary" href="${getWhatsAppReceiptUrl(txData)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;font-size:12px;display:flex;align-items:center;gap:4px;background:#dcfce7;border:1.5px solid #86efac;color:#166534;font-weight:700">
+        💬 WhatsApp
+      </a>
       <button class="btn btn--secondary" id="btn-print-ble" style="font-size:12px;display:flex;align-items:center;gap:4px">
-        📲 Web Bluetooth
+        📲 Web BLE
       </button>
       <button class="btn btn--secondary" id="btn-print-usb" style="font-size:12px;display:flex;align-items:center;gap:4px">
-        🔌 WebUSB (Kabel)
+        🔌 WebUSB
       </button>
       <a class="btn btn--secondary" href="${printUrl}" style="text-decoration:none;font-size:12px;display:flex;align-items:center;gap:4px">
         🌐 BT App
