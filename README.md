@@ -78,9 +78,22 @@ KASIR/
 │       ├── image.js        # Kompresi gambar client-side WebP/JPEG & SKU generator
 │       ├── invoice.js      # Generator nomor resi
 │       └── sanitize.js     # Proteksi Anti-XSS
+├── docs/
+│   ├── 01_SYSTEM_BLUEPRINT.md       # Cetak biru arsitektur sistem & state management
+│   ├── 02_ACCOUNTING_LOGIC.md       # Logika matematika, akuntansi double-entry, & saldo kas
+│   ├── 03_MILITARY_VERIFICATION.md  # Protokol QA gate & 10 aturan mutlak pra-deploy
+│   └── 04_BUSINESS_TIMELINE.md      # Roadmap strategi bisnis & evolusi fitur
 └── scripts/
     └── verify.js           # Skrip audit CI/CD Quality Gate & sinkronisasi versi otomatis
 ```
+
+## 📚 Dokumentasi Standar Sistem
+
+Seluruh protokol teknis dan acuan baku tersimpan di folder `docs/`:
+- 📐 [01 — System Architecture & Technical Blueprint](docs/01_SYSTEM_BLUEPRINT.md)
+- 💰 [02 — Logika Matematika, Keuangan & Akuntansi](docs/02_ACCOUNTING_LOGIC.md)
+- 🛡️ [03 — Protokol Verifikasi Militer & QA Gate](docs/03_MILITARY_VERIFICATION.md)
+- 📈 [04 — Roadmap Bisnis & Timeline Evolusi Fitur](docs/04_BUSINESS_TIMELINE.md)
 
 ## 🖨️ Arsitektur Universal Thermal Printing
 
