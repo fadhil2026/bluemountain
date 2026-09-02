@@ -158,8 +158,17 @@ export const getReceiptPreviewHTML = (txData, paperWidth = null) => {
          style="width:${spec.logoWidth};max-width:100%;height:auto;object-fit:contain;display:block;margin:0 auto 4px auto">
   </div>`;
 
-  // Shop Info
-  html += line(settings.shopName || 'Blue Mountain Refilling Station', true, 'center', sizeKey === '80mm' ? '14px' : '12px');
+  // Shop Info (Clean 2-line header)
+  const rawShopName = settings.shopName || 'Blue Mountain Refilling Station';
+  if (rawShopName.toLowerCase().includes('blue mountain') && rawShopName.toLowerCase().includes('refilling station')) {
+    html += line('Blue Mountain', true, 'center', sizeKey === '80mm' ? '14px' : '13px');
+    html += line('Refilling Station', true, 'center', sizeKey === '80mm' ? '12px' : '11px');
+  } else {
+    const lines = rawShopName.split('\n');
+    lines.forEach(l => {
+      html += line(l.trim(), true, 'center', sizeKey === '80mm' ? '14px' : '12px');
+    });
+  }
   if (settings.shopAddress) html += line(settings.shopAddress, false, 'center', '10px');
   if (settings.shopPhone)   html += line(`Telp: ${settings.shopPhone}`, false, 'center', '10px');
   
@@ -367,9 +376,20 @@ export const buildESCPOSBuffer = (txData, paperSize = null) => {
 
   // Shop Header (Center, Double Height)
   pushCmd([0x1B, 0x61, 0x01]); // Align Center
-  pushCmd([0x1B, 0x21, 0x10]); // Double Height
-  pushText(settings.shopName || 'Blue Mountain');
-  pushCmd([0x1B, 0x21, 0x00]); // Normal
+  const rawShopName = settings.shopName || 'Blue Mountain Refilling Station';
+  if (rawShopName.toLowerCase().includes('blue mountain') && rawShopName.toLowerCase().includes('refilling station')) {
+    pushCmd([0x1B, 0x21, 0x10]); // Double Height
+    pushText('Blue Mountain');
+    pushCmd([0x1B, 0x21, 0x00]); // Normal
+    pushCmd([0x1B, 0x45, 0x01]); // Bold
+    pushText('Refilling Station');
+    pushCmd([0x1B, 0x45, 0x00]); // Normal
+  } else {
+    pushCmd([0x1B, 0x21, 0x10]); // Double Height
+    const lines = rawShopName.split('\n');
+    lines.forEach(l => pushText(l.trim()));
+    pushCmd([0x1B, 0x21, 0x00]); // Normal
+  }
   if (settings.shopAddress) pushText(settings.shopAddress);
   if (settings.shopPhone) pushText(`Telp: ${settings.shopPhone}`);
   

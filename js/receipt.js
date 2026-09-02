@@ -25,7 +25,14 @@ export const buildReceiptJSON = (txData, settings) => {
 
   // Header
   empty();
-  text(settings.shopName || 'Blue Mountain Refilling Station', 1, 1, 2);
+  const rawShopName = settings.shopName || 'Blue Mountain Refilling Station';
+  if (rawShopName.toLowerCase().includes('blue mountain') && rawShopName.toLowerCase().includes('refilling station')) {
+    text('Blue Mountain', 1, 1, 2);
+    text('Refilling Station', 1, 1, 1);
+  } else {
+    const lines = rawShopName.split('\n');
+    lines.forEach(l => text(l.trim(), 1, 1, 2));
+  }
   text(settings.shopAddress || '', 0, 1, 4);
   if (settings.shopPhone) text(`Telp: ${settings.shopPhone}`, 0, 1, 4);
   separator();
