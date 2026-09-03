@@ -191,8 +191,8 @@ export const renderSettings = async () => {
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Versi Aplikasi</div>
-          <div class="settings-row__desc">Otomatis &amp; Real-time via Git CI/CD Build Engine</div>
+          <div class="settings-row__label">Standar Versi Aplikasi (SemVer 3-Digit)</div>
+          <div class="settings-row__desc">Format: <strong>Major</strong> (Arsitektur) . <strong>Minor</strong> (Fitur Sedang) . <strong>Patch</strong> (Revisi Ringan)</div>
         </div>
         <div style="text-align:right">
           <span class="badge badge--blue" style="font-size:12px;padding:6px 12px;font-weight:800;letter-spacing:0.02em">

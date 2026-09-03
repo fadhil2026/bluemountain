@@ -70,10 +70,12 @@ const store = {
   },
 
   clearCart() {
-    this.state.cart         = [];
-    this.state.discount     = 0;
-    this.state.customerName = '';
+    this.state.cart             = [];
+    this.state.discount         = 0;
+    this.state.customerName     = '';
+    this.state.selectedCustomer = null;
     this.emit('cart:change', this.state.cart);
+    this.emit('selectedCustomer:change', null);
   },
 
   setDiscount(amount) {

@@ -8,7 +8,10 @@ import path from 'path';
 
 console.log('🔍 [CI/CD Verification] Memulai audit pra-deploy...');
 
-// 0. Auto-sync dynamic package.json version with Git revision
+// 0. Auto-sync dynamic package.json SemVer version: [MAJOR].[MINOR].[PATCH]
+// - MAJOR: Perubahan Arsitektur Utama / Fase Enterprise (e.g. 3)
+// - MINOR: Modul Fitur Sedang (e.g. 0)
+// - PATCH: Revisi Ringan & Bugfix (auto-sync dengan Git revision)
 try {
   const gitCount = execSync('git rev-list --count HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
   const statusOut = execSync('git status --porcelain', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
@@ -16,13 +19,15 @@ try {
   if (gitCount && gitCount !== '0') {
     const pkgPath = './package.json';
     const pkgData = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-    const base = pkgData.version.split('.').slice(0, 2).join('.');
-    const targetRev = Number(gitCount) + (isDirty ? 1 : 0);
-    const nextVer = `${base}.${targetRev}`;
+    const parts = (pkgData.version || '3.0.0').split('.');
+    const major = parts[0] || '3'; // Major (Arsitektur)
+    const minor = parts[1] || '0'; // Minor (Fitur Sedang)
+    const patch = Number(gitCount) + (isDirty ? 1 : 0); // Patch (Revisi Ringan)
+    const nextVer = `${major}.${minor}.${patch}`;
     if (pkgData.version !== nextVer) {
       pkgData.version = nextVer;
       fs.writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2) + '\n', 'utf8');
-      console.log(`  ✓ Sinkronisasi versi dinamis package.json -> v${nextVer}`);
+      console.log(`  ✓ Sinkronisasi SemVer Baku (Major.Minor.Patch) -> v${nextVer} (Major: ${major}, Minor: ${minor}, Patch: ${patch})`);
     }
   }
 } catch (_) {}

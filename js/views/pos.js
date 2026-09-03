@@ -29,8 +29,10 @@ export const initPOS = async () => {
   _posAbort = new AbortController();
   _posUnsubs.forEach(u => u());   // FIX: cleanup previous store listeners
   _posUnsubs = [
-    store.on('cart:change',     updateCartUI),
-    store.on('products:change', () => renderProductGrid()),
+    store.on('cart:change',             updateCartUI),
+    store.on('products:change',         () => renderProductGrid()),
+    store.on('selectedCustomer:change', () => renderCustomerRow()),
+    store.on('customers:change',        () => renderCustomerRow()),
   ];
 
   bindPOSEvents(_posAbort.signal);
@@ -67,15 +69,7 @@ const renderPOS = () => {
           <span class="cart-count" id="cart-count">0</span>
         </div>
 
-        <div class="customer-row" style="padding:10px 16px;border-bottom:1px solid var(--border-subtle);position:relative;display:flex;align-items:center;gap:8px">
-          <span style="font-size:16px">👤</span>
-          <input type="text" class="customer-input" id="customer-name"
-            placeholder="Cari / nama pelanggan..." maxlength="80" autocomplete="off" style="flex:1">
-          <button type="button" class="btn btn--sm btn--secondary" id="btn-quick-add-cust" title="Tambah Pelanggan Baru" style="padding:3px 8px;font-size:11px;font-weight:700">
-            ➕ Baru
-          </button>
-          <div id="cust-autocomplete-dropdown" style="display:none;position:absolute;left:16px;right:16px;top:100%;background:var(--card-bg);border:1px solid var(--card-border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:99;max-height:220px;overflow-y:auto"></div>
-        </div>
+        <div class="customer-row-wrapper" id="customer-row-container" style="border-bottom:1px solid var(--border-subtle);position:relative"></div>
 
         <div class="cart-items" id="cart-items">
           <div class="cart-empty">
@@ -120,6 +114,7 @@ const renderPOS = () => {
 
   renderCategoryPills();
   renderProductGrid();
+  renderCustomerRow();
   updateCartUI();
 };
 
@@ -463,7 +458,6 @@ const bindPOSEvents = (signal) => {
 
       if (!query) {
         dropdown.style.display = 'none';
-        store.setSelectedCustomer(null);
         return;
       }
 
@@ -474,9 +468,9 @@ const bindPOSEvents = (signal) => {
 
       if (matches.length === 0) {
         dropdown.innerHTML = `
-          <div style="padding:10px 12px;font-size:12px;color:var(--text-muted);display:flex;justify-content:space-between;align-items:center">
+          <div style="padding:12px;font-size:12px;color:#64748b;display:flex;justify-content:space-between;align-items:center;background:#ffffff">
             <span>Pelanggan belum terdaftar</span>
-            <button type="button" class="btn btn--sm btn--primary" id="btn-dropdown-quick-add" style="font-size:11px;padding:2px 8px">
+            <button type="button" class="btn btn--sm btn--primary" id="btn-dropdown-quick-add" style="font-size:11px;padding:3px 10px;font-weight:700">
               ➕ Tambahkan
             </button>
           </div>
@@ -490,40 +484,230 @@ const bindPOSEvents = (signal) => {
       }
 
       dropdown.innerHTML = matches.map(c => `
-        <div class="cust-option" data-id="${c.id}" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border-subtle);font-size:12px;display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div style="font-weight:700;color:var(--text-primary)">${esc(c.name)} <span style="font-size:10px;font-weight:400;color:var(--text-secondary)">(${esc(c.category || 'Umum')})</span></div>
-            <div style="font-size:11px;color:var(--text-muted)">📱 ${esc(c.phone || '-')}</div>
+        <div class="cust-option" data-id="${c.id}" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:12px;display:flex;justify-content:space-between;align-items:center;background:#ffffff;transition:background 100ms ease">
+          <div style="min-width:0;flex:1">
+            <div style="font-weight:800;color:#1e293b">${esc(c.name)} <span class="badge" style="font-size:10px;font-weight:700;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px">${esc(c.category || 'Umum')}</span></div>
+            <div style="font-size:11px;color:#64748b;margin-top:2px">📱 ${esc(c.phone || '-')} ${c.address ? `&bull; 📍 ${esc(c.address)}` : ''}</div>
           </div>
-          ${c.totalDebt > 0 ? `<span style="color:var(--color-danger);font-weight:700;font-size:11px">Hutang: ${formatRupiah(c.totalDebt)}</span>` : ''}
+          <div style="text-align:right;flex-shrink:0;margin-left:8px">
+            ${c.totalDebt > 0 ? `<span style="color:#dc2626;font-weight:800;font-size:11px;display:block">Hutang: ${formatRupiah(c.totalDebt)}</span>` : ''}
+            <span style="font-size:10px;color:#2563eb;font-weight:700">Pilih ➔</span>
+          </div>
         </div>
       `).join('');
       dropdown.style.display = 'block';
 
       dropdown.querySelectorAll('.cust-option').forEach(opt => {
+        opt.addEventListener('mouseenter', () => { opt.style.background = '#f8fafc'; });
+        opt.addEventListener('mouseleave', () => { opt.style.background = '#ffffff'; });
         opt.addEventListener('click', () => {
           const custId = opt.dataset.id;
           const selected = store.state.customers.find(c => String(c.id) === String(custId));
           if (selected) {
             store.setSelectedCustomer(selected);
-            e.target.value = selected.name;
           }
           dropdown.style.display = 'none';
+          renderCustomerRow();
         });
       });
     }
   }, { signal });
 
   document.addEventListener('click', (e) => {
-    if (e.target.closest('#btn-quick-add-cust')) {
-      showCustomerModal();
-      return;
-    }
     const dropdown = document.getElementById('cust-autocomplete-dropdown');
-    if (dropdown && !e.target.closest('.customer-row')) {
+    if (dropdown && !e.target.closest('#customer-row-container')) {
       dropdown.style.display = 'none';
     }
   }, { signal });
+};
+
+/**
+ * Render Customer Selection Bar in Cart
+ */
+export const renderCustomerRow = () => {
+  const container = document.getElementById('customer-row-container');
+  if (!container) return;
+
+  const cust = store.state.selectedCustomer;
+
+  if (cust) {
+    container.innerHTML = `
+      <div class="selected-customer-chip" style="display:flex;align-items:center;justify-content:space-between;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:10px;padding:8px 12px;margin:6px 12px;box-shadow:0 1px 3px rgba(0,0,0,0.05)">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          <span style="font-size:18px;flex-shrink:0">👤</span>
+          <div style="min-width:0">
+            <div style="font-weight:800;font-size:13px;color:#1e3a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+              ${esc(cust.name)} <span class="badge" style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:6px;font-weight:700">${esc(cust.category || 'Umum')}</span>
+            </div>
+            <div style="font-size:11px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+              📱 ${esc(cust.phone || '-')} ${cust.totalDebt > 0 ? `&bull; <span style="color:#dc2626;font-weight:800">Hutang: ${formatRupiah(cust.totalDebt)}</span>` : ''}
+            </div>
+          </div>
+        </div>
+        <button type="button" id="btn-clear-selected-cust" title="Kosongkan / Ganti Pelanggan" style="border-radius:50%;width:26px;height:26px;min-width:26px;padding:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#dc2626;background:#fee2e2;border:1px solid #fca5a5;cursor:pointer">
+          ✕
+        </button>
+      </div>
+    `;
+
+    container.querySelector('#btn-clear-selected-cust')?.addEventListener('click', () => {
+      store.setSelectedCustomer(null);
+      store.setCustomerName('');
+      renderCustomerRow();
+    });
+  } else {
+    container.innerHTML = `
+      <div style="padding:8px 12px;display:flex;align-items:center;gap:6px;position:relative">
+        <span style="font-size:16px;flex-shrink:0">👤</span>
+        <div style="position:relative;flex:1;min-width:0">
+          <input type="text" class="customer-input" id="customer-name"
+            placeholder="Cari nama / HP pelanggan..." maxlength="80" autocomplete="off"
+            value="${esc(store.state.customerName || '')}"
+            style="width:100%;padding:6px 24px 6px 8px;font-size:12px;border:1px solid var(--border-default);border-radius:8px">
+          ${store.state.customerName ? `
+            <button type="button" id="btn-clear-typed-name" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:transparent;color:#94a3b8;cursor:pointer;font-size:12px;padding:2px">✕</button>
+          ` : ''}
+        </div>
+        <button type="button" class="btn btn--sm btn--secondary" id="btn-pick-cust" title="Pilih dari Daftar Pelanggan" style="padding:5px 8px;font-size:11px;font-weight:700;white-space:nowrap;border-radius:6px;display:flex;align-items:center;gap:3px">
+          👥 Pilih
+        </button>
+        <button type="button" class="btn btn--sm btn--primary" id="btn-quick-add-cust" title="Tambah Pelanggan Baru" style="padding:5px 8px;font-size:11px;font-weight:700;white-space:nowrap;border-radius:6px;display:flex;align-items:center;gap:3px">
+          ➕ Baru
+        </button>
+
+        <!-- Dropdown with 100% SOLID OPAQUE WHITE background and high z-index -->
+        <div id="cust-autocomplete-dropdown" style="display:none;position:absolute;left:10px;right:10px;top:100%;background:#ffffff !important;border:2px solid #2563eb;border-radius:10px;box-shadow:0 14px 32px rgba(0,0,0,0.28);z-index:99999;max-height:220px;overflow-y:auto"></div>
+      </div>
+    `;
+
+    container.querySelector('#btn-clear-typed-name')?.addEventListener('click', () => {
+      store.setCustomerName('');
+      renderCustomerRow();
+    });
+
+    container.querySelector('#btn-pick-cust')?.addEventListener('click', () => {
+      showCustomerPickerModal();
+    });
+
+    container.querySelector('#btn-quick-add-cust')?.addEventListener('click', () => {
+      showCustomerModal();
+    });
+  }
+};
+
+/**
+ * Modal Pilih Pelanggan (Search & Pick)
+ */
+export const showCustomerPickerModal = () => {
+  const customers = store.state.customers || [];
+  let query = '';
+
+  const renderList = (filterText) => {
+    const q = filterText.trim().toLowerCase();
+    const filtered = customers.filter(c =>
+      !q || (c.name || '').toLowerCase().includes(q) ||
+      (c.phone || '').includes(q) ||
+      (c.category || '').toLowerCase().includes(q)
+    );
+
+    if (filtered.length === 0) {
+      return `
+        <div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">
+          Pelanggan tidak ditemukan.<br>
+          <button type="button" class="btn btn--primary btn--sm" id="btn-picker-add-new" style="margin-top:10px">
+            ➕ Tambah Pelanggan "${esc(filterText)}"
+          </button>
+        </div>
+      `;
+    }
+
+    return `
+      <div style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto;padding-right:4px">
+        ${filtered.map(c => `
+          <div class="picker-cust-row" data-id="${c.id}" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;cursor:pointer;transition:all 120ms ease">
+            <div style="min-width:0;flex:1">
+              <div style="display:flex;align-items:center;gap:6px">
+                <strong style="font-size:13px;color:#1e293b">${esc(c.name)}</strong>
+                <span class="badge" style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px;font-weight:700">${esc(c.category || 'Umum')}</span>
+              </div>
+              <div style="font-size:11px;color:#64748b;margin-top:2px">
+                📱 ${esc(c.phone || '-')} ${c.address ? `&bull; 📍 ${esc(c.address)}` : ''}
+              </div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;margin-left:10px">
+              ${c.totalDebt > 0 ? `<div style="font-size:11px;font-weight:800;color:#dc2626">Hutang: ${formatRupiah(c.totalDebt)}</div>` : ''}
+              <button type="button" class="btn btn--sm btn--primary" style="padding:3px 10px;font-size:11px;font-weight:700;margin-top:2px">
+                Pilih
+              </button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  };
+
+  const html = `
+    <div class="modal-header">
+      <h3 class="modal-title">👥 Pilih Pelanggan</h3>
+      <button class="modal-close" id="modal-picker-close">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:12px">
+      <div style="position:relative">
+        <input type="text" class="input" id="picker-search" placeholder="Ketik nama, no HP, atau alamat..." autofocus style="width:100%;padding-left:34px;border-radius:10px;font-size:13px">
+        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text-muted)">🔍</span>
+      </div>
+      <div id="picker-list-container">
+        ${renderList('')}
+      </div>
+    </div>
+    <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center">
+      <button class="btn btn--primary btn--sm" id="picker-create-btn">➕ Pelanggan Baru</button>
+      <button class="btn btn--secondary btn--sm" id="picker-cancel-btn">Tutup</button>
+    </div>
+  `;
+
+  openModal(html, 'modal-customer-picker');
+
+  const listContainer = document.getElementById('picker-list-container');
+  const searchInput = document.getElementById('picker-search');
+
+  const bindRows = () => {
+    listContainer?.querySelectorAll('.picker-cust-row').forEach(row => {
+      row.addEventListener('mouseenter', () => { row.style.background = '#f0f7ff'; row.style.borderColor = '#93c5fd'; });
+      row.addEventListener('mouseleave', () => { row.style.background = '#ffffff'; row.style.borderColor = '#e2e8f0'; });
+      row.addEventListener('click', () => {
+        const id = row.dataset.id;
+        const selected = customers.find(c => String(c.id) === String(id));
+        if (selected) {
+          store.setSelectedCustomer(selected);
+          closeModal('modal-customer-picker');
+          renderCustomerRow();
+        }
+      });
+    });
+
+    listContainer?.querySelector('#btn-picker-add-new')?.addEventListener('click', () => {
+      closeModal('modal-customer-picker');
+      showCustomerModal({ name: searchInput?.value?.trim() });
+    });
+  };
+
+  bindRows();
+
+  searchInput?.addEventListener('input', (e) => {
+    query = e.target.value;
+    if (listContainer) {
+      listContainer.innerHTML = renderList(query);
+      bindRows();
+    }
+  });
+
+  document.getElementById('modal-picker-close')?.addEventListener('click', () => closeModal('modal-customer-picker'));
+  document.getElementById('picker-cancel-btn')?.addEventListener('click', () => closeModal('modal-customer-picker'));
+  document.getElementById('picker-create-btn')?.addEventListener('click', () => {
+    closeModal('modal-customer-picker');
+    showCustomerModal();
+  });
 };
 
 export const refreshPOS = async () => {
