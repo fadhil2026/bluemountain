@@ -6,6 +6,7 @@ import { formatRupiah }          from '../utils/currency.js';
 import { formatDateTime }        from '../utils/date.js';
 import { esc }                   from '../utils/sanitize.js';
 import { openModal, closeModal } from './modals.js';
+import { exportToCSV }           from '../utils/export.js';
 import {
   getReceiptPreviewHTML,
   getPrintSchemeUrl,
@@ -126,6 +127,7 @@ const renderTransactionsUI = (allTxs) => {
         <button class="btn btn--primary btn--sm" id="tx-btn-apply" style="padding:6px 14px;font-weight:700">Tampilkan</button>
         <button class="btn btn--secondary btn--sm" id="tx-btn-today" style="padding:6px 10px;font-size:11px">Hari Ini</button>
         <button class="btn btn--secondary btn--sm" id="tx-btn-all" style="padding:6px 10px;font-size:11px">Semua</button>
+        <button class="btn btn--secondary btn--sm" id="tx-btn-export-csv" style="padding:6px 12px;font-size:11px;font-weight:700">📊 Export Excel/CSV</button>
       </div>
     </div>
 
@@ -265,6 +267,29 @@ const bindTxEvents = (allTxs) => {
     _endDate   = '';
     _currentPage = 1;
     renderTransactionsUI(allTxs);
+  });
+
+  // Export CSV
+  document.getElementById('tx-btn-export-csv')?.addEventListener('click', () => {
+    const headers = ['Tanggal', 'No. Invoice', 'Kasir', 'Pelanggan', 'Metode Pembayaran', 'Status', 'Subtotal', 'Diskon', 'Pajak', 'Total', 'Dibayar', 'Kembalian', 'Sisa Piutang'];
+    const rows = filtered.map(t => [
+      formatDateTime(new Date(t.date)),
+      t.invoiceNo || '',
+      t.cashier || 'Admin',
+      t.customerName || '-',
+      t.paymentMethod || 'cash',
+      t.paymentStatus || 'paid',
+      t.subtotal || 0,
+      t.discount || 0,
+      t.tax || 0,
+      t.total || 0,
+      t.paid || 0,
+      t.change || 0,
+      t.remainingDebt || 0,
+    ]);
+    const dateTag = new Date().toISOString().split('T')[0];
+    exportToCSV(`Riwayat-Transaksi-${dateTag}.csv`, headers, rows);
+    window.showToast?.('✅ Riwayat transaksi berhasil diekspor ke Excel/CSV!', 'success');
   });
 
   // Pagination Prev & Next

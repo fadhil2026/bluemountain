@@ -127,6 +127,14 @@ export const renderSettings = async () => {
         </div>
         <input type="text" class="input" id="set-bankHolder" value="${esc(s.bankHolder || '')}" maxlength="60" style="max-width:240px">
       </div>
+
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__label">Kode String QRIS Toko (Statis)</div>
+          <div class="settings-row__desc">Salin string QRIS dari BCA/Mandiri/Shopee/GoPay untuk diubah jadi Dynamic QRIS otomatis ber-nominal</div>
+        </div>
+        <textarea class="input" id="set-qrisNumber" rows="2" style="max-width:280px;font-size:11px" placeholder="0002010102112659...">${esc(s.qrisNumber || '')}</textarea>
+      </div>
     </div>
 
     <!-- Printer -->

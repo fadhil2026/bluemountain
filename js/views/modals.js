@@ -2,9 +2,11 @@
  * views/modals.js — Payment modal, success overlay, shared modal utils
  */
 import store                  from '../store.js';
+import QRCode                 from 'qrcode';
+import { generateDynamicQRIS } from '../utils/qris.js';
 import { formatRupiah }       from '../utils/currency.js';
 import { esc }                from '../utils/sanitize.js';
-import { saveTransaction }    from '../db.js';
+import { saveTransaction, getAllCustomers, addCustomer, updateCustomer } from '../db.js';
 import {
   getReceiptPreviewHTML,
   getPrintSchemeUrl,
@@ -136,6 +138,12 @@ export const showPaymentModal = (method = 'cash') => {
             </div>
             <div style="font-size:12px;color:var(--text-secondary)">Atas Nama: <strong>${bankHolder}</strong></div>
           </div>
+          <div style="margin-top:12px;text-align:center">
+            <canvas id="qris-dynamic-canvas" style="display:block;margin:0 auto;border-radius:10px;border:1px solid var(--border-subtle);background:#fff;max-width:170px;height:auto"></canvas>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;font-weight:700">
+              ⚡ QRIS Dinamis Otomatis Nominal: <span style="color:var(--blue-600)">${formatRupiah(total)}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -186,7 +194,19 @@ export const showPaymentModal = (method = 'cash') => {
     document.getElementById('pay-close-btn')?.addEventListener('click',  () => closeModal('payment-modal'));
     document.getElementById('pay-cancel-btn')?.addEventListener('click', () => closeModal('payment-modal'));
 
-    // Method tab switching
+    // Dynamic QRIS Renderer
+    const renderQR = () => {
+      const canvas = document.getElementById('qris-dynamic-canvas');
+      if (!canvas) return;
+      const staticQRIS = store.state.settings?.qrisNumber || '';
+      const dynPayload = generateDynamicQRIS(staticQRIS, total);
+      QRCode.toCanvas(canvas, dynPayload, { width: 170, margin: 1, errorCorrectionLevel: 'M' }, (err) => {
+        if (err) console.warn('[QRIS] QR code render warning:', err);
+      });
+    };
+    renderQR();
+
+    // Tab switching
     document.querySelectorAll('.pay-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('.pay-tab').forEach(t => t.classList.remove('active'));
@@ -195,6 +215,10 @@ export const showPaymentModal = (method = 'cash') => {
         document.getElementById('pay-cash-section').style.display     = m === 'cash'     ? '' : 'none';
         document.getElementById('pay-transfer-section').style.display = m === 'transfer' ? '' : 'none';
         document.getElementById('pay-debt-section').style.display     = m === 'debt'     ? '' : 'none';
+        
+        if (m === 'cash') document.getElementById('cash-received')?.focus();
+        if (m === 'transfer') renderQR();
+        if (m === 'debt') document.getElementById('debt-customer')?.focus();
       });
     });
 
@@ -251,6 +275,21 @@ export const showPaymentModal = (method = 'cash') => {
           window.showToast('Nama pelanggan wajib diisi untuk transaksi hutang/cicil!', 'warning');
           document.getElementById('debt-customer')?.focus();
           return;
+        }
+
+        const paidNow   = Math.min(parseFloat(document.getElementById('debt-paid-now')?.value) || 0, total);
+        const remaining = total - paidNow;
+
+        // Credit limit guard
+        const matchedCust = (store.state.customers || []).find(c => (c.name || '').trim().toLowerCase() === custName.toLowerCase());
+        if (matchedCust && matchedCust.creditLimit > 0) {
+          const projectedDebt = (Number(matchedCust.totalDebt) || 0) + remaining;
+          if (projectedDebt > matchedCust.creditLimit) {
+            const proceed = confirm(
+              `⚠️ Peringatan Limit Piutang!\nTotal piutang ${matchedCust.name} akan menjadi ${formatRupiah(projectedDebt)}, melebihi batas kredit (${formatRupiah(matchedCust.creditLimit)}).\n\nTetap lanjutkan transaksi?`
+            );
+            if (!proceed) return;
+          }
         }
       }
 
@@ -332,6 +371,35 @@ export const showPaymentModal = (method = 'cash') => {
         const savedId = await saveTransaction(txData);
         txData.id = savedId;
         store.addTransaction(txData);
+
+        // Update customer statistics in Dexie & Supabase
+        if (txData.customerName) {
+          const allCusts = await getAllCustomers();
+          let targetCust = allCusts.find(c => (c.name || '').trim().toLowerCase() === txData.customerName.trim().toLowerCase());
+          if (targetCust) {
+            targetCust.totalOrders = (Number(targetCust.totalOrders) || 0) + 1;
+            targetCust.totalSpent = (Number(targetCust.totalSpent) || 0) + txData.total;
+            if (txData.remainingDebt > 0) {
+              targetCust.totalDebt = (Number(targetCust.totalDebt) || 0) + txData.remainingDebt;
+            }
+            await updateCustomer(targetCust);
+          } else {
+            await addCustomer({
+              name: txData.customerName,
+              phone: '',
+              category: 'Rumah Tangga',
+              address: '',
+              totalOrders: 1,
+              totalSpent: txData.total,
+              totalDebt: txData.remainingDebt || 0,
+              creditLimit: 0,
+              galonLoaned: 0,
+            });
+          }
+          const freshCusts = await getAllCustomers();
+          store.setCustomers(freshCusts);
+        }
+
         closeModal('payment-modal');
         store.clearCart();
         showSuccessOverlay(txData);

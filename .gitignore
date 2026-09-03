@@ -24,3 +24,5 @@ TestResults.xml
 node_modules
 .mimosa
 .DS_Store
+_backup_*.zip
+*.zip

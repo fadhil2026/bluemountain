@@ -8,13 +8,15 @@ const _listeners = {};
 
 const store = {
   state: {
-    cart:         [],
-    products:     [],
-    transactions: [],
-    expenses:     [],
-    currentView:  'pos',
-    discount:     0,
-    customerName: '',
+    cart:             [],
+    products:         [],
+    customers:        [],
+    transactions:     [],
+    expenses:         [],
+    currentView:      'pos',
+    discount:         0,
+    customerName:     '',
+    selectedCustomer: null,
     settings: {
       shopName:     'Blue Mountain Refilling Station',
       shopAddress:  'Jl. Contoh No. 1, Kota',
@@ -104,6 +106,18 @@ const store = {
   setProducts(products) {
     this.state.products = products;
     this.emit('products:change', products);
+  },
+
+  // ── Customers ──
+  setCustomers(customers) {
+    this.state.customers = customers || [];
+    this.emit('customers:change', this.state.customers);
+  },
+
+  setSelectedCustomer(cust) {
+    this.state.selectedCustomer = cust;
+    this.state.customerName = cust ? cust.name : '';
+    this.emit('selectedCustomer:change', cust);
   },
 
   // ── Transactions ──

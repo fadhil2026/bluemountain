@@ -6,6 +6,7 @@ import { getAllTransactions } from '../db.js';
 import { formatRupiah }       from '../utils/currency.js';
 import { todayKey, monthKey, formatDateTime } from '../utils/date.js';
 import { esc }                from '../utils/sanitize.js';
+import { exportToCSV }        from '../utils/export.js';
 import store                  from '../store.js';
 
 let _unsubscribe   = null;
@@ -38,6 +39,18 @@ const renderReportsUI = (txs) => {
   // ── Financial KPI Calculations ──
   const todayTxs   = txs.filter(t => t.dateKey === today);
   const todayTotal = todayTxs.reduce((s, t) => s + t.total, 0);
+
+  // Calculate COGS / HPP and Gross Profit
+  let totalHPP = 0;
+  txs.forEach(t => {
+    (t.items || []).forEach(item => {
+      const unitCost = Number(item.product?.cost) || 0;
+      totalHPP += unitCost * (Number(item.qty) || 1);
+    });
+  });
+  const allTotalForProfit = txs.reduce((s, t) => s + t.total, 0);
+  const grossProfit = Math.max(0, allTotalForProfit - totalHPP);
+  const grossMargin = allTotalForProfit > 0 ? ((grossProfit / allTotalForProfit) * 100).toFixed(1) : 0;
   const todayCount = todayTxs.length;
 
   const monthTxs   = txs.filter(t => t.dateKey?.startsWith(month));
@@ -97,7 +110,8 @@ const renderReportsUI = (txs) => {
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn--secondary btn--sm" id="btn-refresh-reports">🔄 Refresh</button>
-        <button class="btn btn--secondary btn--sm" id="btn-export-pdf-report">📄 Export PDF Laporan</button>
+        <button class="btn btn--secondary btn--sm" id="btn-export-pdf-report">📄 Export PDF</button>
+        <button class="btn btn--primary btn--sm" id="btn-export-csv-report" style="font-weight:700">📊 Export Excel / CSV</button>
       </div>
     </div>
 
@@ -143,6 +157,13 @@ const renderReportsUI = (txs) => {
         <div class="stat-card__value">${formatRupiah(allTotal)}</div>
         <div class="stat-card__label">Total Omzet All-Time</div>
         <div class="stat-card__trend">${txs.length} transaksi</div>
+      </div>
+
+      <div class="stat-card" style="border-left:4px solid #059669">
+        <span class="stat-card__icon">📈</span>
+        <div class="stat-card__value" style="color:#059669">${formatRupiah(grossProfit)}</div>
+        <div class="stat-card__label">Estimasi Laba Kotor (Gross Profit)</div>
+        <div class="stat-card__trend" style="color:#059669;font-weight:700">Margin: ${grossMargin}% (HPP: ${formatRupiah(totalHPP)})</div>
       </div>
     </div>
 
@@ -279,6 +300,25 @@ const renderReportsUI = (txs) => {
   // Bind events
   document.getElementById('btn-refresh-reports')?.addEventListener('click', renderReports);
   document.getElementById('btn-export-pdf-report')?.addEventListener('click', () => exportReportPDF(txs, today, month));
+  document.getElementById('btn-export-csv-report')?.addEventListener('click', () => {
+    const headers = ['Tanggal', 'No. Invoice', 'Kasir', 'Pelanggan', 'Metode Pembayaran', 'Status Pembayaran', 'Subtotal', 'Diskon', 'Pajak', 'Grand Total', 'Sisa Piutang'];
+    const rows = sorted.map(t => [
+      formatDateTime(new Date(t.date)),
+      t.invoiceNo || '',
+      t.cashier || 'Admin',
+      t.customerName || '-',
+      t.paymentMethod || 'cash',
+      t.paymentStatus || 'paid',
+      t.subtotal || 0,
+      t.discount || 0,
+      t.tax || 0,
+      t.total || 0,
+      t.remainingDebt || 0,
+    ]);
+    const dateTag = new Date().toISOString().split('T')[0];
+    exportToCSV(`Laporan-Penjualan-${dateTag}.csv`, headers, rows);
+    window.showToast?.('✅ Laporan penjualan berhasil diekspor ke Excel/CSV!', 'success');
+  });
 
   document.getElementById('rpt-prev')?.addEventListener('click', () => {
     if (window._reportPage > 1) { window._reportPage--; renderReportsUI(txs); }

@@ -7,6 +7,7 @@ import store                                         from './store.js';
 import { formatDate, formatTime }                    from './utils/date.js';
 import { initPOS, refreshPOS }                       from './views/pos.js';
 import { initProducts, renderProducts }              from './views/products.js';
+import { initCustomers, renderCustomers }            from './views/customers.js';
 import { initTransactions, renderTransactions }      from './views/transactions.js';
 import { initReports, renderReports }                from './views/reports.js';
 import { initSettings, renderSettings }              from './views/settings.js';
@@ -76,6 +77,7 @@ const updateClock = () => {
 const VIEWS = {
   pos:          { init: initPOS,          refresh: refreshPOS },
   products:     { init: initProducts,     refresh: renderProducts },
+  customers:    { init: initCustomers,    refresh: renderCustomers },
   transactions: { init: initTransactions, refresh: renderTransactions },
   reports:      { init: initReports,      refresh: renderReports },
   settings:     { init: initSettings,     refresh: renderSettings },

@@ -4,10 +4,11 @@
  * FEATURE: Manual item & custom price entry directly in POS
  */
 import store                        from '../store.js';
-import { getAllProducts, addProduct } from '../db.js';
+import { getAllProducts, addProduct, getAllCustomers } from '../db.js';
 import { formatRupiah }             from '../utils/currency.js';
 import { esc }                      from '../utils/sanitize.js';
 import { showPaymentModal, openModal, closeModal } from './modals.js';
+import { showCustomerModal }        from './customers.js';
 
 let _searchQuery    = '';
 let _activeCategory = 'Semua';
@@ -15,8 +16,12 @@ let _posAbort       = null;
 let _posUnsubs      = [];   // FIX: track store subscriptions
 
 export const initPOS = async () => {
-  const products = await getAllProducts();
+  const [products, customers] = await Promise.all([
+    getAllProducts(),
+    getAllCustomers(),
+  ]);
   store.setProducts(products);
+  store.setCustomers(customers);
   renderPOS();
 
   // Cleanup previous listeners
@@ -62,10 +67,14 @@ const renderPOS = () => {
           <span class="cart-count" id="cart-count">0</span>
         </div>
 
-        <div class="customer-row" style="padding:10px 16px;border-bottom:1px solid var(--border-subtle)">
+        <div class="customer-row" style="padding:10px 16px;border-bottom:1px solid var(--border-subtle);position:relative;display:flex;align-items:center;gap:8px">
           <span style="font-size:16px">👤</span>
           <input type="text" class="customer-input" id="customer-name"
-            placeholder="Nama pelanggan (opsional)" maxlength="80" autocomplete="off">
+            placeholder="Cari / nama pelanggan..." maxlength="80" autocomplete="off" style="flex:1">
+          <button type="button" class="btn btn--sm btn--secondary" id="btn-quick-add-cust" title="Tambah Pelanggan Baru" style="padding:3px 8px;font-size:11px;font-weight:700">
+            ➕ Baru
+          </button>
+          <div id="cust-autocomplete-dropdown" style="display:none;position:absolute;left:16px;right:16px;top:100%;background:var(--card-bg);border:1px solid var(--card-border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:99;max-height:220px;overflow-y:auto"></div>
         </div>
 
         <div class="cart-items" id="cart-items">
@@ -446,7 +455,73 @@ const bindPOSEvents = (signal) => {
       store.setDiscount(parseFloat(e.target.value) || 0);
     }
     if (e.target.id === 'customer-name') {
+      const query = e.target.value.trim().toLowerCase();
       store.setCustomerName(e.target.value);
+
+      const dropdown = document.getElementById('cust-autocomplete-dropdown');
+      if (!dropdown) return;
+
+      if (!query) {
+        dropdown.style.display = 'none';
+        store.setSelectedCustomer(null);
+        return;
+      }
+
+      const matches = (store.state.customers || []).filter(c =>
+        (c.name || '').toLowerCase().includes(query) ||
+        (c.phone || '').includes(query)
+      ).slice(0, 6);
+
+      if (matches.length === 0) {
+        dropdown.innerHTML = `
+          <div style="padding:10px 12px;font-size:12px;color:var(--text-muted);display:flex;justify-content:space-between;align-items:center">
+            <span>Pelanggan belum terdaftar</span>
+            <button type="button" class="btn btn--sm btn--primary" id="btn-dropdown-quick-add" style="font-size:11px;padding:2px 8px">
+              ➕ Tambahkan
+            </button>
+          </div>
+        `;
+        dropdown.style.display = 'block';
+        dropdown.querySelector('#btn-dropdown-quick-add')?.addEventListener('click', () => {
+          dropdown.style.display = 'none';
+          showCustomerModal({ name: e.target.value.trim() });
+        });
+        return;
+      }
+
+      dropdown.innerHTML = matches.map(c => `
+        <div class="cust-option" data-id="${c.id}" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border-subtle);font-size:12px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:700;color:var(--text-primary)">${esc(c.name)} <span style="font-size:10px;font-weight:400;color:var(--text-secondary)">(${esc(c.category || 'Umum')})</span></div>
+            <div style="font-size:11px;color:var(--text-muted)">📱 ${esc(c.phone || '-')}</div>
+          </div>
+          ${c.totalDebt > 0 ? `<span style="color:var(--color-danger);font-weight:700;font-size:11px">Hutang: ${formatRupiah(c.totalDebt)}</span>` : ''}
+        </div>
+      `).join('');
+      dropdown.style.display = 'block';
+
+      dropdown.querySelectorAll('.cust-option').forEach(opt => {
+        opt.addEventListener('click', () => {
+          const custId = opt.dataset.id;
+          const selected = store.state.customers.find(c => String(c.id) === String(custId));
+          if (selected) {
+            store.setSelectedCustomer(selected);
+            e.target.value = selected.name;
+          }
+          dropdown.style.display = 'none';
+        });
+      });
+    }
+  }, { signal });
+
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#btn-quick-add-cust')) {
+      showCustomerModal();
+      return;
+    }
+    const dropdown = document.getElementById('cust-autocomplete-dropdown');
+    if (dropdown && !e.target.closest('.customer-row')) {
+      dropdown.style.display = 'none';
     }
   }, { signal });
 };

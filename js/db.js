@@ -6,6 +6,8 @@ import Dexie from 'dexie';
 import {
   pushProductToCloud,
   deleteProductFromCloud,
+  pushCustomerToCloud,
+  deleteCustomerFromCloud,
   pushTransactionToCloud,
   deleteTransactionFromCloud,
   pushExpenseToCloud,
@@ -21,6 +23,33 @@ db.version(2).stores({
   settings:     'key',
   expenses:     '++id, dateKey, category',
 });
+
+db.version(3).stores({
+  products:     '++id, category, sku',
+  customers:    '++id, name, phone, category, totalDebt',
+  transactions: '++id, dateKey, paymentStatus, paymentMethod, customerName',
+  settings:     'key',
+  expenses:     '++id, dateKey, category',
+});
+
+// ── Customers ──
+export const getAllCustomers = () => db.customers.toArray();
+export const getCustomerById = (id) => db.customers.get(id);
+export const addCustomer     = async (c) => {
+  const id = await db.customers.add(c);
+  pushCustomerToCloud({ ...c, id }).catch(() => {});
+  return id;
+};
+export const updateCustomer  = async (c) => {
+  const res = await db.customers.put(c);
+  pushCustomerToCloud(c).catch(() => {});
+  return res;
+};
+export const deleteCustomer  = async (id) => {
+  const res = await db.customers.delete(id);
+  deleteCustomerFromCloud(id).catch(() => {});
+  return res;
+};
 
 // ── Products ──
 export const getAllProducts    = ()        => db.products.toArray();

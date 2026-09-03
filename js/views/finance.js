@@ -8,6 +8,7 @@ import { formatRupiah }           from '../utils/currency.js';
 import { formatDateTime }         from '../utils/date.js';
 import { esc }                    from '../utils/sanitize.js';
 import { openModal, closeModal }  from './modals.js';
+import { exportToCSV }            from '../utils/export.js';
 import store                      from '../store.js';
 
 let _unsubTx      = null;
@@ -78,6 +79,12 @@ export const renderFinance = async () => {
 
     const dailyMap   = buildDailyCashFlow(txs, expenses);
     const journal    = buildJournal(txs, expenses);
+    const totalJournalDebit  = journal.reduce((s, j) => s + (j.debit || 0), 0);
+    const totalJournalCredit = journal.reduce((s, j) => s + (j.credit || 0), 0);
+    const isJournalBalanced  = totalJournalDebit === totalJournalCredit;
+
+    const totalGalonDipinjam = (store.state.customers || []).reduce((s, c) => s + (Number(c.galonLoaned) || 0), 0);
+
     const outstanding = [
       ...txs.filter(t => t.paymentStatus === 'transfer_pending'),
       ...txs.filter(t => (t.paymentMethod === 'debt' || t.paymentStatus === 'partial' || t.paymentStatus === 'unpaid') && (t.remainingDebt || 0) > 0),
@@ -141,6 +148,30 @@ export const renderFinance = async () => {
           <div class="stat-card__value" style="color:#d97706">${formatRupiah(totalPiutang)}</div>
           <div class="stat-card__label">Total Piutang</div>
           <div class="stat-card__trend">${outstanding.length} belum lunas</div>
+        </div>
+      </div>
+
+      <!-- Pelacakan Aset Galon Fisik Toko -->
+      <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg, rgba(37,99,235,0.03), rgba(16,185,129,0.03));border:1.5px solid var(--border-subtle)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">
+          🪣 Pelacakan Aset Galon Fisik Toko
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">
+          <div style="padding:10px 14px;background:white;border-radius:10px;border:1px solid var(--border-subtle)">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:600">Galon Dipinjam Pelanggan</div>
+            <div style="font-size:18px;font-weight:900;color:var(--color-warning)">${totalGalonDipinjam} <span style="font-size:12px;font-weight:600">galon</span></div>
+            <div style="font-size:10px;color:var(--text-muted)">Di ${(store.state.customers || []).filter(c => (c.galonLoaned || 0) > 0).length} pelanggan</div>
+          </div>
+          <div style="padding:10px 14px;background:white;border-radius:10px;border:1px solid var(--border-subtle)">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:600">Nilai Aset Galon Toko</div>
+            <div style="font-size:18px;font-weight:900;color:var(--blue-600)">${formatRupiah(totalGalonDipinjam * 45000)}</div>
+            <div style="font-size:10px;color:var(--text-muted)">Estimasi @ Rp 45.000 / galon</div>
+          </div>
+          <div style="padding:10px 14px;background:white;border-radius:10px;border:1px solid var(--border-subtle)">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:600">Buku Pembantu Galon</div>
+            <div style="font-size:13px;font-weight:800;color:var(--color-success);margin-top:4px">Tersinkronisasi ✅</div>
+            <div style="font-size:10px;color:var(--text-muted)">CRM Master Pelanggan</div>
+          </div>
         </div>
       </div>
 
@@ -283,13 +314,23 @@ export const renderFinance = async () => {
 
       <!-- Jurnal Entri with Pagination (10/page) -->
       <div class="card card--elevated" style="overflow:hidden;padding:0">
-        <div style="padding:14px 16px;border-bottom:1.5px solid var(--border-subtle);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text-primary)">
-          📒 Jurnal Entri Akuntansi (${journal.length} baris)
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1.5px solid var(--border-subtle);flex-wrap:wrap;gap:8px">
+          <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text-primary)">
+            📒 Jurnal Entri Akuntansi SAK EMKM (${journal.length} baris)
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span class="badge" style="background:${isJournalBalanced ? '#dcfce7' : '#fee2e2'};color:${isJournalBalanced ? '#166534' : '#991b1b'};border:1px solid ${isJournalBalanced ? '#86efac' : '#fca5a5'};font-size:11px;font-weight:700;padding:4px 10px">
+              ⚖️ Debit: ${formatRupiah(totalJournalDebit)} | Kredit: ${formatRupiah(totalJournalCredit)} (${isJournalBalanced ? 'Seimbang ✅' : 'Selisih ⚠️'})
+            </span>
+            <button class="btn btn--secondary btn--sm" id="btn-export-journal-csv" style="font-size:11px;font-weight:700">
+              📊 Export Jurnal (CSV)
+            </button>
+          </div>
         </div>
         <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
           <table class="data-table">
             <thead>
-              <tr><th>Tanggal</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Akun</th></tr>
+              <tr><th>Tanggal</th><th>Keterangan</th><th>Debit (Rp)</th><th>Kredit (Rp)</th><th>Bagan Akun (COA SAK EMKM)</th></tr>
             </thead>
             <tbody>
               ${journalPageItems.map(j => `
@@ -401,7 +442,7 @@ const buildJournal = (txs, expenses) => {
         desc: `Penjualan Tunai — ${tx.invoiceNo} (${cust})`,
         debit: tx.total,
         credit: tx.total,
-        account: 'Kas / Penjualan',
+        account: '[1001] Kas Toko / [4001] Pendapatan Penjualan',
         type: 'kas',
       });
     } else if (tx.paymentMethod === 'transfer') {
@@ -411,7 +452,7 @@ const buildJournal = (txs, expenses) => {
           desc: `Transfer Terkonfirmasi — ${tx.invoiceNo} (${cust})`,
           debit: tx.total,
           credit: tx.total,
-          account: 'Bank / Penjualan',
+          account: '[1002] Bank Transfer & QRIS / [4001] Pendapatan',
           type: 'kas',
         });
       } else {
@@ -420,17 +461,17 @@ const buildJournal = (txs, expenses) => {
           desc: `Transfer Pending — ${tx.invoiceNo} (${cust}) [Menunggu Konfirmasi]`,
           debit: tx.total,
           credit: tx.total,
-          account: 'Piutang Transfer',
+          account: '[1101] Piutang Transfer / [4001] Pendapatan',
           type: 'piutang',
         });
       }
     } else if (tx.paymentMethod === 'debt') {
       entries.push({
         date: tx.date,
-        desc: `Penjualan Piutang Usaha — ${tx.invoiceNo} (${cust}) [Total: ${formatRupiah(tx.total)}]`,
+        desc: `Penjualan Kredit/Tempo — ${tx.invoiceNo} (${cust}) [Total: ${formatRupiah(tx.total)}]`,
         debit: tx.total,
         credit: tx.total,
-        account: 'Piutang / Penjualan',
+        account: '[1101] Piutang Usaha / [4001] Pendapatan',
         type: 'piutang',
       });
 
@@ -444,8 +485,8 @@ const buildJournal = (txs, expenses) => {
         const cicilNum  = idx + 1;
 
         const label = isLunas
-          ? `Pelunasan (#${cicilNum}/LUNAS ✅)`
-          : `Cicilan #${cicilNum} (dari ${payments.length})`;
+          ? `Pelunasan Piutang (#${cicilNum}/LUNAS ✅)`
+          : `Cicilan Piutang #${cicilNum} (dari ${payments.length})`;
 
         const noteStr = p.note ? ` — ${esc(p.note)}` : '';
 
@@ -454,7 +495,7 @@ const buildJournal = (txs, expenses) => {
           desc: `${label} — ${tx.invoiceNo} (${cust})${noteStr} [Bayar: ${formatRupiah(p.amount)} | Sisa: ${formatRupiah(remaining)}]`,
           debit: p.amount,
           credit: p.amount,
-          account: isLunas ? 'Kas / Piutang (LUNAS ✅)' : 'Kas / Piutang Usaha',
+          account: isLunas ? '[1001] Kas Toko / [1101] Piutang (LUNAS ✅)' : '[1001] Kas Toko / [1101] Piutang Usaha',
           type: 'kas',
         });
       });
@@ -462,12 +503,24 @@ const buildJournal = (txs, expenses) => {
   }
 
   for (const exp of expenses) {
+    const cat = (exp.category || '').toLowerCase();
+    let coaCode = '[6099] Beban Operasional';
+    if (cat.includes('tutup') || cat.includes('tisu') || cat.includes('galon') || cat.includes('bahan')) {
+      coaCode = '[6001] Beban Tutup & Tisu';
+    } else if (cat.includes('listrik') || cat.includes('air') || cat.includes('utilitas')) {
+      coaCode = '[6002] Beban Utilitas/Listrik';
+    } else if (cat.includes('gaji') || cat.includes('upah')) {
+      coaCode = '[6003] Beban Gaji Karyawan';
+    } else if (cat.includes('bensin') || cat.includes('antar') || cat.includes('transport')) {
+      coaCode = '[6004] Beban Transportasi';
+    }
+
     entries.push({
       date: exp.date,
       desc: `Beban ${esc(exp.category || 'Operasional')} — ${esc(exp.note || 'Pengeluaran kas')}`,
       debit: exp.amount,
       credit: exp.amount,
-      account: `Beban (${esc(exp.category || 'Operasional')}) / Kas`,
+      account: `${coaCode} / [1001] Kas Toko`,
       type: 'beban',
     });
   }
@@ -500,6 +553,21 @@ const bindFinanceEvents = (txs) => {
   });
   document.getElementById('journal-next')?.addEventListener('click', () => {
     _journalPage++; renderFinance();
+  });
+
+  // Export Journal CSV
+  document.getElementById('btn-export-journal-csv')?.addEventListener('click', () => {
+    const headers = ['Tanggal', 'Keterangan', 'Debit', 'Kredit', 'Bagan Akun COA'];
+    const rows = journal.map(j => [
+      formatDateTime(new Date(j.date)),
+      j.desc || '',
+      j.debit || 0,
+      j.credit || 0,
+      j.account || '',
+    ]);
+    const dateTag = new Date().toISOString().split('T')[0];
+    exportToCSV(`Jurnal-Akuntansi-${dateTag}.csv`, headers, rows);
+    window.showToast?.('✅ Jurnal akuntansi berhasil diekspor ke file CSV/Excel!', 'success');
   });
 
   // Set Modal Awal

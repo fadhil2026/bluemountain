@@ -58,7 +58,10 @@ const renderProductCard = (p) => {
           </div>
         </div>
       </div>
-      <div class="product-manage-card__price">${formatRupiah(p.price)}<span style="font-size:12px;font-weight:400;color:var(--text-secondary)"> / ${esc(p.unit)}</span></div>
+      <div class="product-manage-card__price">
+        ${formatRupiah(p.price)}<span style="font-size:12px;font-weight:400;color:var(--text-secondary)"> / ${esc(p.unit)}</span>
+        ${p.cost > 0 ? `<div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-top:2px">Modal: ${formatRupiah(p.cost)} &bull; Margin: ${formatRupiah(p.price - p.cost)}</div>` : ''}
+      </div>
       <div class="product-manage-card__actions">
         <button class="btn btn--secondary btn--sm" style="flex:1" data-action="edit" data-id="${p.id}">✏️ Edit</button>
         <button class="btn btn--danger btn--sm" data-action="delete" data-id="${p.id}">🗑️</button>
@@ -124,17 +127,32 @@ const showProductForm = (product = null, allProducts = []) => {
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="input-group">
-          <label class="input-label">Harga (Rp) <span style="color:red">*</span></label>
+          <label class="input-label">Harga Jual (Rp) <span style="color:red">*</span></label>
           <input type="number" class="input" id="pf-price"
             value="${product?.price || ''}" min="0" max="999999999"
             placeholder="5000" inputmode="numeric">
         </div>
+        <div class="input-group">
+          <label class="input-label">Harga Modal / HPP (Rp)</label>
+          <input type="number" class="input" id="pf-cost"
+            value="${product?.cost || ''}" min="0" max="999999999"
+            placeholder="2500" inputmode="numeric">
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="input-group">
           <label class="input-label">Satuan</label>
           <input type="text" class="input" id="pf-unit"
             value="${esc(product?.unit || 'galon')}"
             placeholder="galon, botol, pcs..."
             maxlength="20">
+        </div>
+        <div class="input-group">
+          <label class="input-label">Stok Fisik Saat Ini</label>
+          <input type="number" class="input" id="pf-stock"
+            value="${product?.stock ?? 999}" min="0" max="999999"
+            placeholder="100">
         </div>
       </div>
 
@@ -266,6 +284,7 @@ const showProductForm = (product = null, allProducts = []) => {
       const name     = document.getElementById('pf-name')?.value.trim();
       const sku      = document.getElementById('pf-sku')?.value.trim() || autoSKU;
       const price    = parseFloat(document.getElementById('pf-price')?.value) || 0;
+      const cost     = parseFloat(document.getElementById('pf-cost')?.value) || 0;
       const unit     = document.getElementById('pf-unit')?.value.trim() || 'pcs';
       const category = document.getElementById('pf-category')?.value || 'Lainnya';
       const emoji    = document.getElementById('pf-emoji')?.value || '📦';
@@ -279,6 +298,7 @@ const showProductForm = (product = null, allProducts = []) => {
           name,
           sku,
           price,
+          cost,
           unit,
           category,
           emoji,

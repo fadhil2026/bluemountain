@@ -3,7 +3,7 @@
  * Supabase PostgreSQL + WebSocket Realtime + Offline Dexie Cache
  */
 import { createClient } from '@supabase/supabase-js';
-import { db, getAllProducts, getAllTransactions, getAllExpenses, getSetting, setSetting } from './db.js';
+import { db, getAllProducts, getAllTransactions, getAllExpenses, getAllCustomers, getSetting, setSetting } from './db.js';
 import store from './store.js';
 
 // Default Supabase Configuration (fadhil2026's Project)
@@ -109,6 +109,24 @@ const formatExpenseForCloud = (exp) => ({
   note: exp.note || '',
   amount: Number(exp.amount) || 0,
   cashier: exp.cashier || 'Admin',
+  updated_at: new Date().toISOString(),
+});
+
+/**
+ * Normalize customer object for Supabase
+ */
+const formatCustomerForCloud = (c) => ({
+  id: String(c.id),
+  name: c.name || '',
+  phone: c.phone || '',
+  address: c.address || '',
+  category: c.category || 'Rumah Tangga',
+  total_orders: Number(c.totalOrders || c.total_orders) || 0,
+  total_spent: Number(c.totalSpent || c.total_spent) || 0,
+  total_debt: Number(c.totalDebt || c.total_debt) || 0,
+  credit_limit: Number(c.creditLimit || c.credit_limit) || 0,
+  galon_loaned: Number(c.galonLoaned || c.galon_loaned) || 0,
+  notes: c.notes || '',
   updated_at: new Date().toISOString(),
 });
 
@@ -222,6 +240,39 @@ export const syncInitialData = async () => {
       }
     }
 
+    // 4. Sync Customers
+    try {
+      const [localCusts, { data: cloudCusts, error: custErr }] = await Promise.all([
+        getAllCustomers(),
+        supabase.from('customers').select('*'),
+      ]);
+
+      if (!custErr && cloudCusts) {
+        if (cloudCusts.length === 0 && localCusts.length > 0) {
+          await supabase.from('customers').upsert(localCusts.map(formatCustomerForCloud));
+        } else {
+          for (const cc of cloudCusts) {
+            const formatted = {
+              id: isNaN(Number(cc.id)) ? cc.id : Number(cc.id),
+              name: cc.name || '',
+              phone: cc.phone || '',
+              address: cc.address || '',
+              category: cc.category || 'Rumah Tangga',
+              totalOrders: Number(cc.total_orders) || 0,
+              totalSpent: Number(cc.total_spent) || 0,
+              totalDebt: Number(cc.total_debt) || 0,
+              creditLimit: Number(cc.credit_limit) || 0,
+              galonLoaned: Number(cc.galon_loaned) || 0,
+              notes: cc.notes || '',
+            };
+            await db.customers.put(formatted);
+          }
+          const freshCusts = await getAllCustomers();
+          store.setCustomers?.(freshCusts);
+        }
+      }
+    } catch (_) {}
+
     updateSyncBadge('online', '🟢 Cloud Realtime');
   } catch (err) {
     console.warn('[Supabase Sync] Warning during initial sync:', err);
@@ -333,6 +384,29 @@ export const setupRealtimeSubscription = () => {
       const updated = await getAllExpenses();
       store.setExpenses(updated);
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, async (payload) => {
+      if (payload.eventType === 'DELETE') {
+        const id = isNaN(Number(payload.old.id)) ? payload.old.id : Number(payload.old.id);
+        await db.customers.delete(id);
+      } else {
+        const row = payload.new;
+        await db.customers.put({
+          id: isNaN(Number(row.id)) ? row.id : Number(row.id),
+          name: row.name || '',
+          phone: row.phone || '',
+          address: row.address || '',
+          category: row.category || 'Rumah Tangga',
+          totalOrders: Number(row.total_orders) || 0,
+          totalSpent: Number(row.total_spent) || 0,
+          totalDebt: Number(row.total_debt) || 0,
+          creditLimit: Number(row.credit_limit) || 0,
+          galonLoaned: Number(row.galon_loaned) || 0,
+          notes: row.notes || '',
+        });
+      }
+      const updated = await getAllCustomers();
+      store.setCustomers?.(updated);
+    })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         updateSyncBadge('online', '🟢 Cloud Realtime');
@@ -363,6 +437,22 @@ export const deleteProductFromCloud = async (id) => {
   try {
     const supabase = getSupabase();
     await supabase.from('products').delete().eq('id', String(id));
+  } catch (_) {}
+};
+
+export const pushCustomerToCloud = async (customer) => {
+  if (!navigator.onLine) return;
+  try {
+    const supabase = getSupabase();
+    await supabase.from('customers').upsert(formatCustomerForCloud(customer));
+  } catch (_) {}
+};
+
+export const deleteCustomerFromCloud = async (id) => {
+  if (!navigator.onLine) return;
+  try {
+    const supabase = getSupabase();
+    await supabase.from('customers').delete().eq('id', String(id));
   } catch (_) {}
 };
 
