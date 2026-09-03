@@ -3,7 +3,7 @@
 
 ---
 
-## 1. 12 Aturan Mutlak Pengembangan (Absolute Rules)
+## 1. 14 Aturan Mutlak Pengembangan (Absolute Rules)
 
 1. **Zero Placeholder / Zero Mock**:
    - Dilarang keras menyisakan data tiruan, dummy hardcoded, atau placeholder statis pada alur data produksi.
@@ -17,18 +17,22 @@
    - Kunci *Service Role* Supabase tidak boleh dimasukkan ke dalam kode frontend client. Hanya *Anon Public Key* yang diizinkan.
 6. **Input Sanitization**:
    - Semua input dinamis yang berpotensi dirender ke DOM wajib melewati fungsi sanitasi `esc()` untuk mencegah serangan XSS.
-7. **Customer Data Integrity**:
-   - Nomor WhatsApp pelanggan harus dinormalisasi (menghapus karakter non-digit dan mengubah awalan `08xx` menjadi format standar `628xx`).
+7. **Customer Phone Normalization**:
+   - Nomor WhatsApp pelanggan wajib dinormalisasi ke format standar internasional `628xxx`.
 8. **Write-Ahead Offline Persistence**:
    - Seluruh operasi transaksi kasir & data pelanggan wajib tersimpan ke IndexedDB lokal terlebih dahulu sebelum di-push ke Cloud.
-9. **Presisi Format Thermal**:
-   - Struk thermal tidak boleh melebihi batas karakter per baris (30 karakter untuk 48mm, 32 karakter untuk 58mm, 48 karakter untuk 80mm).
+9. **Zero-Delay Thermal Printing**:
+   - Logo struk wajib menggunakan embedded Base64 synchronous dan iframe cetak wajib memiliki dimensi fisik off-screen agar layout dan bitmap paint tidak ter-skip oleh browser.
 10. **Single Source of Truth**:
     - Seluruh perubahan arsitektur atau fitur wajib didokumentasikan di folder `docs/` dan `README.md`.
 11. **Clean Working Tree**:
     - Build artifact `dist/` wajib di-commit bersamaan dengan source code agar live deployment di GitHub Pages selalu mutakhir.
 12. **Double-Entry Balance Guarantee**:
     - Setiap entri pembukuan dan cicilan wajib menjaga neraca $\sum \text{Debit} == \sum \text{Kredit}$.
+13. **Strict Zero-Loss Inventory**:
+    - Setiap transaksi penjualan wajib memotong stok produk secara atomik.
+14. **QRIS EMVCo Checksum Integrity**:
+    - QRIS dinamis wajib melalui verifikasi perhitungan ulang CRC16-CCITT sebelum dirender ke QR Code visual.
 
 ---
 
