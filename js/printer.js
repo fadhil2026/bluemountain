@@ -8,38 +8,11 @@
  * 4. Android App Intents (RawBT & Bluetooth Print App)
  * 5. WhatsApp Digital Receipt (Direct wa.me Text Invoice)
  */
-import { buildReceiptJSON } from './receipt.js';
-import { formatRupiah }     from './utils/currency.js';
-import { formatDateTime }   from './utils/date.js';
-import store                from './store.js';
-import logoUrl              from '../assets/logo.png';
-
-/**
- * Preload and cache logo as Data URI for 100% reliable zero-delay print rendering
- */
-let _cachedLogoDataUrl = null;
-
-export const initLogoData = async () => {
-  if (_cachedLogoDataUrl) return _cachedLogoDataUrl;
-  try {
-    const res  = await fetch(logoUrl);
-    const blob = await res.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (reader.result) _cachedLogoDataUrl = reader.result;
-        resolve(_cachedLogoDataUrl || logoUrl);
-      };
-      reader.onerror = () => resolve(logoUrl);
-      reader.readAsDataURL(blob);
-    });
-  } catch (e) {
-    return logoUrl;
-  }
-};
-
-// Immediate pre-fetch
-initLogoData();
+import { buildReceiptJSON }                     from './receipt.js';
+import { formatRupiah }                         from './utils/currency.js';
+import { formatDateTime }                       from './utils/date.js';
+import { LOGO_THERMAL_BASE64, LOGO_ESCPOS_RASTER } from './utils/logo-thermal.js';
+import store                                    from './store.js';
 
 /**
  * Paper Configs by Width
@@ -138,11 +111,10 @@ export const getWhatsAppReceiptUrl = (txData, targetPhone = '') => {
  * Generate 48mm / 58mm / 80mm HTML Receipt for Direct Print & Modal Preview
  */
 export const getReceiptPreviewHTML = (txData, paperWidth = null) => {
-  const settings   = store.state.settings || {};
-  const sizeKey    = paperWidth || settings.printerPaper || '58mm';
-  const spec       = PAPER_SPECS[sizeKey] || PAPER_SPECS['58mm'];
-  const items      = txData.items || [];
-  const currentLogo = _cachedLogoDataUrl || (new URL(logoUrl, window.location.href).href);
+  const settings = store.state.settings || {};
+  const sizeKey  = paperWidth || settings.printerPaper || '58mm';
+  const spec     = PAPER_SPECS[sizeKey] || PAPER_SPECS['58mm'];
+  const items    = txData.items || [];
 
   const line = (t, bold = false, align = 'left', size = spec.fontSize) =>
     `<div style="text-align:${align};font-weight:${bold ? '700' : '400'};font-size:${size};line-height:1.35;word-break:break-word">${t}</div>`;
@@ -151,11 +123,14 @@ export const getReceiptPreviewHTML = (txData, paperWidth = null) => {
 
   let html = `<div class="thermal-receipt" style="width:${spec.widthPx};margin:0 auto;font-family:'Courier New',Consolas,monospace;color:#000;background:#fff;padding:4px">`;
 
-  // Logo (Center aligned, high-contrast, responsive)
+  // Logo (Center aligned, high-contrast, pure Base64 for instant zero-delay render)
   html += `<div style="text-align:center;margin-bottom:6px;margin-top:2px">
-    <img src="${currentLogo}"
-         alt="Logo"
-         style="width:${spec.logoWidth};max-width:100%;height:auto;object-fit:contain;display:block;margin:0 auto 4px auto">
+    <img src="${LOGO_THERMAL_BASE64}"
+         class="thermal-logo"
+         alt="Blue Mountain"
+         width="70"
+         height="70"
+         style="width:${spec.logoWidth};height:auto;max-width:100%;object-fit:contain;display:block;margin:0 auto 4px auto;-webkit-print-color-adjust:exact;print-color-adjust:exact">
   </div>`;
 
   // Shop Info (Clean 2-line header)
@@ -257,13 +232,16 @@ export const printThermalDirect = (txData, customPaper = null) => {
   const spec       = PAPER_SPECS[paperSize] || PAPER_SPECS['58mm'];
   const receiptHTML = getReceiptPreviewHTML(txData, paperSize);
 
+  // Use a properly dimensioned off-screen frame so browser rendering engine performs complete layout & bitmap paint
   const printFrame = document.createElement('iframe');
   printFrame.style.position = 'fixed';
-  printFrame.style.right    = '0';
-  printFrame.style.bottom   = '0';
-  printFrame.style.width    = '0';
-  printFrame.style.height   = '0';
-  printFrame.style.border   = '0';
+  printFrame.style.top      = '-9999px';
+  printFrame.style.left     = '-9999px';
+  printFrame.style.width    = '400px';
+  printFrame.style.height   = '800px';
+  printFrame.style.border   = 'none';
+  printFrame.style.opacity  = '0';
+  printFrame.style.pointerEvents = 'none';
   document.body.appendChild(printFrame);
 
   const doc = printFrame.contentWindow.document;
@@ -272,12 +250,16 @@ export const printThermalDirect = (txData, customPaper = null) => {
 <html>
 <head>
   <meta charset="UTF-8">
-  <base href="${window.location.origin}${window.location.pathname}">
   <title>Struk-${txData.invoiceNo || 'KASIR'}</title>
   <style>
     @page {
       size: ${spec.width} auto;
       margin: 0mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
     @media print {
       html, body {
@@ -286,23 +268,19 @@ export const printThermalDirect = (txData, customPaper = null) => {
         padding: 1mm 2mm !important;
         background: #fff !important;
         color: #000 !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
       }
       .thermal-receipt {
         width: 100% !important;
         padding: 0 !important;
       }
-      img {
+      img, .thermal-logo {
         max-width: ${spec.logoWidth} !important;
         width: ${spec.logoWidth} !important;
         height: auto !important;
         display: block !important;
-        margin: 0 auto 4px auto !important;
-        -webkit-filter: grayscale(100%) contrast(140%) !important;
-        filter: grayscale(100%) contrast(140%) !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
+        margin: 0 auto 6px auto !important;
+        image-rendering: -webkit-optimize-contrast;
+        image-rendering: crisp-edges;
       }
     }
     body {
@@ -334,18 +312,18 @@ export const printThermalDirect = (txData, customPaper = null) => {
         setTimeout(() => { win.print(); setTimeout(() => win.close(), 1000); }, 300);
       }
     } finally {
-      setTimeout(() => printFrame.remove(), 2500);
+      setTimeout(() => printFrame.remove(), 3000);
     }
   };
 
-  // Ensure image is fully loaded before triggering print dialog
+  // Immediate or onload synchronization
   const img = doc.querySelector('img');
   if (img && !img.complete) {
-    img.onload = () => setTimeout(triggerPrint, 100);
-    img.onerror = () => setTimeout(triggerPrint, 100);
+    img.onload = () => setTimeout(triggerPrint, 120);
+    img.onerror = () => setTimeout(triggerPrint, 120);
     setTimeout(triggerPrint, 800);
   } else {
-    setTimeout(triggerPrint, 250);
+    setTimeout(triggerPrint, 200);
   }
 };
 
@@ -366,15 +344,21 @@ export const buildESCPOSBuffer = (txData, paperSize = null) => {
 
   let buffer = [];
   const pushCmd = (arr) => buffer.push(...arr);
+  const pushBytes = (arr) => {
+    for (const b of arr) buffer.push(b);
+  };
   const pushText = (txt) => {
     const encoded = encoder.encode(txt + '\n');
     for (const b of encoded) buffer.push(b);
   };
 
-  // Init Printer
+  // 1. Init Printer
   pushCmd([0x1B, 0x40]); // ESC @
 
-  // Shop Header (Center, Double Height)
+  // 2. Prepend ESC/POS 1-bit Monochrome Raster Logo (160x160 px)
+  pushBytes(LOGO_ESCPOS_RASTER);
+
+  // 3. Shop Header (Center, Double Height)
   pushCmd([0x1B, 0x61, 0x01]); // Align Center
   const rawShopName = settings.shopName || 'Blue Mountain Refilling Station';
   if (rawShopName.toLowerCase().includes('blue mountain') && rawShopName.toLowerCase().includes('refilling station')) {
@@ -393,18 +377,18 @@ export const buildESCPOSBuffer = (txData, paperSize = null) => {
   if (settings.shopAddress) pushText(settings.shopAddress);
   if (settings.shopPhone) pushText(`Telp: ${settings.shopPhone}`);
   
-  // Divider
+  // 4. Divider
   pushCmd([0x1B, 0x61, 0x00]); // Align Left
   pushText('-'.repeat(colWidth));
 
-  // Invoice Meta
+  // 5. Invoice Meta
   pushText(padLR(`No: ${txData.invoiceNo || '-'}`, ''));
   pushText(padLR(`Tgl: ${formatDateTime(new Date(txData.date || Date.now()))}`, ''));
   if (txData.customerName) pushText(padLR(`Cust: ${txData.customerName}`, ''));
   if (txData.cashier)      pushText(padLR(`Kasir: ${txData.cashier}`, ''));
   pushText('-'.repeat(colWidth));
 
-  // Items
+  // 6. Items
   for (const item of (txData.items || [])) {
     if (!item?.product) continue;
     pushCmd([0x1B, 0x45, 0x01]); // Bold
@@ -414,7 +398,7 @@ export const buildESCPOSBuffer = (txData, paperSize = null) => {
   }
   pushText('-'.repeat(colWidth));
 
-  // Totals
+  // 7. Totals
   if (txData.discount > 0) {
     pushText(padLR('Subtotal', formatRupiah(txData.subtotal || txData.total + txData.discount)));
     pushText(padLR('Diskon', '-' + formatRupiah(txData.discount)));
@@ -442,7 +426,7 @@ export const buildESCPOSBuffer = (txData, paperSize = null) => {
     pushCmd([0x1B, 0x45, 0x00]);
   }
 
-  // Footer
+  // 8. Footer
   pushText('-'.repeat(colWidth));
   pushCmd([0x1B, 0x61, 0x01]); // Align Center
   pushText('Terima kasih sudah berbelanja!');

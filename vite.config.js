@@ -51,6 +51,7 @@ export default defineConfig({
       injectRegister: 'auto',
       includeAssets: [
         'assets/logo.png',
+        'assets/logo-thermal.png',
         'assets/icons/icon-192.png',
         'assets/icons/icon-512.png',
         'favicon.ico',

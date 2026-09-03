@@ -7,13 +7,14 @@
  *  2. Store in sessionStorage as 'pendingReceipt'
  *  3. receipt-data.html serves it via the scheme
  */
-import { formatDateTime } from './utils/date.js';
-import { formatRupiah }   from './utils/currency.js';
+import { formatDateTime }       from './utils/date.js';
+import { formatRupiah }         from './utils/currency.js';
+import { LOGO_THERMAL_BASE64 }  from './utils/logo-thermal.js';
 
 /**
  * Build receipt JSON array per Bluetooth Print App spec.
  */
-export const buildReceiptJSON = (txData, settings) => {
+export const buildReceiptJSON = (txData, settings = {}) => {
   const items   = txData.items || [];
   const receipt = [];
 
@@ -23,8 +24,17 @@ export const buildReceiptJSON = (txData, settings) => {
   const separator = () => text('--------------------------------', 0, 1, 0);
   const empty     = () => text(' ', 0, 0, 0);
 
-  // Header
+  // 1. Logo (Type 1 image payload)
   empty();
+  receipt.push({
+    type: 1,
+    content: LOGO_THERMAL_BASE64,
+    align: 1,
+    width: 160,
+    height: 160,
+  });
+
+  // 2. Header
   const rawShopName = settings.shopName || 'Blue Mountain Refilling Station';
   if (rawShopName.toLowerCase().includes('blue mountain') && rawShopName.toLowerCase().includes('refilling station')) {
     text('Blue Mountain', 1, 1, 2);
@@ -37,19 +47,19 @@ export const buildReceiptJSON = (txData, settings) => {
   if (settings.shopPhone) text(`Telp: ${settings.shopPhone}`, 0, 1, 4);
   separator();
 
-  // Invoice info
+  // 3. Invoice info
   text(`No: ${txData.invoiceNo || '-'}`, 0, 0, 0);
   text(`Tgl: ${formatDateTime(new Date(txData.date))}`, 0, 0, 0);
   if (txData.customerName) text(`Pelanggan: ${txData.customerName}`, 0, 0, 0);
   if (txData.cashier) text(`Kasir: ${txData.cashier}`, 0, 0, 0);
   separator();
 
-  // Items
+  // 4. Items
   for (const item of items) {
     if (!item?.product) continue;
-    const name    = item.product.name;
-    const qty     = item.qty;
-    const price   = formatRupiah(item.product.price);
+    const name     = item.product.name;
+    const qty      = item.qty;
+    const price    = formatRupiah(item.product.price);
     const subtotal = formatRupiah(item.product.price * qty);
     text(`${name}`, 0, 0, 0);
     text(`  ${qty} x ${price} = ${subtotal}`, 0, 0, 0);
@@ -57,7 +67,7 @@ export const buildReceiptJSON = (txData, settings) => {
 
   separator();
 
-  // Totals
+  // 5. Totals
   if (txData.discount > 0) {
     text(`Subtotal: ${formatRupiah(txData.subtotal)}`, 0, 0, 0);
     text(`Diskon:  -${formatRupiah(txData.discount)}`, 0, 0, 0);
@@ -81,7 +91,6 @@ export const buildReceiptJSON = (txData, settings) => {
   separator();
   empty();
   text('Terima kasih sudah berbelanja!', 1, 1, 0);
-  // FIX: use settings.shopName, not hardcoded
   text(settings.shopName || 'Blue Mountain Refilling Station', 0, 1, 4);
   empty();
   empty();
