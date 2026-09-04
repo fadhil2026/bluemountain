@@ -1,6 +1,6 @@
 /**
  * views/customers.js — Customer Management & CRM 360° for Blue Mountain POS
- * Full CRUD + Category Filter + Instant Search + 10x Pagination + Customer 360° Drawer + Instant Debt Settlement
+ * Full CRUD + Category Filter + Instant Search + Responsive Data-Table + Always-Visible Pagination + Customer 360° Drawer + Instant Debt Settlement
  */
 import {
   getAllCustomers,
@@ -42,6 +42,16 @@ export const initCustomers = async () => {
   // Subscribe to real-time events from Store, POS, Transactions, and Supabase Cloud
   _unsubscribers.push(store.on('customers:change', () => renderCustomers()));
   _unsubscribers.push(store.on('transactions:change', () => renderCustomers()));
+
+  // Auto-sync on window resize so mobile/tablet resolution changes re-evaluate layout
+  const onResize = () => {
+    const custContainer = document.getElementById('view-customers');
+    if (custContainer && custContainer.classList.contains('active')) {
+      renderCustomers();
+    }
+  };
+  window.addEventListener('resize', onResize);
+  _unsubscribers.push(() => window.removeEventListener('resize', onResize));
 
   // Initial load
   const [customers, transactions] = await Promise.all([
@@ -137,167 +147,184 @@ export const renderCustomers = async () => {
     return matchCat && matchSearch;
   });
 
-  // Pagination (10 per page)
+  // Pagination calculation (consistent with transactions & other modules)
   const totalItems = filtered.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
   if (_currentPage > totalPages) _currentPage = totalPages;
   if (_currentPage < 1) _currentPage = 1;
 
-  const startIndex = (_currentPage - 1) * PAGE_SIZE;
-  const paginated = filtered.slice(startIndex, startIndex + PAGE_SIZE);
+  const startIdx = totalItems === 0 ? 0 : (_currentPage - 1) * PAGE_SIZE + 1;
+  const endIdx   = Math.min(_currentPage * PAGE_SIZE, totalItems);
+  const paginated = filtered.slice((_currentPage - 1) * PAGE_SIZE, _currentPage * PAGE_SIZE);
 
   container.innerHTML = `
-    <div class="view-header" style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+    <!-- Responsive Section Header matching other POS modules -->
+    <div class="section-header" style="flex-wrap:wrap;gap:12px;margin-bottom:var(--space-4)">
       <div>
-        <h1 class="view-title" style="margin:0;font-size:24px;font-weight:900;color:var(--text-primary)">👥 Manajemen Pelanggan (CRM)</h1>
-        <p style="margin:4px 0 0;font-size:13px;color:var(--text-secondary)">Data langganan, pelacakan piutang real-time, pinjaman galon fisik & broadcast WhatsApp</p>
+        <h2 class="section-title">
+          👥 Manajemen Pelanggan <span>${totalCustomers} total (${filtered.length} terfilter)</span>
+        </h2>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">
+          Data langganan, pelacakan piutang real-time, pinjaman galon & broadcast WhatsApp
+        </div>
       </div>
       <button class="btn btn--primary" id="btn-add-customer" style="font-weight:700;display:flex;align-items:center;gap:6px">
         <span>➕</span> Tambah Pelanggan Baru
       </button>
     </div>
 
-    <!-- Summary Metrics Cards -->
-    <div class="stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:14px;margin-bottom:20px">
-      <div class="stat-card" style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm)">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);letter-spacing:.05em">Total Pelanggan</div>
-        <div style="font-size:24px;font-weight:900;color:var(--blue-600);margin-top:6px">${totalCustomers} <span style="font-size:13px;font-weight:600;color:var(--text-muted)">orang</span></div>
+    <!-- Summary Metrics Cards: responsive 4-card / 2x2 grid via CSS -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Total Pelanggan</div>
+        <div style="font-size:20px;font-weight:800;color:var(--blue-700);margin-top:4px">${totalCustomers} <span style="font-size:12px;font-weight:600;color:var(--text-muted)">orang</span></div>
       </div>
-      <div class="stat-card" style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm)">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);letter-spacing:.05em">Sisa Piutang Pelanggan</div>
-        <div style="font-size:24px;font-weight:900;color:var(--color-danger);margin-top:6px">${formatRupiah(totalAllDebt)}</div>
+      <div class="stat-card">
+        <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Sisa Piutang</div>
+        <div style="font-size:20px;font-weight:800;color:#dc2626;margin-top:4px">${formatRupiah(totalAllDebt)}</div>
       </div>
-      <div class="stat-card" style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm)">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);letter-spacing:.05em">Galon Toko Dipinjam</div>
-        <div style="font-size:24px;font-weight:900;color:var(--color-warning);margin-top:6px">${totalAllLoanedGalon} <span style="font-size:13px;font-weight:600;color:var(--text-muted)">galon</span></div>
+      <div class="stat-card">
+        <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Galon Dipinjam</div>
+        <div style="font-size:20px;font-weight:800;color:#d97706;margin-top:4px">${totalAllLoanedGalon} <span style="font-size:12px;font-weight:600;color:var(--text-muted)">galon</span></div>
       </div>
-      <div class="stat-card" style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm)">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);letter-spacing:.05em">Akumulasi Omzet (LTV)</div>
-        <div style="font-size:24px;font-weight:900;color:var(--color-success);margin-top:6px">${formatRupiah(totalAllSpent)}</div>
+      <div class="stat-card">
+        <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Akumulasi Omzet (LTV)</div>
+        <div style="font-size:20px;font-weight:800;color:#16a34a;margin-top:4px">${formatRupiah(totalAllSpent)}</div>
       </div>
     </div>
 
-    <!-- Filters & Search Bar -->
-    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px">
-      <div class="category-pills" style="display:flex;flex-wrap:wrap;gap:6px">
+    <!-- Filters & Responsive Search Bar -->
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:16px">
+      <div class="category-pills" style="display:flex;flex-wrap:wrap;gap:6px;max-width:100%">
         ${CATEGORIES.map(cat => `
           <button class="btn btn--sm ${cat.id === _currentCategory ? 'btn--primary' : 'btn--secondary'} cat-filter-btn"
-                  data-cat="${cat.id}" style="border-radius:20px;font-size:12px;padding:6px 14px">
+                  data-cat="${cat.id}" style="border-radius:20px;font-size:12px;padding:5px 12px">
             ${cat.label}
           </button>
         `).join('')}
       </div>
 
-      <div style="position:relative;width:280px">
+      <div style="position:relative;flex:1;min-width:200px;max-width:320px">
         <input type="text" class="input" id="cust-search"
                placeholder="Cari nama, nomor HP, alamat..."
                value="${esc(_searchQuery)}"
-               style="width:100%;border-radius:20px;padding-left:34px;font-size:13px">
-        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text-muted)">🔍</span>
+               style="width:100%;border-radius:20px;padding-left:34px;font-size:12px">
+        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text-muted)">🔍</span>
       </div>
     </div>
 
-    <!-- Customer Table -->
-    <div class="table-container" style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-sm)">
-      <table class="table" style="width:100%;border-collapse:collapse">
-        <thead>
-          <tr style="background:rgba(0,0,0,0.02);border-bottom:1px solid var(--card-border);font-size:12px;text-align:left">
-            <th style="padding:12px 16px">Nama Pelanggan</th>
-            <th style="padding:12px 16px">Kategori</th>
-            <th style="padding:12px 16px">Kontak WhatsApp</th>
-            <th style="padding:12px 16px">Alamat Pengantaran</th>
-            <th style="padding:12px 16px;text-align:right">Total Piutang</th>
-            <th style="padding:12px 16px;text-align:center">Galon Dipinjam</th>
-            <th style="padding:12px 16px;text-align:center">Aksi</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${paginated.length === 0 ? `
+    <!-- Customer Card with Native Scroll & Always-Visible Pagination -->
+    <div class="card card--elevated" style="overflow:hidden;padding:0;margin-bottom:var(--space-6)">
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%">
+        <table class="data-table" id="cust-table" style="width:100%;min-width:720px">
+          <thead>
             <tr>
-              <td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">
-                Belum ada data pelanggan yang sesuai filter.
-              </td>
+              <th>Nama Pelanggan</th>
+              <th>Kategori</th>
+              <th>Kontak WhatsApp</th>
+              <th>Alamat Pengantaran</th>
+              <th style="text-align:right">Total Piutang</th>
+              <th style="text-align:center">Galon Dipinjam</th>
+              <th style="text-align:center">Aksi</th>
             </tr>
-          ` : paginated.map(c => {
-            const idKey = `id:${c.id}`;
-            const nameKey = `name:${(c.name || '').trim().toLowerCase()}`;
-            const liveStatsId = customerStatsMap[idKey];
-            const liveStatsName = customerStatsMap[nameKey];
-            const liveDebt = Math.max(liveStatsId?.debt || 0, liveStatsName?.debt || 0);
-            const debt = Math.max(Number(c.totalDebt || 0), liveDebt);
-
-            const cleanPhone = (c.phone || '').replace(/\D/g, '');
-            const waPhone = cleanPhone.startsWith('08') ? '62' + cleanPhone.slice(1) : cleanPhone;
-
-            return `
-              <tr style="border-bottom:1px solid var(--card-border);font-size:13px" class="hover-row">
-                <td style="padding:12px 16px">
-                  <div style="font-weight:700;color:var(--text-primary)">${esc(c.name)}</div>
-                  ${c.creditLimit > 0 ? `<div style="font-size:11px;color:var(--text-muted)">Limit: ${formatRupiah(c.creditLimit)}</div>` : ''}
-                </td>
-                <td style="padding:12px 16px">
-                  <span class="badge" style="background:rgba(37,99,235,0.08);color:var(--blue-600);border:1px solid rgba(37,99,235,0.2);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">
-                    ${esc(c.category || 'Rumah Tangga')}
-                  </span>
-                </td>
-                <td style="padding:12px 16px">
-                  ${waPhone ? `
-                    <a href="https://wa.me/${waPhone}" target="_blank" rel="noopener noreferrer"
-                       style="display:inline-flex;align-items:center;gap:4px;color:#166534;background:#dcfce7;border:1px solid #86efac;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700;text-decoration:none">
-                      💬 ${esc(c.phone)}
-                    </a>
-                  ` : '<span style="color:var(--text-muted)">-</span>'}
-                </td>
-                <td style="padding:12px 16px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(c.address || '-')}">
-                  ${esc(c.address || '-')}
-                </td>
-                <td style="padding:12px 16px;text-align:right">
-                  ${debt > 0 ? `
-                    <div style="color:var(--color-danger);font-weight:800;font-size:13px">${formatRupiah(debt)}</div>
-                    <button class="btn btn--sm btn-pay-debt-quick" data-id="${c.id}"
-                            style="margin-top:3px;padding:2px 8px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:6px;cursor:pointer">
-                      💰 Bayar
-                    </button>
-                  ` : '<span style="color:var(--color-success);font-weight:600;font-size:12px">Lunas ✅</span>'}
-                </td>
-                <td style="padding:12px 16px;text-align:center">
-                  ${c.galonLoaned > 0 ? `
-                    <span style="font-weight:800;color:var(--color-warning);background:rgba(245,158,11,0.1);padding:2px 8px;border-radius:8px;font-size:12px">
-                      🪣 ${c.galonLoaned}
-                    </span>
-                  ` : '<span style="color:var(--text-muted)">0</span>'}
-                </td>
-                <td style="padding:12px 16px;text-align:center">
-                  <div style="display:inline-flex;gap:6px">
-                    <button class="btn btn--sm btn--secondary btn-view-360" data-id="${c.id}" title="Detail Profil 360°" style="padding:4px 8px;font-size:12px">
-                      🔍 Profil
-                    </button>
-                    <button class="btn btn--sm btn--secondary btn-edit-cust" data-id="${c.id}" title="Edit Pelanggan" style="padding:4px 8px;font-size:12px">
-                      ✏️
-                    </button>
-                    <button class="btn btn--sm btn--danger btn-del-cust" data-id="${c.id}" title="Hapus Pelanggan" style="padding:4px 8px;font-size:12px">
-                      🗑️
-                    </button>
-                  </div>
+          </thead>
+          <tbody>
+            ${paginated.length === 0 ? `
+              <tr>
+                <td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">
+                  Belum ada data pelanggan yang sesuai filter.
                 </td>
               </tr>
-            `;
-          }).join('')}
-        </tbody>
-      </table>
-    </div>
+            ` : paginated.map(c => {
+              const idKey = `id:${c.id}`;
+              const nameKey = `name:${(c.name || '').trim().toLowerCase()}`;
+              const liveStatsId = customerStatsMap[idKey];
+              const liveStatsName = customerStatsMap[nameKey];
+              const liveDebt = Math.max(liveStatsId?.debt || 0, liveStatsName?.debt || 0);
+              const debt = Math.max(Number(c.totalDebt || 0), liveDebt);
 
-    <!-- Pagination -->
-    ${totalPages > 1 ? `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;font-size:12px;color:var(--text-secondary)">
-        <div>Menampilkan ${startIndex + 1} - ${Math.min(totalItems, startIndex + PAGE_SIZE)} dari ${totalItems} pelanggan</div>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn--sm btn--secondary" id="cust-prev-page" ${_currentPage <= 1 ? 'disabled' : ''}>← Sebelumnya</button>
-          <span style="padding:4px 10px;font-weight:700">Halaman ${_currentPage} / ${totalPages}</span>
-          <button class="btn btn--sm btn--secondary" id="cust-next-page" ${_currentPage >= totalPages ? 'disabled' : ''}>Selanjutnya →</button>
+              const cleanPhone = (c.phone || '').replace(/\D/g, '');
+              const waPhone = cleanPhone.startsWith('08') ? '62' + cleanPhone.slice(1) : cleanPhone;
+
+              return `
+                <tr>
+                  <td>
+                    <div style="font-weight:700;color:var(--text-primary)">${esc(c.name)}</div>
+                    ${c.creditLimit > 0 ? `<div style="font-size:11px;color:var(--text-muted)">Limit: ${formatRupiah(c.creditLimit)}</div>` : ''}
+                  </td>
+                  <td>
+                    <span class="badge badge--blue">
+                      ${esc(c.category || 'Rumah Tangga')}
+                    </span>
+                  </td>
+                  <td>
+                    ${waPhone ? `
+                      <a href="https://wa.me/${waPhone}" target="_blank" rel="noopener noreferrer"
+                         style="display:inline-flex;align-items:center;gap:4px;color:#166534;background:#dcfce7;border:1px solid #86efac;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700;text-decoration:none">
+                        💬 ${esc(c.phone)}
+                      </a>
+                    ` : '<span style="color:var(--text-muted)">-</span>'}
+                  </td>
+                  <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(c.address || '-')}">
+                    ${esc(c.address || '-')}
+                  </td>
+                  <td style="text-align:right">
+                    ${debt > 0 ? `
+                      <div style="color:#dc2626;font-weight:800;font-size:13px">${formatRupiah(debt)}</div>
+                      <button class="btn btn--sm btn-pay-debt-quick" data-id="${c.id}"
+                              style="margin-top:3px;padding:2px 8px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:6px;cursor:pointer">
+                        💰 Bayar
+                      </button>
+                    ` : '<span style="color:#16a34a;font-weight:700;font-size:12px">Lunas ✅</span>'}
+                  </td>
+                  <td style="text-align:center">
+                    ${c.galonLoaned > 0 ? `
+                      <span style="font-weight:800;color:#d97706;background:rgba(245,158,11,0.1);padding:2px 8px;border-radius:8px;font-size:12px">
+                        🪣 ${c.galonLoaned}
+                      </span>
+                    ` : '<span style="color:var(--text-muted)">0</span>'}
+                  </td>
+                  <td style="text-align:center">
+                    <div style="display:inline-flex;gap:4px">
+                      <button class="btn btn--secondary btn--sm btn-view-360" data-id="${c.id}" title="Detail Profil 360°" style="padding:4px 8px;font-size:11px">
+                        🔍 Profil
+                      </button>
+                      <button class="btn btn--secondary btn--sm btn-edit-cust" data-id="${c.id}" title="Edit Pelanggan" style="padding:4px 8px;font-size:11px">
+                        ✏️
+                      </button>
+                      <button class="btn btn--danger btn--sm btn-del-cust" data-id="${c.id}" title="Hapus Pelanggan" style="padding:4px 8px;font-size:11px">
+                        🗑️
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination ALWAYS Visible matching Riwayat Transaksi -->
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:white;border-top:1.5px solid var(--border-subtle);flex-wrap:wrap;gap:8px">
+        <div style="font-size:12px;color:var(--text-muted)">
+          Menampilkan <strong>${startIdx}-${endIdx}</strong> dari <strong>${totalItems}</strong> pelanggan
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn btn--secondary btn--sm" id="cust-prev-page" ${_currentPage <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>
+            ◀ Sebelumnya
+          </button>
+          <span style="font-size:12px;font-weight:700;padding:0 8px;color:var(--blue-700)">
+            Hal ${_currentPage} / ${totalPages}
+          </span>
+          <button class="btn btn--secondary btn--sm" id="cust-next-page" ${_currentPage >= totalPages ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>
+            Berikutnya ▶
+          </button>
         </div>
       </div>
-    ` : ''}
+    </div>
+
+    <!-- Dock Clearance Spacer: prevents bottom navigation dock from overlapping content -->
+    <div style="height:48px" aria-hidden="true"></div>
   `;
 
   // Attach Event Handlers
