@@ -146,104 +146,108 @@ export const syncInitialData = async () => {
   updateSyncBadge('syncing');
 
   try {
-    // 1. Sync Products
+    // 1. Sync Products (2-Way)
     const [localProds, { data: cloudProds, error: prodErr }] = await Promise.all([
       getAllProducts(),
       supabase.from('products').select('*'),
     ]);
 
     if (!prodErr && cloudProds) {
-      if (cloudProds.length === 0 && localProds.length > 0) {
-        // First-time seed local to cloud
-        await supabase.from('products').upsert(localProds.map(formatProductForCloud));
-      } else {
-        // Merge cloud to local Dexie
-        for (const cp of cloudProds) {
-          const formatted = {
-            id: isNaN(Number(cp.id)) ? cp.id : Number(cp.id),
-            sku: cp.sku || `BM-${cp.id}`,
-            name: cp.name,
-            category: cp.category,
-            price: Number(cp.price),
-            cost: Number(cp.cost) || 0,
-            unit: cp.unit,
-            emoji: cp.emoji,
-            image: cp.image || null,
-            stock: Number(cp.stock),
-          };
-          await db.products.put(formatted);
-        }
-        const freshProds = await getAllProducts();
-        store.setProducts(freshProds);
+      const cloudProdIds = new Set(cloudProds.map(p => String(p.id)));
+      const unpushedProds = localProds.filter(l => !cloudProdIds.has(String(l.id)));
+      if (unpushedProds.length > 0) {
+        await supabase.from('products').upsert(unpushedProds.map(formatProductForCloud));
       }
+
+      for (const cp of cloudProds) {
+        const formatted = {
+          id: isNaN(Number(cp.id)) ? cp.id : Number(cp.id),
+          sku: cp.sku || `BM-${cp.id}`,
+          name: cp.name,
+          category: cp.category,
+          price: Number(cp.price),
+          cost: Number(cp.cost) || 0,
+          unit: cp.unit,
+          emoji: cp.emoji,
+          image: cp.image || null,
+          stock: Number(cp.stock),
+        };
+        await db.products.put(formatted);
+      }
+      const freshProds = await getAllProducts();
+      store.setProducts(freshProds);
     }
 
-    // 2. Sync Transactions
+    // 2. Sync Transactions (2-Way)
     const [localTxs, { data: cloudTxs, error: txErr }] = await Promise.all([
       getAllTransactions(),
       supabase.from('transactions').select('*'),
     ]);
 
     if (!txErr && cloudTxs) {
-      if (cloudTxs.length === 0 && localTxs.length > 0) {
-        await supabase.from('transactions').upsert(localTxs.map(formatTransactionForCloud));
-      } else {
-        for (const ctx of cloudTxs) {
-          const formatted = {
-            id: isNaN(Number(ctx.id)) ? ctx.id : Number(ctx.id),
-            invoiceNo: ctx.invoice_no,
-            date: ctx.date,
-            dateKey: ctx.date_key,
-            customerName: ctx.customer_name,
-            items: ctx.items || [],
-            subtotal: Number(ctx.subtotal),
-            discount: Number(ctx.discount),
-            tax: Number(ctx.tax),
-            total: Number(ctx.total),
-            paid: Number(ctx.paid),
-            change: Number(ctx.change),
-            paymentMethod: ctx.payment_method,
-            paymentStatus: ctx.payment_status,
-            paidAmount: Number(ctx.paid_amount),
-            remainingDebt: Number(ctx.remaining_debt),
-            debtPayments: ctx.debt_payments || [],
-            cashier: ctx.cashier,
-          };
-          await db.transactions.put(formatted);
-        }
-        const freshTxs = await getAllTransactions();
-        store.setTransactions(freshTxs);
+      const cloudTxKeys = new Set(cloudTxs.map(t => t.invoice_no || String(t.id)));
+      const unpushedTxs = localTxs.filter(l => !cloudTxKeys.has(l.invoiceNo || String(l.id)));
+      if (unpushedTxs.length > 0) {
+        await supabase.from('transactions').upsert(unpushedTxs.map(formatTransactionForCloud));
       }
+
+      for (const ctx of cloudTxs) {
+        const formatted = {
+          id: isNaN(Number(ctx.id)) ? ctx.id : Number(ctx.id),
+          invoiceNo: ctx.invoice_no,
+          date: ctx.date,
+          dateKey: ctx.date_key,
+          customerName: ctx.customer_name,
+          items: ctx.items || [],
+          subtotal: Number(ctx.subtotal),
+          discount: Number(ctx.discount),
+          tax: Number(ctx.tax),
+          total: Number(ctx.total),
+          paid: Number(ctx.paid),
+          change: Number(ctx.change),
+          paymentMethod: ctx.payment_method,
+          paymentStatus: ctx.payment_status,
+          paidAmount: Number(ctx.paid_amount),
+          remainingDebt: Number(ctx.remaining_debt),
+          debtPayments: ctx.debt_payments || [],
+          cashier: ctx.cashier,
+        };
+        await db.transactions.put(formatted);
+      }
+      const freshTxs = await getAllTransactions();
+      store.setTransactions(freshTxs);
     }
 
-    // 3. Sync Expenses
+    // 3. Sync Expenses (2-Way)
     const [localExps, { data: cloudExps, error: expErr }] = await Promise.all([
       getAllExpenses(),
       supabase.from('expenses').select('*'),
     ]);
 
     if (!expErr && cloudExps) {
-      if (cloudExps.length === 0 && localExps.length > 0) {
-        await supabase.from('expenses').upsert(localExps.map(formatExpenseForCloud));
-      } else {
-        for (const ce of cloudExps) {
-          const formatted = {
-            id: isNaN(Number(ce.id)) ? ce.id : Number(ce.id),
-            date: ce.date,
-            dateKey: ce.date_key,
-            category: ce.category,
-            note: ce.note,
-            amount: Number(ce.amount),
-            cashier: ce.cashier,
-          };
-          await db.expenses.put(formatted);
-        }
-        const freshExps = await getAllExpenses();
-        store.setExpenses(freshExps);
+      const cloudExpIds = new Set(cloudExps.map(e => String(e.id)));
+      const unpushedExps = localExps.filter(l => !cloudExpIds.has(String(l.id)));
+      if (unpushedExps.length > 0) {
+        await supabase.from('expenses').upsert(unpushedExps.map(formatExpenseForCloud));
       }
+
+      for (const ce of cloudExps) {
+        const formatted = {
+          id: isNaN(Number(ce.id)) ? ce.id : Number(ce.id),
+          date: ce.date,
+          dateKey: ce.date_key,
+          category: ce.category,
+          note: ce.note,
+          amount: Number(ce.amount),
+          cashier: ce.cashier,
+        };
+        await db.expenses.put(formatted);
+      }
+      const freshExps = await getAllExpenses();
+      store.setExpenses(freshExps);
     }
 
-    // 4. Sync Customers
+    // 4. Sync Customers (2-Way)
     try {
       const [localCusts, { data: cloudCusts, error: custErr }] = await Promise.all([
         getAllCustomers(),
@@ -251,27 +255,37 @@ export const syncInitialData = async () => {
       ]);
 
       if (!custErr && cloudCusts) {
-        if (cloudCusts.length === 0 && localCusts.length > 0) {
-          await supabase.from('customers').upsert(localCusts.map(formatCustomerForCloud));
-        } else {
-          for (const cc of cloudCusts) {
-            const formatted = {
-              id: isNaN(Number(cc.id)) ? cc.id : Number(cc.id),
-              name: cc.name || '',
-              phone: cc.phone || '',
-              address: cc.address || '',
-              category: cc.category || 'Rumah Tangga',
-              totalOrders: Number(cc.total_orders) || 0,
-              totalSpent: Number(cc.total_spent) || 0,
-              totalDebt: Number(cc.total_debt) || 0,
-              creditLimit: Number(cc.credit_limit) || 0,
-              galonLoaned: Number(cc.galon_loaned) || 0,
-              notes: cc.notes || '',
-            };
-            await db.customers.put(formatted);
+        const cloudCustIds = new Set(cloudCusts.map(c => String(c.id)));
+        const unpushedCusts = localCusts.filter(l => !cloudCustIds.has(String(l.id)));
+        if (unpushedCusts.length > 0) {
+          await supabase.from('customers').upsert(unpushedCusts.map(formatCustomerForCloud));
+        }
+
+        for (const cc of cloudCusts) {
+          const formatted = {
+            id: isNaN(Number(cc.id)) ? cc.id : Number(cc.id),
+            name: cc.name || '',
+            phone: cc.phone || '',
+            address: cc.address || '',
+            category: cc.category || 'Rumah Tangga',
+            totalOrders: Number(cc.total_orders) || 0,
+            totalSpent: Number(cc.total_spent) || 0,
+            totalDebt: Number(cc.total_debt) || 0,
+            creditLimit: Number(cc.credit_limit) || 0,
+            galonLoaned: Number(cc.galon_loaned) || 0,
+            notes: cc.notes || '',
+          };
+          await db.customers.put(formatted);
+        }
+        const freshCusts = await getAllCustomers();
+        store.setCustomers?.(freshCusts);
+      } else if (custErr) {
+        console.warn('[Supabase Sync] Warning on customers table:', custErr.message);
+        if (custErr.code === 'PGRST205') {
+          store.state.supabaseMissingTables = store.state.supabaseMissingTables || [];
+          if (!store.state.supabaseMissingTables.includes('customers')) {
+            store.state.supabaseMissingTables.push('customers');
           }
-          const freshCusts = await getAllCustomers();
-          store.setCustomers?.(freshCusts);
         }
       }
     } catch (_) {}

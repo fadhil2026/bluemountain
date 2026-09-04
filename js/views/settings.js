@@ -230,8 +230,18 @@ export const renderSettings = async () => {
 
       <div class="settings-row">
         <div class="settings-row__info">
+          <div class="settings-row__label">Skema Database Cloud (SQL)</div>
+          <div class="settings-row__desc">Salin skema SQL lengkap tabel pelanggan &amp; sinkronisasi Realtime untuk Supabase SQL Editor</div>
+        </div>
+        <button class="btn btn--secondary btn--sm" id="btn-show-cloud-sql" style="white-space:nowrap">
+          📋 Salin Skema SQL Cloud
+        </button>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-row__info">
           <div class="settings-row__label">Sinkronkan Data Sekarang</div>
-          <div class="settings-row__desc">Tarik data transaksi &amp; produk terbaru dari cloud secara manual</div>
+          <div class="settings-row__desc">Tarik dan dorong data transaksi, pelanggan &amp; produk terbaru secara manual</div>
         </div>
         <button class="btn btn--primary btn--sm" id="btn-sync-cloud-now" style="white-space:nowrap">
           ⚡ Sinkronkan Sekarang
@@ -284,6 +294,64 @@ export const renderSettings = async () => {
 };
 
 const bindSettingsEvents = () => {
+  // Show Supabase SQL Schema Modal
+  document.getElementById('btn-show-cloud-sql')?.addEventListener('click', () => {
+    const sqlCode = `-- Jalankan kode ini di Supabase SQL Editor (https://supabase.com/dashboard/project/wiapnhpdgjbtkblowfig/sql):
+CREATE TABLE IF NOT EXISTS public.customers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    phone TEXT,
+    address TEXT,
+    category TEXT DEFAULT 'Rumah Tangga',
+    total_orders NUMERIC DEFAULT 0,
+    total_spent NUMERIC DEFAULT 0,
+    total_debt NUMERIC DEFAULT 0,
+    credit_limit NUMERIC DEFAULT 0,
+    galon_loaned NUMERIC DEFAULT 0,
+    notes TEXT,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow anon all on customers" ON public.customers;
+CREATE POLICY "Allow anon all on customers" ON public.customers FOR ALL USING (true) WITH CHECK (true);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables 
+        WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'customers'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.customers;
+    END IF;
+END $$;`;
+
+    const html = `
+      <div class="modal-header">
+        <h3 class="modal-title">☁️ Skema SQL Supabase (Tabel Pelanggan)</h3>
+        <button class="modal-close" id="sql-modal-close" type="button">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px">
+          Jalankan perintah SQL ini di menu <strong>SQL Editor</strong> dashboard Supabase Anda agar data pelanggan tersinkronisasi otomatis antar-perangkat (PC/HP/Tablet):
+        </p>
+        <textarea id="sql-code-area" readonly style="width:100%;height:180px;font-family:monospace;font-size:11px;padding:8px;border-radius:8px;border:1px solid var(--border-default);background:rgba(0,0,0,0.02);line-height:1.4">${sqlCode}</textarea>
+      </div>
+      <div class="modal-footer" style="display:flex;justify-content:space-between;gap:8px">
+        <button class="btn btn--primary btn--sm" id="btn-copy-sql">📋 Salin Perintah SQL</button>
+        <button class="btn btn--secondary btn--sm" id="btn-close-sql">Tutup</button>
+      </div>
+    `;
+    openModal(html, 'modal-sql');
+    document.getElementById('sql-modal-close')?.addEventListener('click', () => closeModal('modal-sql'));
+    document.getElementById('btn-close-sql')?.addEventListener('click', () => closeModal('modal-sql'));
+    document.getElementById('btn-copy-sql')?.addEventListener('click', () => {
+      navigator.clipboard?.writeText(sqlCode).then(() => {
+        window.showToast?.('✅ Perintah SQL berhasil disalin ke clipboard!', 'success');
+      });
+    });
+  });
+
   // Manual Supabase Cloud Sync
   document.getElementById('btn-sync-cloud-now')?.addEventListener('click', async () => {
     const btn = document.getElementById('btn-sync-cloud-now');

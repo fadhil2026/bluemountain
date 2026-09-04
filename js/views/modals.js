@@ -23,13 +23,15 @@ import { todayKey }           from '../utils/date.js';
 /* ─────────────────────────────────────────
    Modal Utilities
    ───────────────────────────────────────── */
-export const openModal = (html, id = 'generic-modal') => {
+export const openModal = (html, id = 'generic-modal', extraClass = '') => {
   closeModal(); // close any existing first
   const cleanId = (typeof id === 'string' && id.trim()) ? id.trim() : 'generic-modal';
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = `overlay-${cleanId}`;
-  overlay.innerHTML = `<div class="modal" id="${cleanId}" role="dialog" aria-modal="true">${html}</div>`;
+  const isWide = cleanId === 'modal-cust-360' || cleanId === 'payment-modal' || extraClass.includes('modal--wide');
+  const modalClass = isWide ? `modal modal--wide ${extraClass}`.trim() : `modal ${extraClass}`.trim();
+  overlay.innerHTML = `<div class="${modalClass}" id="${cleanId}" role="dialog" aria-modal="true">${html}</div>`;
   document.body.appendChild(overlay);
 
   overlay.addEventListener('click', (e) => {

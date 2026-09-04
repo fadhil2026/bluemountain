@@ -599,35 +599,38 @@ export const showCustomer360Drawer = async (cust) => {
 
       <!-- Order History List -->
       <div style="margin-top:8px">
-        <h4 style="margin:0 0 8px;font-size:14px;font-weight:800">📋 Riwayat Pembelian (${custTxs.length})</h4>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px">
+          <h4 style="margin:0;font-size:14px;font-weight:800">📋 Riwayat Pembelian (${custTxs.length})</h4>
+          ${custTxs.length > 0 ? `<span style="font-size:11px;color:var(--text-muted)">⇄ Geser horizontal jika di HP</span>` : ''}
+        </div>
         ${custTxs.length === 0 ? `
           <div style="font-size:12px;color:var(--text-muted);text-align:center;padding:20px;border:1px dashed var(--card-border);border-radius:10px">
             Belum ada data transaksi individual yang terhubung.
           </div>
         ` : `
-          <div style="border:1px solid var(--card-border);border-radius:10px;overflow:hidden">
-            <table class="table" style="width:100%;font-size:12px">
+          <div style="border:1px solid var(--card-border);border-radius:10px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+            <table class="table" style="width:100%;min-width:540px;font-size:12px;margin-bottom:0">
               <thead>
                 <tr style="background:rgba(0,0,0,0.02)">
-                  <th style="padding:8px 12px">Invoice</th>
-                  <th style="padding:8px 12px">Tanggal</th>
-                  <th style="padding:8px 12px;text-align:right">Total</th>
-                  <th style="padding:8px 12px;text-align:center">Status / Metode</th>
-                  <th style="padding:8px 12px;text-align:right">Sisa Hutang</th>
+                  <th style="padding:8px 12px;white-space:nowrap">Invoice</th>
+                  <th style="padding:8px 12px;white-space:nowrap">Tanggal</th>
+                  <th style="padding:8px 12px;text-align:right;white-space:nowrap">Total</th>
+                  <th style="padding:8px 12px;text-align:center;white-space:nowrap">Status / Metode</th>
+                  <th style="padding:8px 12px;text-align:right;white-space:nowrap">Sisa Hutang</th>
                 </tr>
               </thead>
               <tbody>
-                ${custTxs.slice(0, 15).map(tx => {
+                ${custTxs.slice(0, 20).map(tx => {
                   const remaining = Number(tx.remainingDebt) || 0;
                   return `
                     <tr style="border-bottom:1px solid var(--card-border)">
-                      <td style="padding:8px 12px;font-weight:700">${esc(tx.invoiceNo)}</td>
-                      <td style="padding:8px 12px">${formatDateTime(new Date(tx.date))}</td>
-                      <td style="padding:8px 12px;text-align:right;font-weight:700">${formatRupiah(tx.total)}</td>
-                      <td style="padding:8px 12px;text-align:center">
+                      <td style="padding:8px 12px;font-weight:700;white-space:nowrap">${esc(tx.invoiceNo)}</td>
+                      <td style="padding:8px 12px;white-space:nowrap">${formatDateTime(new Date(tx.date))}</td>
+                      <td style="padding:8px 12px;text-align:right;font-weight:700;white-space:nowrap">${formatRupiah(tx.total)}</td>
+                      <td style="padding:8px 12px;text-align:center;white-space:nowrap">
                         <span class="badge" style="font-size:10px;text-transform:uppercase">${esc(tx.paymentStatus || tx.paymentMethod)}</span>
                       </td>
-                      <td style="padding:8px 12px;text-align:right">
+                      <td style="padding:8px 12px;text-align:right;white-space:nowrap">
                         ${remaining > 0 ? `
                           <strong style="color:var(--color-danger)">${formatRupiah(remaining)}</strong>
                         ` : '<span style="color:var(--color-success)">Lunas ✅</span>'}
