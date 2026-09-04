@@ -738,9 +738,12 @@ const bindFinanceEvents = (txs) => {
             store.updateTransaction(id, { paidAmount: newPaid, remainingDebt: newRemaining, paymentStatus: newStatus, debtPayments: newPayments });
 
             // Decrement customer's totalDebt in CRM customer database
-            if (txObj.customerName) {
+            if (txObj.customerId || txObj.customerName) {
               const custs = await getAllCustomers();
-              const targetCust = custs.find(c => (c.name || '').trim().toLowerCase() === txObj.customerName.trim().toLowerCase());
+              const targetCust = custs.find(c =>
+                (txObj.customerId && String(c.id) === String(txObj.customerId)) ||
+                (c.name || '').trim().toLowerCase() === (txObj.customerName || '').trim().toLowerCase()
+              );
               if (targetCust) {
                 targetCust.totalDebt = Math.max(0, (Number(targetCust.totalDebt) || 0) - amount);
                 await updateCustomer(targetCust);

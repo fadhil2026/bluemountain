@@ -1,13 +1,14 @@
 /**
  * views/customers.js — Customer Management & CRM 360° for Blue Mountain POS
- * Full CRUD + Category Filter + Instant Search + 10x Pagination + Customer 360° Drawer
+ * Full CRUD + Category Filter + Instant Search + 10x Pagination + Customer 360° Drawer + Instant Debt Settlement
  */
 import {
   getAllCustomers,
   addCustomer,
   updateCustomer,
   deleteCustomer,
-  getAllTransactions
+  getAllTransactions,
+  updateTransaction
 } from '../db.js';
 import { formatRupiah }          from '../utils/currency.js';
 import { formatDateTime }        from '../utils/date.js';
@@ -15,7 +16,7 @@ import { esc }                   from '../utils/sanitize.js';
 import { openModal, closeModal } from './modals.js';
 import store                     from '../store.js';
 
-let _unsubscribe = null;
+let _unsubscribers = [];
 let _currentCategory = 'all';
 let _searchQuery = '';
 let _currentPage = 1;
@@ -30,19 +31,42 @@ export const CATEGORIES = [
 ];
 
 /**
- * Initialize Customer View
+ * Initialize Customer View with Real-time Multi-module Event Listeners
  */
 export const initCustomers = async () => {
-  if (_unsubscribe) _unsubscribe();
+  if (_unsubscribers.length) {
+    _unsubscribers.forEach(u => typeof u === 'function' && u());
+    _unsubscribers = [];
+  }
 
-  _unsubscribe = store.on('customers:change', () => {
-    renderCustomers();
-  });
+  // Subscribe to real-time events from Store, POS, Transactions, and Supabase Cloud
+  _unsubscribers.push(store.on('customers:change', () => renderCustomers()));
+  _unsubscribers.push(store.on('transactions:change', () => renderCustomers()));
 
   // Initial load
-  const customers = await getAllCustomers();
+  const [customers, transactions] = await Promise.all([
+    getAllCustomers(),
+    getAllTransactions()
+  ]);
   store.setCustomers(customers);
+  store.setTransactions(transactions);
   renderCustomers();
+};
+
+/**
+ * Helper: Find all transactions related to a customer
+ */
+const getTransactionsForCustomer = (cust, transactions = []) => {
+  const custId = cust.id ? String(cust.id) : null;
+  const nameKey = (cust.name || '').trim().toLowerCase();
+  const cleanPhone = (cust.phone || '').replace(/\D/g, '');
+
+  return transactions.filter(t => {
+    if (custId && t.customerId && String(t.customerId) === custId) return true;
+    if (nameKey && t.customerName && t.customerName.trim().toLowerCase() === nameKey) return true;
+    if (cleanPhone && t.customerPhone && t.customerPhone.replace(/\D/g, '') === cleanPhone) return true;
+    return false;
+  }).sort((a, b) => new Date(b.date) - new Date(a.date));
 };
 
 /**
@@ -55,32 +79,49 @@ export const renderCustomers = async () => {
   const customers = store.state.customers || [];
   const transactions = await getAllTransactions();
 
-  // Recalculate metrics per customer from real transactions
+  // Aggregate live stats per customer
   const customerStatsMap = {};
   for (const tx of transactions) {
+    const custId = tx.customerId ? String(tx.customerId) : null;
     const nameKey = (tx.customerName || '').trim().toLowerCase();
-    if (!nameKey) continue;
-    if (!customerStatsMap[nameKey]) {
-      customerStatsMap[nameKey] = { orders: 0, spent: 0, debt: 0 };
-    }
-    customerStatsMap[nameKey].orders += 1;
-    customerStatsMap[nameKey].spent += Number(tx.total) || 0;
-    if (tx.paymentMethod === 'debt' && (tx.remainingDebt || 0) > 0) {
-      customerStatsMap[nameKey].debt += Number(tx.remainingDebt) || 0;
+
+    const keys = [];
+    if (custId) keys.push(`id:${custId}`);
+    if (nameKey) keys.push(`name:${nameKey}`);
+
+    for (const k of keys) {
+      if (!customerStatsMap[k]) {
+        customerStatsMap[k] = { orders: 0, spent: 0, debt: 0, txIds: new Set() };
+      }
+      if (!customerStatsMap[k].txIds.has(tx.id)) {
+        customerStatsMap[k].txIds.add(tx.id);
+        customerStatsMap[k].orders += 1;
+        customerStatsMap[k].spent += Number(tx.total) || 0;
+        if (tx.paymentMethod === 'debt' && (Number(tx.remainingDebt) || 0) > 0) {
+          customerStatsMap[k].debt += Number(tx.remainingDebt) || 0;
+        }
+      }
     }
   }
 
-  // Aggregate global stats
+  // Aggregate global metrics
   const totalCustomers = customers.length;
   let totalAllDebt = 0;
   let totalAllLoanedGalon = 0;
   let totalAllSpent = 0;
 
   customers.forEach(c => {
-    const key = (c.name || '').trim().toLowerCase();
-    const liveStats = customerStatsMap[key] || { orders: 0, spent: 0, debt: 0 };
-    const debt = Math.max(Number(c.totalDebt || 0), liveStats.debt);
-    const spent = Math.max(Number(c.totalSpent || 0), liveStats.spent);
+    const idKey = `id:${c.id}`;
+    const nameKey = `name:${(c.name || '').trim().toLowerCase()}`;
+    const liveStatsId = customerStatsMap[idKey];
+    const liveStatsName = customerStatsMap[nameKey];
+
+    const liveDebt = Math.max(liveStatsId?.debt || 0, liveStatsName?.debt || 0);
+    const liveSpent = Math.max(liveStatsId?.spent || 0, liveStatsName?.spent || 0);
+
+    const debt = Math.max(Number(c.totalDebt || 0), liveDebt);
+    const spent = Math.max(Number(c.totalSpent || 0), liveSpent);
+
     totalAllDebt += debt;
     totalAllSpent += spent;
     totalAllLoanedGalon += Number(c.galonLoaned || 0);
@@ -109,7 +150,7 @@ export const renderCustomers = async () => {
     <div class="view-header" style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
       <div>
         <h1 class="view-title" style="margin:0;font-size:24px;font-weight:900;color:var(--text-primary)">👥 Manajemen Pelanggan (CRM)</h1>
-        <p style="margin:4px 0 0;font-size:13px;color:var(--text-secondary)">Data langganan, pelacakan piutang, pinjaman galon fisik & broadcast WhatsApp</p>
+        <p style="margin:4px 0 0;font-size:13px;color:var(--text-secondary)">Data langganan, pelacakan piutang real-time, pinjaman galon fisik & broadcast WhatsApp</p>
       </div>
       <button class="btn btn--primary" id="btn-add-customer" style="font-weight:700;display:flex;align-items:center;gap:6px">
         <span>➕</span> Tambah Pelanggan Baru
@@ -178,9 +219,13 @@ export const renderCustomers = async () => {
               </td>
             </tr>
           ` : paginated.map(c => {
-            const key = (c.name || '').trim().toLowerCase();
-            const liveStats = customerStatsMap[key] || { orders: 0, spent: 0, debt: 0 };
-            const debt = Math.max(Number(c.totalDebt || 0), liveStats.debt);
+            const idKey = `id:${c.id}`;
+            const nameKey = `name:${(c.name || '').trim().toLowerCase()}`;
+            const liveStatsId = customerStatsMap[idKey];
+            const liveStatsName = customerStatsMap[nameKey];
+            const liveDebt = Math.max(liveStatsId?.debt || 0, liveStatsName?.debt || 0);
+            const debt = Math.max(Number(c.totalDebt || 0), liveDebt);
+
             const cleanPhone = (c.phone || '').replace(/\D/g, '');
             const waPhone = cleanPhone.startsWith('08') ? '62' + cleanPhone.slice(1) : cleanPhone;
 
@@ -208,7 +253,11 @@ export const renderCustomers = async () => {
                 </td>
                 <td style="padding:12px 16px;text-align:right">
                   ${debt > 0 ? `
-                    <span style="color:var(--color-danger);font-weight:800;font-size:13px">${formatRupiah(debt)}</span>
+                    <div style="color:var(--color-danger);font-weight:800;font-size:13px">${formatRupiah(debt)}</div>
+                    <button class="btn btn--sm btn-pay-debt-quick" data-id="${c.id}"
+                            style="margin-top:3px;padding:2px 8px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:6px;cursor:pointer">
+                      💰 Bayar
+                    </button>
                   ` : '<span style="color:var(--color-success);font-weight:600;font-size:12px">Lunas ✅</span>'}
                 </td>
                 <td style="padding:12px 16px;text-align:center">
@@ -310,7 +359,15 @@ export const renderCustomers = async () => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.id;
       const cust = customers.find(c => String(c.id) === String(id));
-      if (cust) showCustomer360Drawer(cust, transactions);
+      if (cust) showCustomer360Drawer(cust);
+    });
+  });
+
+  container.querySelectorAll('.btn-pay-debt-quick').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const cust = customers.find(c => String(c.id) === String(id));
+      if (cust) showPayCustomerDebtModal(cust);
     });
   });
 };
@@ -323,7 +380,7 @@ export const showCustomerModal = (cust = null) => {
   const html = `
     <div class="modal-header">
       <h3 class="modal-title">${isEdit ? '✏️ Edit Data Pelanggan' : '➕ Tambah Pelanggan Baru'}</h3>
-      <button class="modal-close" id="modal-cust-close">✕</button>
+      <button class="modal-close" id="modal-cust-close" type="button">✕</button>
     </div>
     <div class="modal-body">
       <form id="cust-form" style="display:flex;flex-direction:column;gap:12px">
@@ -360,6 +417,13 @@ export const showCustomerModal = (cust = null) => {
             <input type="number" class="input" id="cf-galonLoaned" value="${cust?.galonLoaned || 0}" min="0" step="1" placeholder="0">
           </div>
         </div>
+        ${isEdit ? `
+          <div>
+            <label class="form-label" style="font-size:12px;font-weight:700">Penyesuaian Saldo Piutang (Rp)</label>
+            <input type="number" class="input" id="cf-totalDebt" value="${cust?.totalDebt || 0}" min="0" step="1000" placeholder="0">
+            <small style="font-size:11px;color:var(--text-muted)">Ubah jika ingin merekonsiliasi sisa hutang pelanggan ini secara manual.</small>
+          </div>
+        ` : ''}
         <div>
           <label class="form-label" style="font-size:12px;font-weight:700">Catatan Khusus (Opsional)</label>
           <input type="text" class="input" id="cf-notes" value="${esc(cust?.notes || '')}" placeholder="e.g. Antar tiap hari Selasa & Jumat" maxlength="150">
@@ -367,15 +431,15 @@ export const showCustomerModal = (cust = null) => {
       </form>
     </div>
     <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
-      <button class="btn btn--secondary" id="cust-cancel-btn">Batal</button>
-      <button class="btn btn--primary" id="cust-save-btn">${isEdit ? '💾 Simpan Perubahan' : '➕ Tambahkan Pelanggan'}</button>
+      <button class="btn btn--secondary" id="cust-cancel-btn" type="button">Batal</button>
+      <button class="btn btn--primary" id="cust-save-btn" type="button">${isEdit ? '💾 Simpan Perubahan' : '➕ Tambahkan Pelanggan'}</button>
     </div>
   `;
 
   openModal(html, 'modal-cust');
 
-  document.getElementById('modal-cust-close')?.addEventListener('click', closeModal);
-  document.getElementById('cust-cancel-btn')?.addEventListener('click', closeModal);
+  document.getElementById('modal-cust-close')?.addEventListener('click', () => closeModal('modal-cust'));
+  document.getElementById('cust-cancel-btn')?.addEventListener('click', () => closeModal('modal-cust'));
 
   document.getElementById('cust-save-btn')?.addEventListener('click', async () => {
     const name = document.getElementById('cf-name').value.trim();
@@ -385,6 +449,8 @@ export const showCustomerModal = (cust = null) => {
     const creditLimit = Math.max(0, Number(document.getElementById('cf-creditLimit').value) || 0);
     const galonLoaned = Math.max(0, Number(document.getElementById('cf-galonLoaned').value) || 0);
     const notes = document.getElementById('cf-notes').value.trim();
+    const debtInput = document.getElementById('cf-totalDebt');
+    const totalDebt = debtInput ? Math.max(0, Number(debtInput.value) || 0) : (cust?.totalDebt || 0);
 
     if (!name) {
       window.showToast?.('Nama pelanggan wajib diisi!', 'warning');
@@ -401,7 +467,7 @@ export const showCustomerModal = (cust = null) => {
       notes,
       totalOrders: cust?.totalOrders || 0,
       totalSpent: cust?.totalSpent || 0,
-      totalDebt: cust?.totalDebt || 0,
+      totalDebt,
     };
 
     if (isEdit) {
@@ -412,7 +478,7 @@ export const showCustomerModal = (cust = null) => {
       window.showToast?.('Pelanggan baru berhasil ditambahkan!', 'success');
     }
 
-    closeModal();
+    closeModal('modal-cust');
     const updated = await getAllCustomers();
     store.setCustomers(updated);
   });
@@ -421,21 +487,26 @@ export const showCustomerModal = (cust = null) => {
 /**
  * Drawer / Modal Profil Pelanggan 360°
  */
-export const showCustomer360Drawer = (cust, transactions = []) => {
-  const custTxs = transactions.filter(t => (t.customerName || '').trim().toLowerCase() === (cust.name || '').trim().toLowerCase());
-  
+export const showCustomer360Drawer = async (cust) => {
+  const transactions = await getAllTransactions();
+  const custTxs = getTransactionsForCustomer(cust, transactions);
+
   const cleanPhone = (cust.phone || '').replace(/\D/g, '');
   const waPhone = cleanPhone.startsWith('08') ? '62' + cleanPhone.slice(1) : cleanPhone;
-  
-  let totalSpent = 0;
-  let activeDebt = 0;
+
+  let txSpent = 0;
+  let txDebt = 0;
 
   custTxs.forEach(t => {
-    totalSpent += Number(t.total || 0);
-    if (t.paymentMethod === 'debt' && (t.remainingDebt || 0) > 0) {
-      activeDebt += Number(t.remainingDebt || 0);
+    txSpent += Number(t.total || 0);
+    if (t.paymentMethod === 'debt' && (Number(t.remainingDebt) || 0) > 0) {
+      txDebt += Number(t.remainingDebt || 0);
     }
   });
+
+  const totalSpent = Math.max(Number(cust.totalSpent || 0), txSpent);
+  const activeDebt = Math.max(Number(cust.totalDebt || 0), txDebt);
+  const totalOrders = Math.max(Number(cust.totalOrders || 0), custTxs.length);
 
   const tagihanMsg = encodeURIComponent(
     `Halo *${cust.name}*, ini pengingat dari *${store.state.settings?.shopName || 'Blue Mountain'}* terkait sisa piutang Anda sebesar *${formatRupiah(activeDebt)}*. Terima kasih!`
@@ -447,14 +518,14 @@ export const showCustomer360Drawer = (cust, transactions = []) => {
         <h3 class="modal-title">👤 Profil Pelanggan 360°</h3>
         <p style="margin:2px 0 0;font-size:12px;color:var(--text-secondary)">${esc(cust.name)} &bull; ${esc(cust.category || 'Rumah Tangga')}</p>
       </div>
-      <button class="modal-close" id="drawer-close-btn">✕</button>
+      <button class="modal-close" id="drawer-close-btn" type="button">✕</button>
     </div>
     <div class="modal-body" style="max-height:75vh;overflow-y:auto;display:flex;flex-direction:column;gap:14px">
       <!-- Quick Info Bar -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:8px;background:rgba(0,0,0,0.02);padding:12px;border-radius:10px">
         <div>
           <div style="font-size:11px;color:var(--text-secondary);font-weight:700">Total Transaksi</div>
-          <div style="font-size:16px;font-weight:900;color:var(--blue-600)">${custTxs.length} kali</div>
+          <div style="font-size:16px;font-weight:900;color:var(--blue-600)">${totalOrders} kali</div>
         </div>
         <div>
           <div style="font-size:11px;color:var(--text-secondary);font-weight:700">Total Belanja (LTV)</div>
@@ -480,6 +551,11 @@ export const showCustomer360Drawer = (cust, transactions = []) => {
 
       <!-- Action Buttons -->
       <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${activeDebt > 0 ? `
+          <button class="btn btn--primary" id="btn-drawer-pay-debt" style="font-size:12px;display:inline-flex;align-items:center;gap:4px;font-weight:700">
+            💰 Bayar / Pelunasan Hutang (${formatRupiah(activeDebt)})
+          </button>
+        ` : ''}
         ${waPhone ? `
           <a href="https://wa.me/${waPhone}" target="_blank" rel="noopener noreferrer"
              class="btn btn--secondary" style="text-decoration:none;font-size:12px;display:inline-flex;align-items:center;gap:4px">
@@ -489,7 +565,7 @@ export const showCustomer360Drawer = (cust, transactions = []) => {
         ${waPhone && activeDebt > 0 ? `
           <a href="https://wa.me/${waPhone}?text=${tagihanMsg}" target="_blank" rel="noopener noreferrer"
              class="btn btn--secondary" style="text-decoration:none;font-size:12px;display:inline-flex;align-items:center;gap:4px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-weight:700">
-            📲 Kirim Tagihan WhatsApp (${formatRupiah(activeDebt)})
+            📲 Kirim Tagihan WhatsApp
           </a>
         ` : ''}
       </div>
@@ -498,7 +574,9 @@ export const showCustomer360Drawer = (cust, transactions = []) => {
       <div style="margin-top:8px">
         <h4 style="margin:0 0 8px;font-size:14px;font-weight:800">📋 Riwayat Pembelian (${custTxs.length})</h4>
         ${custTxs.length === 0 ? `
-          <div style="font-size:12px;color:var(--text-muted);text-align:center;padding:20px">Belum ada riwayat transaksi.</div>
+          <div style="font-size:12px;color:var(--text-muted);text-align:center;padding:20px;border:1px dashed var(--card-border);border-radius:10px">
+            Belum ada data transaksi individual yang terhubung.
+          </div>
         ` : `
           <div style="border:1px solid var(--card-border);border-radius:10px;overflow:hidden">
             <table class="table" style="width:100%;font-size:12px">
@@ -507,20 +585,29 @@ export const showCustomer360Drawer = (cust, transactions = []) => {
                   <th style="padding:8px 12px">Invoice</th>
                   <th style="padding:8px 12px">Tanggal</th>
                   <th style="padding:8px 12px;text-align:right">Total</th>
-                  <th style="padding:8px 12px;text-align:center">Metode</th>
+                  <th style="padding:8px 12px;text-align:center">Status / Metode</th>
+                  <th style="padding:8px 12px;text-align:right">Sisa Hutang</th>
                 </tr>
               </thead>
               <tbody>
-                ${custTxs.slice(0, 10).map(tx => `
-                  <tr style="border-bottom:1px solid var(--card-border)">
-                    <td style="padding:8px 12px;font-weight:700">${esc(tx.invoiceNo)}</td>
-                    <td style="padding:8px 12px">${formatDateTime(new Date(tx.date))}</td>
-                    <td style="padding:8px 12px;text-align:right;font-weight:700">${formatRupiah(tx.total)}</td>
-                    <td style="padding:8px 12px;text-align:center">
-                      <span class="badge" style="font-size:10px">${esc(tx.paymentMethod)}</span>
-                    </td>
-                  </tr>
-                `).join('')}
+                ${custTxs.slice(0, 15).map(tx => {
+                  const remaining = Number(tx.remainingDebt) || 0;
+                  return `
+                    <tr style="border-bottom:1px solid var(--card-border)">
+                      <td style="padding:8px 12px;font-weight:700">${esc(tx.invoiceNo)}</td>
+                      <td style="padding:8px 12px">${formatDateTime(new Date(tx.date))}</td>
+                      <td style="padding:8px 12px;text-align:right;font-weight:700">${formatRupiah(tx.total)}</td>
+                      <td style="padding:8px 12px;text-align:center">
+                        <span class="badge" style="font-size:10px;text-transform:uppercase">${esc(tx.paymentStatus || tx.paymentMethod)}</span>
+                      </td>
+                      <td style="padding:8px 12px;text-align:right">
+                        ${remaining > 0 ? `
+                          <strong style="color:var(--color-danger)">${formatRupiah(remaining)}</strong>
+                        ` : '<span style="color:var(--color-success)">Lunas ✅</span>'}
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
               </tbody>
             </table>
           </div>
@@ -528,11 +615,155 @@ export const showCustomer360Drawer = (cust, transactions = []) => {
       </div>
     </div>
     <div class="modal-footer" style="display:flex;justify-content:flex-end">
-      <button class="btn btn--secondary" id="drawer-ok-btn">Tutup</button>
+      <button class="btn btn--secondary" id="drawer-ok-btn" type="button">Tutup</button>
     </div>
   `;
 
   openModal(html, 'modal-cust-360');
-  document.getElementById('drawer-close-btn')?.addEventListener('click', closeModal);
-  document.getElementById('drawer-ok-btn')?.addEventListener('click', closeModal);
+
+  document.getElementById('drawer-close-btn')?.addEventListener('click', () => closeModal('modal-cust-360'));
+  document.getElementById('drawer-ok-btn')?.addEventListener('click', () => closeModal('modal-cust-360'));
+  document.getElementById('btn-drawer-pay-debt')?.addEventListener('click', () => {
+    closeModal('modal-cust-360');
+    showPayCustomerDebtModal(cust);
+  });
+};
+
+/**
+ * Modal Pelunasan / Cicilan Hutang Pelanggan Terintegrasi
+ */
+export const showPayCustomerDebtModal = async (cust) => {
+  const transactions = await getAllTransactions();
+  const custTxs = getTransactionsForCustomer(cust, transactions);
+  const activeTxs = custTxs.filter(t => t.paymentMethod === 'debt' && (Number(t.remainingDebt) || 0) > 0);
+
+  const totalRemainingDebt = Math.max(
+    Number(cust.totalDebt || 0),
+    activeTxs.reduce((sum, t) => sum + (Number(t.remainingDebt) || 0), 0)
+  );
+
+  if (totalRemainingDebt <= 0) {
+    window.showToast?.('Pelanggan ini tidak memiliki sisa piutang.', 'info');
+    return;
+  }
+
+  const html = `
+    <div class="modal-header">
+      <h3 class="modal-title">💰 Pembayaran Piutang: ${esc(cust.name)}</h3>
+      <button class="modal-close" id="pcd-close-btn" type="button">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:12px">
+      <div style="background:rgba(239,68,68,0.06);border:1.5px solid rgba(239,68,68,0.2);padding:12px 16px;border-radius:10px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase">Total Sisa Piutang</div>
+          <div style="font-size:22px;font-weight:900;color:var(--color-danger);margin-top:2px">${formatRupiah(totalRemainingDebt)}</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary)">
+          ${activeTxs.length > 0 ? `${activeTxs.length} transaksi berjalan` : 'Pencatatan saldo CRM'}
+        </div>
+      </div>
+
+      <div>
+        <label class="form-label" style="font-size:12px;font-weight:700">Jumlah Pembayaran / Cicilan (Rp) *</label>
+        <input type="number" class="input" id="pcd-amount" min="1" max="${totalRemainingDebt}" value="${totalRemainingDebt}"
+               style="font-size:16px;font-weight:800;color:var(--text-primary);padding:10px" autofocus>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <button type="button" class="btn btn--sm btn--secondary pcd-quick-amt" data-amt="${totalRemainingDebt}">
+          Pelunasan Penuh (${formatRupiah(totalRemainingDebt)})
+        </button>
+        ${totalRemainingDebt > 10000 ? `
+          <button type="button" class="btn btn--sm btn--secondary pcd-quick-amt" data-amt="10000">Rp 10.000</button>
+        ` : ''}
+        ${totalRemainingDebt > 20000 ? `
+          <button type="button" class="btn btn--sm btn--secondary pcd-quick-amt" data-amt="20000">Rp 20.000</button>
+        ` : ''}
+        ${totalRemainingDebt > 50000 ? `
+          <button type="button" class="btn btn--sm btn--secondary pcd-quick-amt" data-amt="50000">Rp 50.000</button>
+        ` : ''}
+      </div>
+
+      <div>
+        <label class="form-label" style="font-size:12px;font-weight:700">Catatan Pembayaran</label>
+        <input type="text" class="input" id="pcd-note" placeholder="e.g. Pembayaran tunai / transfer pelunasan" value="Pembayaran piutang pelanggan">
+      </div>
+    </div>
+    <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn--secondary" id="pcd-cancel-btn" type="button">Batal</button>
+      <button class="btn btn--primary" id="pcd-submit-btn" type="button" style="font-weight:700">
+        ✅ Catat Pembayaran
+      </button>
+    </div>
+  `;
+
+  openModal(html, 'modal-pay-customer-debt');
+
+  document.getElementById('pcd-close-btn')?.addEventListener('click', () => closeModal('modal-pay-customer-debt'));
+  document.getElementById('pcd-cancel-btn')?.addEventListener('click', () => closeModal('modal-pay-customer-debt'));
+
+  document.querySelectorAll('.pcd-quick-amt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const amtInput = document.getElementById('pcd-amount');
+      if (amtInput) amtInput.value = btn.dataset.amt;
+    });
+  });
+
+  document.getElementById('pcd-submit-btn')?.addEventListener('click', async () => {
+    const amount = Number(document.getElementById('pcd-amount')?.value) || 0;
+    const note = document.getElementById('pcd-note')?.value?.trim() || 'Pembayaran piutang';
+
+    if (amount <= 0 || amount > totalRemainingDebt) {
+      window.showToast?.(`Jumlah pembayaran harus antara Rp 1 dan ${formatRupiah(totalRemainingDebt)}`, 'warning');
+      return;
+    }
+
+    try {
+      let unallocated = amount;
+      const nowIso = new Date().toISOString();
+
+      // Allocate payment to active debt transactions (oldest first)
+      const sortedActiveTxs = [...activeTxs].sort((a, b) => new Date(a.date) - new Date(b.date));
+      for (const tx of sortedActiveTxs) {
+        if (unallocated <= 0) break;
+        const currentRem = Number(tx.remainingDebt) || 0;
+        const payPortion = Math.min(unallocated, currentRem);
+
+        const newPaid = (Number(tx.paidAmount) || 0) + payPortion;
+        const newRem = Math.max(0, currentRem - payPortion);
+        const newStatus = newRem === 0 ? 'paid' : 'partial';
+
+        const nextCicilNum = (tx.debtPayments || []).length + 1;
+        const cicilNote = newRem === 0 ? `${note} (Pelunasan/LUNAS ✅)` : `${note} (Cicilan #${nextCicilNum})`;
+        const newPayments = [...(tx.debtPayments || []), { date: nowIso, amount: payPortion, note: cicilNote }];
+
+        const updatedTx = {
+          ...tx,
+          paidAmount: newPaid,
+          remainingDebt: newRem,
+          paymentStatus: newStatus,
+          debtPayments: newPayments
+        };
+
+        await updateTransaction(updatedTx);
+        store.updateTransaction(tx.id, updatedTx);
+        unallocated -= payPortion;
+      }
+
+      // Decrement customer's totalDebt in CRM database
+      const freshCusts = await getAllCustomers();
+      const targetCust = freshCusts.find(c => String(c.id) === String(cust.id)) || cust;
+      targetCust.totalDebt = Math.max(0, (Number(targetCust.totalDebt) || 0) - amount);
+      await updateCustomer(targetCust);
+
+      const finalCusts = await getAllCustomers();
+      store.setCustomers(finalCusts);
+
+      closeModal('modal-pay-customer-debt');
+      window.showToast?.(`Pembayaran ${formatRupiah(amount)} untuk ${cust.name} berhasil dicatat!`, 'success');
+    } catch (err) {
+      console.error('[customer-debt-pay]', err);
+      window.showToast?.('Gagal mencatat pembayaran hutang: ' + (err.message || 'Error'), 'error');
+    }
+  });
 };

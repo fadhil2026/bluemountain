@@ -129,7 +129,7 @@ const store = {
   },
 
   removeTransaction(id) {
-    this.state.transactions = this.state.transactions.filter(t => t.id !== id);
+    this.state.transactions = this.state.transactions.filter(t => String(t.id) !== String(id));
     this.emit('transactions:change', this.state.transactions);
   },
 
@@ -139,11 +139,29 @@ const store = {
   },
 
   updateTransaction(id, patch) {
-    const idx = this.state.transactions.findIndex(t => t.id === id);
+    const idx = this.state.transactions.findIndex(t => String(t.id) === String(id));
     if (idx >= 0) {
       this.state.transactions[idx] = { ...this.state.transactions[idx], ...patch };
       this.emit('transactions:change', this.state.transactions);
     }
+  },
+
+  updateCustomer(id, patch) {
+    const idx = this.state.customers.findIndex(c => String(c.id) === String(id));
+    if (idx >= 0) {
+      this.state.customers[idx] = { ...this.state.customers[idx], ...patch };
+      this.emit('customers:change', this.state.customers);
+    }
+  },
+
+  addCustomer(cust) {
+    this.state.customers = [...this.state.customers, cust];
+    this.emit('customers:change', this.state.customers);
+  },
+
+  removeCustomer(id) {
+    this.state.customers = this.state.customers.filter(c => String(c.id) !== String(id));
+    this.emit('customers:change', this.state.customers);
   },
 
   // ── Expenses ──

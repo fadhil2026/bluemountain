@@ -346,13 +346,19 @@ const bindTxEvents = (allTxs) => {
         await deleteTransaction(id);
         store.removeTransaction(id);
 
-        // Revert customer statistics if customerName was attached
-        if (txObj.customerName) {
+        // Revert customer statistics if customer is linked
+        if (txObj.customerId || txObj.customerName) {
           const custs = await getAllCustomers();
-          const targetCust = custs.find(c => (c.name || '').trim().toLowerCase() === txObj.customerName.trim().toLowerCase());
+          const targetCust = custs.find(c =>
+            (txObj.customerId && String(c.id) === String(txObj.customerId)) ||
+            (c.name || '').trim().toLowerCase() === (txObj.customerName || '').trim().toLowerCase()
+          );
           if (targetCust) {
             targetCust.totalOrders = Math.max(0, (Number(targetCust.totalOrders) || 1) - 1);
             targetCust.totalSpent  = Math.max(0, (Number(targetCust.totalSpent) || txObj.total) - txObj.total);
+            if (txObj.paymentMethod === 'debt' && (Number(txObj.remainingDebt) || 0) > 0) {
+              targetCust.totalDebt = Math.max(0, (Number(targetCust.totalDebt) || 0) - Number(txObj.remainingDebt));
+            }
             await updateCustomer(targetCust);
             const freshCusts = await getAllCustomers();
             store.setCustomers(freshCusts);
@@ -446,9 +452,12 @@ const showPayDebtModal = (tx) => {
         store.updateTransaction(tx.id, { paidAmount: newPaid, remainingDebt: newRemaining, paymentStatus: newStatus, debtPayments: newPayments });
 
         // Decrement customer's totalDebt in CRM customer database
-        if (tx.customerName) {
+        if (tx.customerId || tx.customerName) {
           const custs = await getAllCustomers();
-          const targetCust = custs.find(c => (c.name || '').trim().toLowerCase() === tx.customerName.trim().toLowerCase());
+          const targetCust = custs.find(c =>
+            (tx.customerId && String(c.id) === String(tx.customerId)) ||
+            (c.name || '').trim().toLowerCase() === (tx.customerName || '').trim().toLowerCase()
+          );
           if (targetCust) {
             targetCust.totalDebt = Math.max(0, (Number(targetCust.totalDebt) || 0) - amount);
             await updateCustomer(targetCust);

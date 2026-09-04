@@ -25,15 +25,24 @@ import { todayKey }           from '../utils/date.js';
    ───────────────────────────────────────── */
 export const openModal = (html, id = 'generic-modal') => {
   closeModal(); // close any existing first
+  const cleanId = (typeof id === 'string' && id.trim()) ? id.trim() : 'generic-modal';
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
-  overlay.id = `overlay-${id}`;
-  overlay.innerHTML = `<div class="modal" id="${id}" role="dialog" aria-modal="true">${html}</div>`;
+  overlay.id = `overlay-${cleanId}`;
+  overlay.innerHTML = `<div class="modal" id="${cleanId}" role="dialog" aria-modal="true">${html}</div>`;
   document.body.appendChild(overlay);
 
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) closeModal(id);
+    if (e.target === overlay) closeModal(cleanId);
   });
+
+  const onKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      document.removeEventListener('keydown', onKeyDown);
+      closeModal(cleanId);
+    }
+  };
+  document.addEventListener('keydown', onKeyDown);
 
   const focusable = overlay.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
   if (focusable.length) focusable[0].focus();
@@ -42,16 +51,26 @@ export const openModal = (html, id = 'generic-modal') => {
 };
 
 export const closeModal = (id = null) => {
-  const selector = id ? `#overlay-${id}` : '.modal-overlay';
-  const overlays = id
-    ? [document.querySelector(selector)].filter(Boolean)
-    : [...document.querySelectorAll('.modal-overlay')];
+  const targetId = (typeof id === 'string' && id.trim()) ? id.trim() : null;
+  let overlays = [];
+  try {
+    if (targetId) {
+      const el = document.getElementById(`overlay-${targetId}`) || document.querySelector(`#overlay-${targetId}`);
+      if (el) overlays = [el];
+    }
+  } catch (_) {}
+
+  if (!overlays.length) {
+    overlays = [...document.querySelectorAll('.modal-overlay')];
+  }
 
   overlays.forEach(overlay => {
     if (!overlay) return;
     overlay.querySelector('.modal')?.classList.add('closing');
     overlay.classList.add('closing');
-    setTimeout(() => overlay.remove(), 180);
+    setTimeout(() => {
+      try { overlay.remove(); } catch (_) {}
+    }, 180);
   });
 };
 
@@ -296,6 +315,20 @@ export const showPaymentModal = (method = 'cash') => {
       if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
 
       const now = new Date().toISOString();
+      const allCusts = await getAllCustomers();
+      let resolvedCust = store.state.selectedCustomer || null;
+      let effectiveCustName = '';
+
+      if (payMethod === 'debt') {
+        effectiveCustName = document.getElementById('debt-customer')?.value?.trim() || store.state.customerName || 'Pelanggan';
+      } else {
+        effectiveCustName = store.state.customerName || '';
+      }
+
+      if (!resolvedCust && effectiveCustName) {
+        resolvedCust = allCusts.find(c => (c.name || '').trim().toLowerCase() === effectiveCustName.toLowerCase()) || null;
+      }
+
       let txData;
 
       if (payMethod === 'cash') {
@@ -317,7 +350,9 @@ export const showPaymentModal = (method = 'cash') => {
           paidAmount:    total,
           remainingDebt: 0,
           debtPayments:  [],
-          customerName:  store.state.customerName || '',
+          customerId:    resolvedCust?.id || null,
+          customerName:  resolvedCust?.name || effectiveCustName,
+          customerPhone: resolvedCust?.phone || '',
           cashier:       store.state.settings.cashierName || 'Kasir',
         };
       } else if (payMethod === 'transfer') {
@@ -337,14 +372,15 @@ export const showPaymentModal = (method = 'cash') => {
           paidAmount:    total,
           remainingDebt: 0,
           debtPayments:  [],
-          customerName:  store.state.customerName || '',
+          customerId:    resolvedCust?.id || null,
+          customerName:  resolvedCust?.name || effectiveCustName,
+          customerPhone: resolvedCust?.phone || '',
           cashier:       store.state.settings.cashierName || 'Kasir',
         };
       } else {
         const paidNow   = Math.min(parseFloat(document.getElementById('debt-paid-now')?.value) || 0, total);
         const remaining = total - paidNow;
         const status    = remaining === 0 ? 'paid' : (paidNow > 0 ? 'partial' : 'unpaid');
-        const custName  = document.getElementById('debt-customer')?.value?.trim() || store.state.customerName || 'Pelanggan';
 
         txData = {
           invoiceNo:     generateInvoiceNo(),
@@ -362,30 +398,28 @@ export const showPaymentModal = (method = 'cash') => {
           paidAmount:    paidNow,
           remainingDebt: remaining,
           debtPayments:  paidNow > 0 ? [{ date: now, amount: paidNow, note: 'DP / Uang muka awal' }] : [],
-          customerName:  custName,
+          customerId:    resolvedCust?.id || null,
+          customerName:  resolvedCust?.name || effectiveCustName,
+          customerPhone: resolvedCust?.phone || '',
           cashier:       store.state.settings.cashierName || 'Kasir',
         };
       }
 
       try {
-        const savedId = await saveTransaction(txData);
-        txData.id = savedId;
-        store.addTransaction(txData);
-
-        // Update customer statistics in Dexie & Supabase
-        if (txData.customerName) {
-          const allCusts = await getAllCustomers();
-          let targetCust = allCusts.find(c => (c.name || '').trim().toLowerCase() === txData.customerName.trim().toLowerCase());
-          if (targetCust) {
-            targetCust.totalOrders = (Number(targetCust.totalOrders) || 0) + 1;
-            targetCust.totalSpent = (Number(targetCust.totalSpent) || 0) + txData.total;
+        // Sync and update customer statistics in CRM
+        if (effectiveCustName) {
+          if (resolvedCust) {
+            resolvedCust.totalOrders = (Number(resolvedCust.totalOrders) || 0) + 1;
+            resolvedCust.totalSpent = (Number(resolvedCust.totalSpent) || 0) + txData.total;
             if (txData.remainingDebt > 0) {
-              targetCust.totalDebt = (Number(targetCust.totalDebt) || 0) + txData.remainingDebt;
+              resolvedCust.totalDebt = (Number(resolvedCust.totalDebt) || 0) + txData.remainingDebt;
             }
-            await updateCustomer(targetCust);
+            await updateCustomer(resolvedCust);
+            txData.customerId = resolvedCust.id;
+            txData.customerName = resolvedCust.name;
           } else {
-            await addCustomer({
-              name: txData.customerName,
+            const newCustId = await addCustomer({
+              name: effectiveCustName,
               phone: '',
               category: 'Rumah Tangga',
               address: '',
@@ -395,10 +429,16 @@ export const showPaymentModal = (method = 'cash') => {
               creditLimit: 0,
               galonLoaned: 0,
             });
+            txData.customerId = newCustId;
+            txData.customerName = effectiveCustName;
           }
           const freshCusts = await getAllCustomers();
           store.setCustomers(freshCusts);
         }
+
+        const savedId = await saveTransaction(txData);
+        txData.id = savedId;
+        store.addTransaction(txData);
 
         closeModal('payment-modal');
         store.clearCart();
