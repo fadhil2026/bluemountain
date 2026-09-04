@@ -1,5 +1,5 @@
 # 📐 01 — MASTER BLUEPRINT: ARSITEKTUR POS & CRM ENTERPRISE 2026
-**Blue Mountain Refilling Station POS & CRM — High-End Industrial Architecture**
+**Blue Mountain Refilling Station POS & CRM — High-End Industrial Architecture (v3.0.43)**
 
 ---
 
@@ -10,8 +10,8 @@
 │               ENTERPRISE POINT OF SALE & RETAIL ENGINE (PWA)                     │
 │                                                                                  │
 │  ┌──────────────┐     ┌──────────────┐     ┌───────────────────────────────────┐ │
-│  │   UI Views   │ <-> │ Reactive     │ <-> │ Dexie.js (IndexedDB v3)           │ │
-│  │  (9 Modules) │     │ Store        │     │ Local Cache (0ms Offline-First)   │ │
+│  │   7 Views    │ <-> │ Reactive     │ <-> │ Dexie.js (IndexedDB v3)           │ │
+│  │ Seragam & Res│     │ Store Event  │     │ Local Cache (0ms Offline-First)   │ │
 │  └──────────────┘     └──────────────┘     └───────────────────────────────────┘ │
 │         │                                                   │                    │
 │         ├────────────────────────┬──────────────────────────┤                    │
@@ -32,46 +32,42 @@
 
 ---
 
-## 2. 9 Modul Inti Sistem Enterprise
+## 2. 7 Modul Tampilan Inti & Mesin Utilitas
 
 1. **Kasir Point of Sale (`pos.js`)**:
    - Multi-tender payment (Tunai, Transfer Bank, Piutang/Hutang, Dinamis QRIS).
-   - Barcode Scanner HID listener (Keyboard Wedge buffer debounce <35ms).
-   - Cash Drawer Kick Pulse (`0x1B 0x70 0x00 0x19 0xFA`).
-   - Quick-add customer & discount/tax calculation with integer rounding.
+   - Pemilihan & pembersihan pelanggan transaksi reaktif.
+   - Quick-add customer & kalkulasi diskon/pajak presisi integer Rupiah.
 2. **Master Produk & Inventaris (`products.js`)**:
    - Auto SKU generator (`BM-001`, `BM-002`).
-   - Client-side Canvas WebP photo compression (128px, ~4KB).
-   - Manajemen stok minimum & kategori produk.
-3. **Manajemen Aset Galon Fisik (`galon.js`)**:
-   - Pelacakan kuantitas galon: *Galon Isi di Toko, Galon Kosong di Toko, Galon Dipinjamkan ke Pelanggan, Galon Rusak/Afkir*.
-4. **Manajemen Pelanggan 360° CRM (`customers.js`)**:
+   - Client-side Canvas WebP photo compression (128px, ~4KB) & emoji fallback.
+   - Manajemen stok minimum, harga modal (cost price), harga jual, & kategori produk.
+3. **Manajemen Pelanggan & CRM 360° (`customers.js`)**:
    - Profil pelanggan, segmentasi (*Rumah Tangga, Kantor, Reseller, VIP*).
-   - Sub-buku besar piutang (*Accounts Receivable Sub-Ledger*).
-   - Limit kredit (*Credit Limit Guard*) & riwayat transaksi seumur hidup (LTV).
-5. **Riwayat & Detail Transaksi (`transactions.js`)**:
-   - Filter rentang tanggal fleksibel (default: hari ini).
-   - Paginasi 10 baris per halaman.
-   - Pembayaran cicilan piutang bertahap & pembatalan transaksi aman.
-6. **Keuangan & Akuntansi Double-Entry (`finance.js`)**:
+   - Sub-buku besar piutang pelanggan (*Accounts Receivable Sub-Ledger*).
+   - Pelacakan saldo aset galon fisik pinjaman (*Loaned Container Tracking*).
+   - Tombol instan WhatsApp pesan tagihan/sapaan (`wa.me`).
+   - Tata letak responsif adaptif resolusi HP/Tablet/Desktop dengan tabel scroll horizontal & paginasi permanen.
+4. **Riwayat & Detail Transaksi (`transactions.js`)**:
+   - Filter rentang tanggal fleksibel (Hari ini, 7 hari, 30 hari, kustom).
+   - Paginasi permanen & pencarian transaksi.
+   - Modal pelunasan piutang bertahap & cetak ulang struk thermal.
+5. **Laporan Analitik & Portabilitas Data (`reports.js`)**:
+   - Ringkasan omzet kotor, HPP (COGS), laba kotor, dan laba bersih.
+   - Grafik penjualan harian/bulanan & jam sibuk kasir.
+   - Export Laporan PDF Resmi (jsPDF + autoTable) & Export Spreadsheet CSV/Excel.
+6. **Keuangan & Valuasi Aset (`finance.js`)**:
    - Standar Bagan Akun (COA: 1001 Kas, 1002 Bank, 1101 Piutang, 4001 Pendapatan, 6001-6099 Beban).
-   - Jurnal Umum otomatis balance ($\sum \text{Debit} == \sum \text{Kredit}$).
-   - Rekonsiliasi Arus Kas Bersih 30 Hari.
-   - Manajemen Shift Kasir (Buka/Tutup Kasir & Saldo Awal).
-7. **Laporan Analitik & Portabilitas Data (`reports.js`)**:
-   - Grafik penjualan harian/bulanan (Chart.js).
-   - Export Laporan PDF Resmi (jsPDF + autoTable).
-   - Export Spreadsheet CSV / Excel (.xlsx) untuk arsip pajak & akuntansi.
-8. **Pengaturan & Integrasi Perangkat (`settings.js`)**:
-   - Profil toko, rekening bank, kustomisasi teks WhatsApp.
+   - Laporan arus kas masuk vs beban operasional.
+   - Valuasi aset fisik galon toko (saldo dipinjamkan vs saldo di toko).
+7. **Pengaturan & Integrasi Perangkat (`settings.js`)**:
+   - Profil toko, rekening bank, kustomisasi teks struk & WhatsApp.
    - Pemilihan ukuran kertas thermal (48mm, 58mm, 80mm).
-   - Diagnostic hardware test print.
-9. **Universal Thermal Print & Messaging Engine (`printer.js`)**:
+   - Kredensial Supabase Cloud Sync, backup database JSON lokal, & restore aman.
+8. **Universal Thermal Print & QRIS Engine (`printer.js`, `qris.js`, `receipt.js`)**:
    - Pure Base64 Synchronous High-Contrast Logo rendering.
    - Direct Print Spooler CSS `@page` zero-margin.
-   - ESC/POS Raster Bit Image for Web Bluetooth (BLE) & WebUSB.
-   - Android Intent (`rawbt:` & `my.bluetoothprint.scheme://`).
-   - 1-Klik WhatsApp Direct Invoice Generator (`https://wa.me/...`).
+   - EMVCo Dynamic QRIS TLV Tag 54 injection & CRC16-CCITT generator.
 
 ---
 
@@ -81,3 +77,4 @@
 2. **Anti-XSS**: Sanitasi input ganda via `esc()` dan DOMPurify.
 3. **Production Stripping**: Esbuild otomatis menghapus `console.log` dan `debugger` di dist.
 4. **Zero Memory Leak**: Kompresi gambar client-side membatasi pemakaian RAM browser.
+5. **Reactive Event Parity**: Semua modul terhubung ke bus event (`store.on(...)`) untuk sinkronisasi seketika antar-tampilan.

@@ -1,101 +1,105 @@
 # 📈 04 — ANALISIS KOMPARATIF, BENCHMARK OPEN-SOURCE & ROADMAP 2026
-**Blue Mountain Refilling Station POS & CRM — High-End Industrial Strategy**
+**Blue Mountain Refilling Station POS & CRM — High-End Industrial Strategy (Revisi v3.0.43)**
 
 ---
 
-## 1. Analisis Komparatif: Kelebihan vs Kekurangan Web App Kita
+## 1. Analisis Komparatif: Fitur Live vs Gap Sistem Mature
 
-### A. Kelebihan Web App Kita (Competitive Edge & High-End Features) 🌟
-1. **Zero-Latency Pure Offline-First Architecture**:
-   - Memakai Dexie.js (IndexedDB v3) dengan kecepatan eksekusi 0ms tanpa ketergantungan koneksi internet.
-   - Sinkronisasi awan 2 arah via Supabase WebSocket saat perangkat kembali online tanpa resiko data hilang (*Write-Ahead Persistence*).
+### A. Fitur Live Web App Kita (v3.0.43) 🌟
+1. **Zero-Latency Pure Offline-First**:
+   - IndexedDB (Dexie v3) lokal primary, 0ms latency.
+   - 2-Way Sync Supabase PostgreSQL/WebSocket saat online tanpa data hilang (*Write-Ahead Persistence*).
 2. **Universal Thermal POS Engine (48mm / 58mm / 80mm)**:
-   - Mendukung semua ukuran kertas roll thermal EDC mini (48mm), Bluetooth portable (58mm), dan Desktop resto (80mm).
-   - Multi-protokol terlengkap: Web Bluetooth BLE (tanpa install app tambahan), WebUSB (kabel OTG), Android Intent (`rawbt:` & `my.bluetoothprint.scheme://`), dan OS Direct Spooler CSS `@page` zero-margin.
-3. **Synchronous 1-Bit Embedded Thermal Logo**:
-   - Logo dikonversi menjadi inline Base64 1.9 KB yang pre-rendered, menjamin logo **tidak pernah hilang atau gagal cetak** di printer fisik mana pun.
-   - Menginjeksi biner biner ESC/POS `GS v 0` murni ke printer hardware BLE/USB.
-4. **WhatsApp Direct Invoicing (Zero Cost Gateway)**:
-   - Pengiriman struk digital & pengingat sisa piutang langsung ke nomor WhatsApp pelanggan (`https://wa.me/...`) tanpa biaya langganan API SMS/WhatsApp pihak ketiga.
-5. **Keamanan & Standar Kualitas Militer**:
-   - Content Security Policy (CSP) ketat, anti-XSS ganda (`esc()` + DOMPurify), esbuild drop console/debugger otomatis, dan pengujian sintaksis AST 21 file via `scripts/verify.js` di CI/CD.
+   - Dukungan semua ukuran roll kertas thermal.
+   - Synchronous 1-bit embedded thermal logo Base64 anti-blank & auto-wrap struk CSS `@page`.
+3. **Customer CRM 360° & Pelacakan Aset Galon Fisik Terpadu**:
+   - Master pelanggan lengkap nomor telepon (WhatsApp auto-format `628xxx`), segmentasi (*Rumah Tangga, Kantor, Reseller, VIP*).
+   - Sub-ledger piutang pelanggan & riwayat mutasi.
+   - Pelacakan aset fisik galon toko (saldo dipinjamkan vs saldo di toko) terintegrasi valuasi aset di neraca keuangan.
+4. **EMVCo Dynamic QRIS Generator**:
+   - Injeksi nominal dinamis Tag 54 & rekalkulasi CRC16-CCITT W3C-compliant tanpa backend perantara.
+5. **Portabilitas Data Lengkap**:
+   - Cetak nota thermal, export PDF invoice formal, dan export rekap Excel/CSV untuk arsip akuntansi.
+6. **Desain Seragam & Responsif Mobile/Tablet**:
+   - Tata letak konsisten 7 modul, tabel dengan swipe/scroll horizontal responsif, dan paginasi permanen.
 
 ---
 
-### B. Kekurangan Web App Kita vs Sistem Mature (Gap Analysis) ⚠️
-1. **Belum Ada Modul Master Pelanggan Mandiri (CRM 360°)**:
-   - *Kondisi*: Nama pelanggan saat ini masih diinput sebagai teks bebas di kasir.
-   - *Standar Industri*: Tabel pelanggan terstruktur dengan segmentasi (*Rumah Tangga, Kantor, Reseller, VIP*), kartu riwayat belanja (LTV), dan batas kredit (*Credit Limit Guard*).
-2. **Belum Ada Export Data ke Spreadsheet (.xlsx / .csv)**:
-   - *Kondisi*: Baru tersedia Export PDF.
-   - *Standar Industri*: Tombol unduh data penjualan, piutang, dan jurnal ke file Excel untuk pelaporan pajak dan rekonsiliasi akuntan eksternal.
-3. **Belum Ada Dynamic QRIS Generator**:
-   - *Kondisi*: Pembayaran transfer bank masih berupa nomor rekening teks statis.
-   - *Standar Industri*: Generate QR Code QRIS dinamis berisikan nominal belanja otomatis (EMVCo Tag 54 + CRC16-CCITT).
-4. **Belum Ada Pelacakan Fisik Galon Toko**:
-   - *Kondisi*: Stok produk hanya mencatat kuantitas umum.
-   - *Standar Industri*: Pelacakan saldo fisik galon toko (Galon Isi di Toko, Galon Kosong di Toko, Galon Dipinjamkan ke Pelanggan, Galon Rusak/Afkir).
-5. **Format Kode Akun COA Belum Tersemat di Jurnal**:
-   - *Kondisi*: Jurnal masih menampilkan label umum (`Kas / Penjualan`).
-   - *Standar Industri SAK EMKM*: Menampilkan kode akun resmi (`[1001] Kas`, `[1101] Piutang`, `[4001] Pendapatan`, `[5001] HPP`, `[6001] Beban`).
-6. **Belum Ada Rekonsiliasi Shift Kasir (X-Report / Z-Report)**:
-   - *Kondisi*: Kasir langsung mencatat transaksi tanpa input modal awal kas fisik (*Opening Float*) dan penghitungan selisih kas fisik di akhir hari (*Closing Balance*).
+### B. Gap vs Sistem POS Mature (Odoo POS, Square, Loyverse, ERPNext) ⚠️
+
+| Fitur / Dimensi | POS Saat Ini (v3.0.43) | Standar Industri POS Mature | Tingkat Urgensi |
+|---|---|---|---|
+| **Sesi & Shift Kasir** | Timeline transaksi tercampur 24 jam tanpa sesi terpisah. | Buka shift (modal awal kasir), log cash in/out laci, hitung kas fisik (blind drop), hitung selisih lebih/kurang, cetak Struk Z-Report penutupan shift. | **Kritis** (Mencegah fraud kasir) |
+| **Keamanan & Role (RBAC)** | Operator tunggal tanpa PIN / autentikasi per aksi. | PIN switch kasir instan, hak akses berjenjang (Kasir vs Supervisor vs Owner). Restriksi void, edit harga, hapus nota, lihat laba bersih. | **Kritis** (Integritas operasional) |
+| **Cetak Hardware Direct** | Dialog cetak browser (`window.print()`). | Direct ESC/POS via WebUSB/WebBluetooth tanpa pop-up dialog; auto-pulse laci kasir RJ11 (`ESC p 0 25 250`). | **Tinggi** (Kecepatan antrean kasir) |
+| **Input Barcode Otomatis** | Harus klik fokus ke kotak input cari. | Global USB Key-wedge listener (<35ms debounce tanpa klik kursor) & Barcode scanner kamera W3C native (`BarcodeDetector`). | **Tinggi** (Ergonomi checkout) |
+| **Split-Tender Payment** | 1 transaksi = 1 metode bayar. | Split payment (sebagian tunai + sebagian QRIS/transfer dalam satu nota). | **Sedang** (Fleksibilitas pembayaran) |
+| **Pembukuan Double-Entry SAK** | Arus kas single-entry & HPP statis saat transaksi. | General Ledger otomatis (Jurnal Debit/Kredit: Kas/Bank/Piutang vs Pendapatan, HPP vs Persediaan), FIFO / Moving Average berkala. | **Sedang** (Standar audit formal) |
+| **Manajemen Stok Lanjutan** | Potong stok atomik saat checkout. | Purchase Order (PO) supplier, Surat Jalan masuk, Stock Opname berkala dengan audit trail selisih fisik. | **Sedang** (Rantai pasok) |
 
 ---
 
 ## 2. Benchmark Repositori Open-Source Global 2026 (MIT/Apache 2.0)
 
-| Repositori / Referensi | Lisensi | Keunggulan Spesifik | Pemanfaatan Integrasi |
+| Repositori / Sumber | Lisensi | Keunggulan Spesifik | Rencana Integrasi / Adopsi |
 |---|---|---|---|
-| **[Frappe Books](https://github.com/frappe/books)** | AGPL-3.0 | Double-entry general ledger, journal balancing, & cash flow. | Standar bagan akun COA (`1001-6099`) & buku besar otomatis di `finance.js`. |
-| **[Odoo POS](https://github.com/odoo/odoo)** | LGPL-3.0 | Shift kasir (Cash Float, X/Z-Report, selisih kas fisik). | Prosedur rekonsiliasi kas modal kasir per pergantian shift. |
-| **[NexoPOS](https://github.com/Blair2004/NexoPOS)** | MIT | Modular UI, quick-add customer, & multi-tender split payment. | Autocomplete pencarian nama/HP & limit kredit piutang. |
-| **[FhyLabs/qris-dynamic](https://github.com/FhyLabs/qris-dynamic)** | MIT | EMVCo TLV Tag 54 injection & CRC16-CCITT recalculation. | Konversi QRIS statis toko menjadi QRIS dinamis ber-nominal otomatis tanpa server pihak ketiga. |
-| **[SheetJS / js-xlsx](https://github.com/SheetJS/sheetjs)** | Apache-2.0 | Spreadsheet workbook generator. | Export data transaksi, pelanggan & jurnal ke file Excel (`.xlsx`/`.csv`). |
-| **[theanam/escpos-encoder](https://github.com/theanam/escpos-encoder)** | MIT | ESC/POS binary raster image commands & drawer kick. | Cetak logo biner ESC/POS `GS v 0` & auto-kick laci kasir. |
+| **[nielsleenheer/receipt-printer-encoder](https://github.com/nielsleenheer/receipt-printer-encoder)** | MIT | Builder byte biner ESC/POS, Star, ESC/P browser-native. Ringan tanpa Node.js native bridge. | Pembuat stream biner ESC/POS langsung di browser client. |
+| **[NielsLeenheer/WebUSBReceiptPrinter](https://github.com/NielsLeenheer/WebUSBReceiptPrinter)** & **[WebBluetoothReceiptPrinter](https://github.com/NielsLeenheer/WebBluetoothReceiptPrinter)** | MIT | Transport driver WebUSB & Web Bluetooth via `navigator.usb` & `navigator.bluetooth`. | Cetak langsung bypass dialog `window.print()` & auto-kick laci kasir RJ11. |
+| **[tngoman/Store-POS](https://github.com/tngoman/Store-POS)** | MIT | Desktop POS React + TypeScript + SQLite, multi-terminal LAN. | Referensi struktur data transaksi multi-terminal & offline ledger. |
+| **[FreeOpenSourcePOS/FloCafe](https://github.com/FreeOpenSourcePOS/FloCafe)** | GPL-3.0 | Arsitektur POS offline-first F&B dengan thermal printer native. | Pola antrean cetak thermal & manajemen kitchen / counter order. |
+| **[BrainWise-DEV/POSNext](https://github.com/BrainWise-DEV/POSNext)** | MIT | POS Vue terhubung ERPNext, offline resilience tinggi. | Pola sesi kasir (shifts) dan rekonsiliasi data master. |
+| **[flash-oss/medici](https://github.com/flash-oss/medici)** | MIT | Engine double-entry general ledger transaksi pembukuan. | Standar skema immutable journal entries debit/kredit seimbang. |
+| **W3C BarcodeDetector API** | W3C Standard | API deteksi barcode native bawaan browser Chromium / Android. | Pemindai barcode kamera HP tanpa menambah bundle size eksternal. |
 
 ---
 
-## 3. Rincian Fase Roadmap Enterprise POS 2026
+## 3. Roadmap Evolusi Sistem Enterprise POS
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           ROADMAP EVOLUSI SISTEM 2026                           │
+│                           ROADMAP EVOLUSI SISTEM POS                            │
 ├───────────────────┬───────────────────┬───────────────────┬─────────────────────┤
-│ FASE 1 (LIVE)     │ FASE 2 (LIVE)     │ FASE 3 (NEXT)     │ FASE 4 (ENTERPRISE) │
+│ FASE 1 (SELESAI)  │ FASE 2 (SELESAI)  │ FASE 3 (SELESAI)  │ FASE 4 (TERENCANA)  │
 ├───────────────────┼───────────────────┼───────────────────┼─────────────────────┤
-│ - POS Checkout    │ - Date Range Fltr │ - Customer CRM    │ - Multi-Cabang      │
-│ - Supabase Sync   │ - Pagination 10x  │ - WA Invoicing    │ - Shift Kasir (Z)   │
-│ - 58mm Thermal    │ - Universal 48/80 │ - Export Excel    │ - Stock Opname      │
-│ - Logo Preload    │ - Jurnal Akuntansi│ - Dynamic QRIS    │ - Barcode Hardware  │
+│ - POS Core Trans  │ - Universal 48/80 │ - Customer CRM    │ - Shift Kasir (Z)   │
+│ - Dexie + Supabase│ - Jurnal Arus Kas │ - Dynamic QRIS    │ - PIN Auth (RBAC)   │
+│ - Thermal Engine  │ - Filter Tanggal  │ - Aset Galon CRM  │ - WebUSB Direct     │
+│ - Logo Preload    │ - Paginasi Tabel  │ - Export Excel    │ - Barcode Scanner   │
 └───────────────────┴───────────────────┴───────────────────┴─────────────────────┘
 ```
 
-### 🟢 FASE 1 & FASE 2: Core POS, Thermal Engine & Ledger (Selesai / Live)
-- Kasir POS reaktif + Master Produk Auto-SKU & kompresi foto WebP.
-- Universal Thermal POS Engine (48mm, 58mm, 80mm) + Synchronous Base64 Logo + ESC/POS Raster Bit Image.
+### 🟢 FASE 1, 2 & 3: TELAH SELESAI & LIVE (v3.0.43)
+- Kasir POS responsif + Master Produk SKU WebP.
+- Cetak struk thermal raster grafik 48mm/58mm/80mm + Base64 synchronous logo.
 - Sinkronisasi Cloud 2 arah via Supabase PostgreSQL & WebSocket.
-- Filter rentang tanggal fleksibel & paginasi 10 baris di semua tabel.
-- Pencatatan piutang pelanggan, skema cicilan bertahap, dan jurnal akuntansi.
-- 1-Klik Kirim Struk WhatsApp (`wa.me`).
+- Filter tanggal fleksibel & paginasi permanen seragam di seluruh modul.
+- Customer CRM 360° terintegrasi sub-ledger piutang & pelacakan galon pinjaman.
+- Valuasi aset fisik galon di modul keuangan (`finance.js`).
+- EMVCo Dynamic QRIS Generator (TLV Tag 54 + CRC16-CCITT).
+- Export data spreadsheet Excel (.csv) dan PDF Invoice.
+- Desain seragam & adaptasi otomatis resolusi HP/Tablet/Desktop.
 
-### 🟡 FASE 3: Customer CRM, Export Excel, Dynamic QRIS & Galon Tracking (Fokus Implementasi Berikutnya)
-- **Modul Master Pelanggan (CRM 360°)**:
-  - Menu baru `👥 Pelanggan` di bilah navigasi.
-  - CRUD pelanggan dengan segmentasi (*Rumah Tangga, Kantor/Instansi, Warung/Reseller, VIP*).
-  - Autocomplete cerdas di kasir POS + tombol *Quick-Add Customer*.
-  - Sub-buku besar piutang per pelanggan & peringatan *Credit Limit*.
-- **Export Data ke Spreadsheet (.xlsx / .csv)**:
-  - Unduh rekapitulasi data penjualan, pelanggan, dan keuangan untuk arsip pajak.
-- **Dynamic QRIS Generator**:
-  - Konversi QRIS statis toko menjadi QRIS dinamis otomatis terisi nominal belanjaan.
-- **Pelacakan Fisik Galon Toko**:
-  - Saldo galon isi, galon kosong, dan galon yang dipinjamkan ke pelanggan.
-- **Tagging Kode Akun COA Resmi di Jurnal**:
-  - Menampilkan kode SAK EMKM (`[1001] Kas`, `[1101] Piutang`, `[4001] Pendapatan`, `[6001] Beban`).
+### 🟡 FASE 4: Shift Kasir (X/Z Report), PIN RBAC & Direct Hardware (Prioritas Berikutnya)
+1. **Manajemen Sesi Kasir (Shifts & Z-Report)**:
+   - Tabel `shifts` lokal & cloud (`id`, `cashier_name`, `started_at`, `closed_at`, `opening_cash`, `cash_in`, `cash_out`, `expected_cash`, `actual_cash`, `difference`, `status`).
+   - Dialog input modal awal saat mulai giliran kasir.
+   - Form tutup shift dengan *blind drop count* (kasir hitung uang fisik tanpa melihat total sistem untuk mencegah manipulasi).
+   - Cetak Struk Penutupan Shift (Z-Report) thermal.
+2. **PIN-Based Quick Switch & Hak Akses (RBAC)**:
+   - Layar input PIN kasir (4-digit).
+   - Pembatasan otoritas: Kasir biasa tidak dapat menghapus transaksi, melihat margin laba bersih di laporan, atau melakukan void tanpa PIN Supervisor.
+3. **Hardware Direct Access (WebUSB & Web Bluetooth)**:
+   - Opsi cetak cepat bypass browser print dialog menggunakan library `receipt-printer-encoder` dan `WebUSBReceiptPrinter`.
+   - Auto-kick command laci uang fisik via port RJ11 printer.
+4. **Barcode Scanner Engine**:
+   - Buffer listener keyboard-wedge USB scanner di layar POS tanpa mewajibkan kursor aktif di input teks.
+   - Integrasi scanner kamera via W3C `BarcodeDetector` API.
 
-### 🔵 FASE 4: Multi-Branch & Advanced Hardware Operations (Evolusi Jangka Panjang)
-- **Multi-Branch Aggregation**: Konsolidasi omzet beberapa cabang depot air.
-- **Manajemen Shift Kasir (X-Report / Z-Report)**: Rekonsiliasi kas fisik per pergantian kasir.
-- **Barcode / QR Scanner Hardware Listener**: Integrasi pemindai barcode USB/Bluetooth.
-- **Cash Drawer Auto-Kick**: Perintah buka laci uang otomatis saat cetak struk tunai.
+### 🔵 FASE 5: Split-Tender Payment, Void/Refund & Advanced Stock Opname
+1. **Split-Tender Payment**:
+   - Pembayaran fleksibel multi-metode (contoh: Rp 25.000 tunai + Rp 25.000 QRIS dalam 1 nota).
+2. **Alur Void & Pengembalian Dana (Refund)**:
+   - Pembatalan transaksi tercatat rapi dengan log alasan pembatalan & pengembalian kuantitas stok otomatis.
+3. **Modul Pengadaan & Stock Opname**:
+   - Pencatatan Purchase Order (PO) pembelian galon & tutup/tisu dari supplier.
+   - Formulir stock opname bulanan dengan pencatatan selisih fisik vs saldo buku.

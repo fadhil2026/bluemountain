@@ -7,18 +7,21 @@ Sistem Kasir POS canggih dengan tampilan macOS-style yang mengadopsi arsitektur 
 
 ## ✨ Fitur Utama
 
-- 🏪 **POS Kasir** — Grid produk, keranjang pintar, perhitungan diskon, kembalian otomatis.
-- ☁️ **Hybrid Real-Time Sync** — Transaksi dan stok tersinkronisasi seketika antar-perangkat via WebSocket (Supabase).
+- 🏪 **POS Kasir** — Grid produk, keranjang pintar, pemilih & quick-add pelanggan, perhitungan diskon, kembalian otomatis.
+- 👥 **Customer CRM 360°** — Manajemen data pelanggan, segmentasi, limit kredit, sub-buku besar piutang, pelacakan aset galon pinjaman fisik, sapaan & tagihan WhatsApp 1-klik.
+- 💳 **Dynamic QRIS (EMVCo)** — Injeksi nominal dinamis Tag 54 dan rekalkulasi checksum CRC16-CCITT otomatis tanpa pihak ketiga.
+- ☁️ **Hybrid Real-Time Sync** — Transaksi, pelanggan, dan stok tersinkronisasi seketika antar-perangkat via WebSocket (Supabase).
 - ⚡ **Zero-Downtime Offline Mode** — Kasir tetap beroperasi 100% normal tanpa internet. Sinkronisasi otomatis (auto-recover) saat koneksi pulih (Dexie.js IndexedDB).
-- 🖨️ **Bluetooth Thermal Printer** — Cetak struk langsung ke printer 58mm via *Intent* web ke aplikasi lokal.
-- 📱 **Progressive Web App (PWA)** — Dapat diinstal layaknya aplikasi native di Android/iOS/Windows.
-- 🌙 **macOS Sonoma UI** — Desain premium dengan *glassmorphism*, dark mode, dan animasi *FLIP* dock drag-and-drop.
+- 🖨️ **Universal Thermal Printer** — Cetak struk langsung ke printer 48mm/58mm/80mm via Web Bluetooth, WebUSB, Intent Android (`rawbt:`, `bluetoothprint`), dan Direct OS Spooler dengan logo Base64 synchronous 1-bit.
+- 📊 **Laporan & Portabilitas Data** — Grafik penjualan analitik, arus kas, valuasi aset galon, export PDF invoice resmi & export spreadsheet Excel (.csv).
+- 📱 **Progressive Web App (PWA)** — Dapat diinstal layaknya aplikasi native di Android/iOS/Windows dengan Service Worker offline cache.
+- 🌙 **macOS Sonoma UI** — Desain premium dengan *glassmorphism*, dark mode, responsive mobile/tablet, dan animasi *FLIP* dock drag-and-drop.
 
 ## 🏗️ Arsitektur Sistem
 
 Aplikasi ini menggunakan pola arsitektur **Offline-First**.
-1. **Frontend**: HTML5, Vanilla JavaScript (ESM), CSS Variables.
-2. **Local Data Layer**: `Dexie.js` (IndexedDB Wrapper) - Memastikan kecepatan 0ms dan ketersediaan offline.
+1. **Frontend**: HTML5, Vanilla JavaScript (ES Modules), CSS Variables & Native Layouts.
+2. **Local Data Layer**: `Dexie.js` (IndexedDB Wrapper) - Memastikan kecepatan 0ms dan ketersediaan offline penuh.
 3. **Cloud Data Layer**: `Supabase` (PostgreSQL) - Menampung _source of truth_ jarak jauh.
 4. **Sync Engine**: Modul sinkronisasi 2 arah yang menangani *auto-seed*, *upsert*, dan mendengarkan event *Realtime* via WebSocket.
 
@@ -46,7 +49,7 @@ Repositori ini ditenagai oleh GitHub Actions untuk Continuous Integration dan De
 KASIR/
 ├── index.html              # SPA utama (CSP Hardened)
 ├── receipt-data.html       # Endpoint JSON untuk Bluetooth Print App
-├── manifest.webmanifest    # Konfigurasi PWA App
+├── manifest.json           # Konfigurasi PWA App
 ├── .github/workflows/
 │   └── deploy.yml          # CI/CD GitHub Actions Pipeline
 ├── assets/
@@ -56,7 +59,7 @@ KASIR/
 │   ├── main.css            # Token desain, variabel, utilitas
 │   ├── dock.css            # macOS dock bar dengan Wave Magnification
 │   ├── pos.css             # Layout utama POS & grid produk
-│   └── modals.css          # Desain dialog, tabel, toast alert
+│   └── modals.css          # Desain dialog, tabel, toast alert, responsif mobile
 ├── js/
 │   ├── app.js              # Bootstrap inisialisasi aplikasi
 │   ├── store.js            # State management (Reactive UI Pattern)
@@ -64,25 +67,29 @@ KASIR/
 │   ├── supabase.js         # Cloud sync engine & WebSocket listener
 │   ├── printer.js          # Universal Thermal POS Engine (48mm/58mm/80mm, WebBLE, WebUSB, RawBT)
 │   ├── receipt.js          # Pembuat payload JSON & ESC/POS untuk struk
-│   ├── views/              # Logika UI per halaman
+│   ├── views/              # Logika UI per modul/halaman
 │   │   ├── pos.js          # Modul kasir utama
 │   │   ├── products.js     # Modul master data produk & upload foto/SKU
+│   │   ├── customers.js    # Modul CRM 360°, piutang, pelacakan galon pinjaman, WA direct
 │   │   ├── transactions.js # Modul riwayat penjualan & filter tanggal range + pagination
-│   │   ├── reports.js      # Modul analitik & Chart.js + pagination
-│   │   ├── finance.js      # Modul pengeluaran, piutang, & jurnal + pagination
-│   │   ├── settings.js     # Modul konfigurasi sistem & hardware printer
-│   │   └── modals.js       # Kontrol pop-up global & multi-protocol print
+│   │   ├── reports.js      # Modul analitik omzet/laba & Chart.js
+│   │   ├── finance.js      # Modul buku besar COA, arus kas, & valuasi aset fisik
+│   │   ├── settings.js     # Modul konfigurasi sistem, backup/restore, cloud sync, & test print
+│   │   └── modals.js       # Kontrol dialog modal global & multi-protocol print
 │   └── utils/
 │       ├── currency.js     # Pemformatan nilai Rupiah
 │       ├── date.js         # Pemformatan tanggal lokal Indonesia
+│       ├── export.js       # Generator export spreadsheet CSV / Excel & format tabel
 │       ├── image.js        # Kompresi gambar client-side WebP/JPEG & SKU generator
-│       ├── invoice.js      # Generator nomor resi
-│       └── sanitize.js     # Proteksi Anti-XSS
+│       ├── invoice.js      # Generator nomor resi transaksi
+│       ├── logo-thermal.js # Synchronous 1-bit embedded thermal logo Base64
+│       ├── qris.js         # Generator EMVCo Dynamic QRIS (TLV Tag 54 + CRC16-CCITT)
+│       └── sanitize.js     # Proteksi Anti-XSS (HTML escape)
 ├── docs/
 │   ├── 01_SYSTEM_BLUEPRINT.md       # Cetak biru arsitektur sistem & state management
 │   ├── 02_ACCOUNTING_LOGIC.md       # Logika matematika, akuntansi double-entry, & saldo kas
-│   ├── 03_MILITARY_VERIFICATION.md  # Protokol QA gate & 10 aturan mutlak pra-deploy
-│   └── 04_BUSINESS_TIMELINE.md      # Roadmap strategi bisnis & evolusi fitur
+│   ├── 03_MILITARY_VERIFICATION.md  # Protokol QA gate & 14 aturan mutlak pra-deploy
+│   └── 04_BUSINESS_TIMELINE.md      # Roadmap strategi bisnis, benchmark open-source, & gap
 └── scripts/
     └── verify.js           # Skrip audit CI/CD Quality Gate & sinkronisasi versi otomatis
 ```
