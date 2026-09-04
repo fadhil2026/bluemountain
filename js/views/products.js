@@ -12,7 +12,17 @@ import { openModal, closeModal }     from './modals.js';
 const EMOJIS     = ['💧','🪣','🍶','🥤','💦','🛵','🚚','⚗️','📦','🏷️','🫙','🧊'];
 const CATEGORIES = ['Galon','Botol','Layanan','Lainnya'];
 
+let _unsubscribe = null;
+
 export const initProducts = async () => {
+  if (_unsubscribe) _unsubscribe();
+  _unsubscribe = store.on('products:change', () => {
+    const view = document.getElementById('view-products');
+    if (view && view.classList.contains('active')) {
+      renderProducts();
+    }
+  });
+
   await renderProducts();
 };
 

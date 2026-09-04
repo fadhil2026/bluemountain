@@ -13,6 +13,7 @@ import store                      from '../store.js';
 
 let _unsubTx      = null;
 let _unsubExp     = null;
+let _unsubCust    = null;
 let _rendering    = false;
 let _piutangPage  = 1;
 let _expensePage  = 1;
@@ -20,10 +21,12 @@ let _journalPage  = 1;
 const PAGE_SIZE   = 10;
 
 export const initFinance = async () => {
-  if (_unsubTx)  _unsubTx();
-  if (_unsubExp) _unsubExp();
-  _unsubTx  = store.on('transactions:change', () => { if (!_rendering) renderFinance(); });
-  _unsubExp = store.on('expenses:change',     () => { if (!_rendering) renderFinance(); });
+  if (_unsubTx)   _unsubTx();
+  if (_unsubExp)  _unsubExp();
+  if (_unsubCust) _unsubCust();
+  _unsubTx   = store.on('transactions:change', () => { if (!_rendering) renderFinance(); });
+  _unsubExp  = store.on('expenses:change',     () => { if (!_rendering) renderFinance(); });
+  _unsubCust = store.on('customers:change',    () => { if (!_rendering) renderFinance(); });
 
   await renderFinance();
 };
