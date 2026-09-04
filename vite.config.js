@@ -13,10 +13,11 @@ try {
   gitCommitHash  = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
 } catch (_) {}
 
-const baseVersion = (pkg.version || '3.0.0').split('.').slice(0, 2).join('.');
-const dynamicAppVersion = gitCommitCount && gitCommitCount !== '0'
-  ? `${baseVersion}.${gitCommitCount}`
-  : (pkg.version || '3.0.0');
+const parts = (pkg.version || '3.0.0').split('.');
+const major = parts[0] || '3';
+const minor = parts[1] || '0';
+const patch = parts[2] || (gitCommitCount && gitCommitCount !== '0' ? gitCommitCount : '0');
+const dynamicAppVersion = `${major}.${minor}.${patch}`;
 
 const buildTimestamp = new Date().toISOString();
 

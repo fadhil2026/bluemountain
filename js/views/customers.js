@@ -387,7 +387,7 @@ export const showCustomerModal = (cust = null) => {
     const notes = document.getElementById('cf-notes').value.trim();
 
     if (!name) {
-      alert('Nama pelanggan wajib diisi!');
+      window.showToast?.('Nama pelanggan wajib diisi!', 'warning');
       return;
     }
 

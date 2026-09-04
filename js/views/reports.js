@@ -315,7 +315,7 @@ const renderReportsUI = (txs) => {
       t.total || 0,
       t.remainingDebt || 0,
     ]);
-    const dateTag = new Date().toISOString().split('T')[0];
+    const dateTag = todayKey();
     exportToCSV(`Laporan-Penjualan-${dateTag}.csv`, headers, rows);
     window.showToast?.('✅ Laporan penjualan berhasil diekspor ke Excel/CSV!', 'success');
   });
@@ -591,7 +591,7 @@ const buildLast7Days = (txs) => {
   for (let i = 6; i >= 0; i--) {
     const d     = new Date();
     d.setDate(d.getDate() - i);
-    const key   = d.toISOString().split('T')[0];
+    const key   = todayKey(d);
     const total = txs.filter(t => t.dateKey === key).reduce((s, t) => s + t.total, 0);
     const label = new Intl.DateTimeFormat('id-ID', { weekday: 'short' }).format(d);
     days.push({ key, label, total });

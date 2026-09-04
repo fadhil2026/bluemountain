@@ -1,9 +1,9 @@
 /**
  * views/transactions.js — Full CRUD + Realtime + Date Range Filter + Pagination (10/page)
  */
-import { getAllTransactions, deleteTransaction, updateTransaction } from '../db.js';
+import { getAllTransactions, deleteTransaction, updateTransaction, getAllCustomers, updateCustomer } from '../db.js';
 import { formatRupiah }          from '../utils/currency.js';
-import { formatDateTime }        from '../utils/date.js';
+import { formatDateTime, todayKey } from '../utils/date.js';
 import { esc }                   from '../utils/sanitize.js';
 import { openModal, closeModal } from './modals.js';
 import { exportToCSV }           from '../utils/export.js';
@@ -20,8 +20,8 @@ import { buildReceiptJSON }      from '../receipt.js';
 import store                     from '../store.js';
 
 let _unsubscribe = null;
-let _startDate   = new Date().toISOString().split('T')[0]; // Default: Hari Ini
-let _endDate     = new Date().toISOString().split('T')[0]; // Default: Hari Ini
+let _startDate   = todayKey(); // Default: Hari Ini (Zona Waktu Lokal)
+let _endDate     = todayKey(); // Default: Hari Ini (Zona Waktu Lokal)
 let _currentPage = 1;
 const PAGE_SIZE  = 10;
 
@@ -84,7 +84,7 @@ const renderTransactionsUI = (allTxs) => {
   const view = document.getElementById('view-transactions');
   if (!view) return;
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayKey();
   const filtered = getFilteredTransactions(allTxs);
 
   // Stats calculation
@@ -287,8 +287,8 @@ const bindTxEvents = (allTxs) => {
       t.change || 0,
       t.remainingDebt || 0,
     ]);
-    const dateTag = new Date().toISOString().split('T')[0];
-    exportToCSV(`Riwayat-Transaksi-${dateTag}.csv`, headers, rows);
+    const dateTag = todayKey();
+    exportToCSV(`Transaksi-${dateTag}.csv`, headers, rows);
     window.showToast?.('✅ Riwayat transaksi berhasil diekspor ke Excel/CSV!', 'success');
   });
 
@@ -345,6 +345,20 @@ const bindTxEvents = (allTxs) => {
       try {
         await deleteTransaction(id);
         store.removeTransaction(id);
+
+        // Revert customer statistics if customerName was attached
+        if (txObj.customerName) {
+          const custs = await getAllCustomers();
+          const targetCust = custs.find(c => (c.name || '').trim().toLowerCase() === txObj.customerName.trim().toLowerCase());
+          if (targetCust) {
+            targetCust.totalOrders = Math.max(0, (Number(targetCust.totalOrders) || 1) - 1);
+            targetCust.totalSpent  = Math.max(0, (Number(targetCust.totalSpent) || txObj.total) - txObj.total);
+            await updateCustomer(targetCust);
+            const freshCusts = await getAllCustomers();
+            store.setCustomers(freshCusts);
+          }
+        }
+
         window.showToast('Transaksi dihapus', 'success');
       } catch (err) { console.error('[tx]', err); window.showToast('Gagal menghapus', 'error'); }
     }
@@ -430,6 +444,19 @@ const showPayDebtModal = (tx) => {
       try {
         await updateTransaction(updated);
         store.updateTransaction(tx.id, { paidAmount: newPaid, remainingDebt: newRemaining, paymentStatus: newStatus, debtPayments: newPayments });
+
+        // Decrement customer's totalDebt in CRM customer database
+        if (tx.customerName) {
+          const custs = await getAllCustomers();
+          const targetCust = custs.find(c => (c.name || '').trim().toLowerCase() === tx.customerName.trim().toLowerCase());
+          if (targetCust) {
+            targetCust.totalDebt = Math.max(0, (Number(targetCust.totalDebt) || 0) - amount);
+            await updateCustomer(targetCust);
+            const freshCusts = await getAllCustomers();
+            store.setCustomers(freshCusts);
+          }
+        }
+
         closeModal('debt-modal');
         window.showToast(newRemaining === 0 ? '🎉 Hutang LUNAS!' : `Cicilan ${formatRupiah(amount)} dicatat`, 'success');
       } catch (err) { console.error('[debt]', err); window.showToast('Gagal simpan cicilan', 'error'); }

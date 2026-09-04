@@ -23,11 +23,21 @@ export const formatDateTime = (date = new Date()) => {
   return `${formatDateShort(date)} ${formatTime(date)}`;
 };
 
-export const todayKey = () => new Date().toISOString().split('T')[0];
+export const todayKey = (d = new Date()) => {
+  const date = d instanceof Date ? d : new Date(d);
+  if (isNaN(date.getTime())) return new Date().toISOString().split('T')[0];
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
-export const monthKey = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+export const toLocalDateKey = (d) => todayKey(d);
+
+export const monthKey = (d = new Date()) => {
+  const date = d instanceof Date ? d : new Date(d);
+  if (isNaN(date.getTime())) return new Date().toISOString().slice(0, 7);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 };
 
 export const getTimeNow = () => formatTime(new Date());

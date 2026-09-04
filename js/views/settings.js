@@ -2,7 +2,7 @@
  * views/settings.js — App settings
  * FIX: version from __APP_VERSION__ (injected by Vite define)
  */
-import { getSetting, setSetting, clearAllData, exportFullBackup, importFullBackup, getAllProducts, getAllTransactions, getAllExpenses } from '../db.js';
+import { getSetting, setSetting, clearAllData, exportFullBackup, importFullBackup, getAllProducts, getAllCustomers, getAllTransactions, getAllExpenses } from '../db.js';
 import store                      from '../store.js';
 import { openModal, closeModal }  from './modals.js';
 import { esc }                    from '../utils/sanitize.js';
@@ -350,6 +350,7 @@ const bindSettingsEvents = () => {
         }
 
         const pCount = (parsed.data.products || []).length;
+        const cCount = (parsed.data.customers || []).length;
         const tCount = (parsed.data.transactions || []).length;
         const eCount = (parsed.data.expenses || []).length;
         const expDate = parsed.exportedAt ? new Date(parsed.exportedAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Tidak diketahui';
@@ -366,18 +367,22 @@ const bindSettingsEvents = () => {
               Waktu Ekspor: ${expDate}
             </div>
 
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;text-align:center">
+            <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:6px;margin-bottom:14px;text-align:center">
               <div style="padding:8px;background:var(--bg-elevated);border-radius:8px;border:1px solid var(--border-subtle)">
                 <div style="font-size:10px;color:var(--text-muted)">Produk</div>
-                <div style="font-size:16px;font-weight:900;color:var(--blue-700)">${pCount}</div>
+                <div style="font-size:15px;font-weight:900;color:var(--blue-700)">${pCount}</div>
+              </div>
+              <div style="padding:8px;background:var(--bg-elevated);border-radius:8px;border:1px solid var(--border-subtle)">
+                <div style="font-size:10px;color:var(--text-muted)">Pelanggan</div>
+                <div style="font-size:15px;font-weight:900;color:#8b5cf6">${cCount}</div>
               </div>
               <div style="padding:8px;background:var(--bg-elevated);border-radius:8px;border:1px solid var(--border-subtle)">
                 <div style="font-size:10px;color:var(--text-muted)">Transaksi</div>
-                <div style="font-size:16px;font-weight:900;color:#16a34a">${tCount}</div>
+                <div style="font-size:15px;font-weight:900;color:#16a34a">${tCount}</div>
               </div>
               <div style="padding:8px;background:var(--bg-elevated);border-radius:8px;border:1px solid var(--border-subtle)">
-                <div style="font-size:10px;color:var(--text-muted)">Pengeluaran</div>
-                <div style="font-size:16px;font-weight:900;color:#dc2626">${eCount}</div>
+                <div style="font-size:10px;color:var(--text-muted)">Beban</div>
+                <div style="font-size:15px;font-weight:900;color:#dc2626">${eCount}</div>
               </div>
             </div>
 
@@ -418,12 +423,14 @@ const bindSettingsEvents = () => {
             try {
               await importFullBackup(parsed, mode);
               // Reload fresh data into store
-              const [newProds, newTxs, newExps] = await Promise.all([
+              const [newProds, newCusts, newTxs, newExps] = await Promise.all([
                 getAllProducts(),
+                getAllCustomers(),
                 getAllTransactions(),
                 getAllExpenses(),
               ]);
               store.setProducts(newProds);
+              store.setCustomers(newCusts);
               store.setTransactions(newTxs);
               store.setExpenses(newExps);
 

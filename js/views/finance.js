@@ -2,10 +2,10 @@
  * views/finance.js — Keuangan / Arus Kas Profesional
  * Features: Multi-table pagination (10/page), Date range cashflow, Modal Awal
  */
-import { getAllTransactions, getAllExpenses, saveExpense, deleteExpense, updateTransaction } from '../db.js';
+import { getAllTransactions, getAllExpenses, saveExpense, deleteExpense, updateTransaction, getAllCustomers, updateCustomer } from '../db.js';
 import { getSetting, setSetting } from '../db.js';
 import { formatRupiah }           from '../utils/currency.js';
-import { formatDateTime }         from '../utils/date.js';
+import { formatDateTime, todayKey } from '../utils/date.js';
 import { esc }                    from '../utils/sanitize.js';
 import { openModal, closeModal }  from './modals.js';
 import { exportToCSV }            from '../utils/export.js';
@@ -405,7 +405,7 @@ const buildDailyCashFlow = (txs, expenses) => {
   for (let i = 29; i >= 0; i--) {
     const d   = new Date();
     d.setDate(d.getDate() - i);
-    const key = d.toISOString().split('T')[0];
+    const key = todayKey(d);
     result.push({ key, ...(map[key] || { masuk: 0, keluar: 0 }) });
   }
   return result;
@@ -565,7 +565,7 @@ const bindFinanceEvents = (txs) => {
       j.credit || 0,
       j.account || '',
     ]);
-    const dateTag = new Date().toISOString().split('T')[0];
+    const dateTag = todayKey();
     exportToCSV(`Jurnal-Akuntansi-${dateTag}.csv`, headers, rows);
     window.showToast?.('✅ Jurnal akuntansi berhasil diekspor ke file CSV/Excel!', 'success');
   });
@@ -736,6 +736,19 @@ const bindFinanceEvents = (txs) => {
           try {
             await updateTransaction(updated);
             store.updateTransaction(id, { paidAmount: newPaid, remainingDebt: newRemaining, paymentStatus: newStatus, debtPayments: newPayments });
+
+            // Decrement customer's totalDebt in CRM customer database
+            if (txObj.customerName) {
+              const custs = await getAllCustomers();
+              const targetCust = custs.find(c => (c.name || '').trim().toLowerCase() === txObj.customerName.trim().toLowerCase());
+              if (targetCust) {
+                targetCust.totalDebt = Math.max(0, (Number(targetCust.totalDebt) || 0) - amount);
+                await updateCustomer(targetCust);
+                const freshCusts = await getAllCustomers();
+                store.setCustomers(freshCusts);
+              }
+            }
+
             closeModal('mini-cicil');
             window.showToast(newRemaining === 0 ? '🎉 Hutang LUNAS!' : `Cicilan #${nextCicilNum} (${formatRupiah(amount)}) dicatat`, 'success');
           } catch (err) { console.error('[cicil]', err); window.showToast('Gagal simpan cicilan', 'error'); }

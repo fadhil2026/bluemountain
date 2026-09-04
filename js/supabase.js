@@ -4,6 +4,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { db, getAllProducts, getAllTransactions, getAllExpenses, getAllCustomers, getSetting, setSetting } from './db.js';
+import { todayKey } from './utils/date.js';
 import store from './store.js';
 
 // Default Supabase Configuration (fadhil2026's Project)
@@ -66,6 +67,7 @@ const formatProductForCloud = (p) => ({
   name: p.name || '',
   category: p.category || 'Umum',
   price: Number(p.price) || 0,
+  cost: Number(p.cost) || 0,
   unit: p.unit || 'buah',
   emoji: p.emoji || '📦',
   image: p.image || null,
@@ -80,7 +82,7 @@ const formatTransactionForCloud = (tx) => ({
   id: String(tx.id),
   invoice_no: tx.invoiceNo || tx.invoice_no || `INV-${Date.now()}`,
   date: tx.date ? new Date(tx.date).toISOString() : new Date().toISOString(),
-  date_key: tx.dateKey || tx.date_key || new Date().toISOString().split('T')[0],
+  date_key: tx.dateKey || tx.date_key || todayKey(tx.date ? new Date(tx.date) : new Date()),
   customer_name: tx.customerName || tx.customer_name || '',
   items: tx.items || [],
   subtotal: Number(tx.subtotal) || 0,
@@ -104,7 +106,7 @@ const formatTransactionForCloud = (tx) => ({
 const formatExpenseForCloud = (exp) => ({
   id: String(exp.id),
   date: exp.date ? new Date(exp.date).toISOString() : new Date().toISOString(),
-  date_key: exp.dateKey || exp.date_key || new Date().toISOString().split('T')[0],
+  date_key: exp.dateKey || exp.date_key || todayKey(exp.date ? new Date(exp.date) : new Date()),
   category: exp.category || 'Operasional',
   note: exp.note || '',
   amount: Number(exp.amount) || 0,
@@ -163,6 +165,7 @@ export const syncInitialData = async () => {
             name: cp.name,
             category: cp.category,
             price: Number(cp.price),
+            cost: Number(cp.cost) || 0,
             unit: cp.unit,
             emoji: cp.emoji,
             image: cp.image || null,
@@ -326,6 +329,7 @@ export const setupRealtimeSubscription = () => {
           name: row.name,
           category: row.category,
           price: Number(row.price),
+          cost: Number(row.cost) || 0,
           unit: row.unit,
           emoji: row.emoji,
           image: row.image || null,

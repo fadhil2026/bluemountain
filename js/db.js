@@ -132,6 +132,7 @@ export const seedDefaultProducts = async () => {
 export const clearAllData = async () => {
   await Promise.all([
     db.products.clear(),
+    db.customers.clear(),
     db.transactions.clear(),
     db.expenses.clear(),
     db.settings.clear(),
@@ -142,8 +143,9 @@ export const clearAllData = async () => {
 
 // ── Export Full Backup JSON (Cross-device sync) ──
 export const exportFullBackup = async () => {
-  const [products, transactions, expenses, settings] = await Promise.all([
+  const [products, customers, transactions, expenses, settings] = await Promise.all([
     db.products.toArray(),
+    db.customers.toArray(),
     db.transactions.toArray(),
     db.expenses.toArray(),
     db.settings.toArray(),
@@ -159,12 +161,14 @@ export const exportFullBackup = async () => {
     shopName,
     data: {
       products,
+      customers,
       transactions,
       expenses,
       settings,
     },
     meta: {
       productCount: products.length,
+      customerCount: customers.length,
       transactionCount: transactions.length,
       expenseCount: expenses.length,
       settingCount: settings.length,
@@ -178,22 +182,31 @@ export const importFullBackup = async (backupJson, mode = 'replace') => {
     throw new Error('Format file backup tidak valid atau rusak.');
   }
 
-  const { products = [], transactions = [], expenses = [], settings = [] } = backupJson.data;
+  const {
+    products = [],
+    customers = [],
+    transactions = [],
+    expenses = [],
+    settings = []
+  } = backupJson.data;
 
   if (mode === 'replace') {
     await Promise.all([
       db.products.clear(),
+      db.customers.clear(),
       db.transactions.clear(),
       db.expenses.clear(),
       db.settings.clear(),
     ]);
 
     if (products.length)     await db.products.bulkAdd(products);
+    if (customers.length)    await db.customers.bulkAdd(customers);
     if (transactions.length) await db.transactions.bulkAdd(transactions);
     if (expenses.length)     await db.expenses.bulkAdd(expenses);
     if (settings.length)     await db.settings.bulkPut(settings);
   } else if (mode === 'merge') {
     if (products.length)     await db.products.bulkPut(products);
+    if (customers.length)    await db.customers.bulkPut(customers);
     if (transactions.length) await db.transactions.bulkPut(transactions);
     if (expenses.length)     await db.expenses.bulkPut(expenses);
     if (settings.length)     await db.settings.bulkPut(settings);
@@ -201,6 +214,7 @@ export const importFullBackup = async (backupJson, mode = 'replace') => {
 
   return {
     products: products.length,
+    customers: customers.length,
     transactions: transactions.length,
     expenses: expenses.length,
     settings: settings.length,
