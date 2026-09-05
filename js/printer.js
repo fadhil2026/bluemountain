@@ -116,42 +116,48 @@ export const getReceiptPreviewHTML = (txData, paperWidth = null) => {
   const spec     = PAPER_SPECS[sizeKey] || PAPER_SPECS['58mm'];
   const items    = txData.items || [];
 
-  const line = (t, bold = false, align = 'left', size = spec.fontSize) =>
-    `<div style="text-align:${align};font-weight:${bold ? '700' : '400'};font-size:${size};line-height:1.35;word-break:break-word">${t}</div>`;
-  const sep = () => '<div style="border-top:1px dashed #333;margin:5px 0"></div>';
-  const empty = () => '<div style="height:4px"></div>';
+  const sep = () => '<div style="border-top:1px dashed #333;margin:4px 0"></div>';
 
-  let html = `<div class="thermal-receipt" style="width:${spec.widthPx};margin:0 auto;font-family:'Courier New',Consolas,monospace;color:#000;background:#fff;padding:4px">`;
+  let html = `<div class="thermal-receipt" style="width:${spec.widthPx};margin:0 auto;font-family:'Courier New',Consolas,monospace;color:#000;background:#fff;padding:2px 4px">`;
 
-  // Logo (Center aligned, high-contrast, pure Base64 for instant zero-delay render)
-  html += `<div style="text-align:center;margin-bottom:6px;margin-top:2px">
+  // 1. Logo (Center aligned, compact gap with header)
+  html += `<div style="text-align:center;margin:0 auto 2px auto;line-height:1">
     <img src="${LOGO_THERMAL_BASE64}"
          class="thermal-logo"
          alt="Blue Mountain"
-         width="70"
-         height="70"
-         style="width:${spec.logoWidth};height:auto;max-width:100%;object-fit:contain;display:block;margin:0 auto 4px auto;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+         width="65"
+         height="65"
+         style="width:${spec.logoWidth};height:auto;max-width:100%;object-fit:contain;display:block;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact">
   </div>`;
 
-  // Shop Info (Clean 2-line header)
+  // 2. Shop Header (ALL CAPS & BOLD with distinct bottom gap before address)
   const rawShopName = settings.shopName || 'Blue Mountain Refilling Station';
+  html += `<div style="text-align:center;margin-bottom:6px">`;
   if (rawShopName.toLowerCase().includes('blue mountain') && rawShopName.toLowerCase().includes('refilling station')) {
-    html += line('Blue Mountain', true, 'center', sizeKey === '80mm' ? '14px' : '13px');
-    html += line('Refilling Station', true, 'center', sizeKey === '80mm' ? '12px' : '11px');
+    html += `<div style="font-weight:900;font-size:${sizeKey === '80mm' ? '15px' : '13px'};line-height:1.2;letter-spacing:0.5px">BLUE MOUNTAIN</div>`;
+    html += `<div style="font-weight:800;font-size:${sizeKey === '80mm' ? '12px' : '11px'};line-height:1.2;letter-spacing:0.3px">REFILLING STATION</div>`;
   } else {
-    const lines = rawShopName.split('\n');
+    const lines = rawShopName.toUpperCase().split('\n');
     lines.forEach(l => {
-      html += line(l.trim(), true, 'center', sizeKey === '80mm' ? '14px' : '12px');
+      html += `<div style="font-weight:900;font-size:${sizeKey === '80mm' ? '14px' : '12px'};line-height:1.2">${l.trim()}</div>`;
     });
   }
-  if (settings.shopAddress) html += line(settings.shopAddress, false, 'center', '10px');
-  if (settings.shopPhone)   html += line(`Telp: ${settings.shopPhone}`, false, 'center', '10px');
+  html += `</div>`;
+
+  if (settings.shopAddress) {
+    html += `<div style="text-align:center;font-size:10px;line-height:1.35;word-break:normal;overflow-wrap:break-word;margin-bottom:2px">${settings.shopAddress}</div>`;
+  }
+  if (settings.shopPhone) {
+    html += `<div style="text-align:center;font-size:10px;line-height:1.35">Telp: ${settings.shopPhone}</div>`;
+  }
   
   html += sep();
-  html += line(`No  : ${txData.invoiceNo || '-'}`);
-  html += line(`Tgl : ${formatDateTime(new Date(txData.date || Date.now()))}`);
-  if (txData.customerName) html += line(`Cust: ${txData.customerName}`);
-  if (txData.cashier)      html += line(`Kasir: ${txData.cashier}`);
+  html += `<div style="font-size:10px;line-height:1.4">`;
+  html += `<div>No&nbsp;&nbsp;&nbsp;: <b>${txData.invoiceNo || '-'}</b></div>`;
+  html += `<div>Tgl&nbsp;&nbsp;: ${formatDateTime(new Date(txData.date || Date.now()))}</div>`;
+  if (txData.customerName) html += `<div>Cust&nbsp;: ${txData.customerName}</div>`;
+  if (txData.cashier)      html += `<div>Kasir: ${txData.cashier}</div>`;
+  html += `</div>`;
   html += sep();
 
   // Item List
@@ -162,10 +168,10 @@ export const getReceiptPreviewHTML = (txData, paperWidth = null) => {
     const pPrice = item.product.price;
     const pSubtotal = pPrice * pQty;
 
-    html += line(pName, true);
-    html += `<div style="display:flex;justify-content:space-between;font-size:10px;line-height:1.3">
+    html += `<div style="font-weight:700;font-size:${spec.fontSize};line-height:1.3">${pName}</div>`;
+    html += `<div style="display:flex;justify-content:space-between;font-size:10px;line-height:1.3;margin-bottom:3px">
       <span>&nbsp;&nbsp;${pQty} x ${formatRupiah(pPrice)}</span>
-      <span>${formatRupiah(pSubtotal)}</span>
+      <span style="font-weight:600">${formatRupiah(pSubtotal)}</span>
     </div>`;
   }
 
@@ -173,51 +179,52 @@ export const getReceiptPreviewHTML = (txData, paperWidth = null) => {
 
   // Totals & Discounts
   if (txData.discount > 0) {
-    html += `<div style="display:flex;justify-content:space-between;font-size:10px">
+    html += `<div style="display:flex;justify-content:space-between;font-size:10px;line-height:1.35">
       <span>Subtotal</span><span>${formatRupiah(txData.subtotal || txData.total + txData.discount)}</span>
     </div>`;
-    html += `<div style="display:flex;justify-content:space-between;font-size:10px">
+    html += `<div style="display:flex;justify-content:space-between;font-size:10px;line-height:1.35">
       <span>Diskon</span><span>-${formatRupiah(txData.discount)}</span>
     </div>`;
   }
   if (txData.tax > 0) {
-    html += `<div style="display:flex;justify-content:space-between;font-size:10px">
+    html += `<div style="display:flex;justify-content:space-between;font-size:10px;line-height:1.35">
       <span>Pajak</span><span>${formatRupiah(txData.tax)}</span>
     </div>`;
   }
 
   // Grand Total
-  html += `<div style="display:flex;justify-content:space-between;font-size:${sizeKey === '80mm' ? '14px' : '12px'};font-weight:900;margin-top:2px">
+  html += `<div style="display:flex;justify-content:space-between;font-size:${sizeKey === '80mm' ? '14px' : '13px'};font-weight:900;margin:3px 0;letter-spacing:0.5px">
     <span>TOTAL</span><span>${formatRupiah(txData.total)}</span>
   </div>`;
 
   // Payment Breakdown
   if (txData.paymentMethod === 'cash') {
-    html += `<div style="display:flex;justify-content:space-between;font-size:10px;margin-top:2px">
+    html += `<div style="display:flex;justify-content:space-between;font-size:10px;line-height:1.35">
       <span>Bayar Tunai</span><span>${formatRupiah(txData.paid || txData.total)}</span>
     </div>`;
-    html += `<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700">
+    html += `<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:800;line-height:1.35">
       <span>Kembali</span><span>${formatRupiah(txData.change || 0)}</span>
     </div>`;
   } else if (txData.paymentMethod === 'transfer') {
-    html += `<div style="display:flex;justify-content:space-between;font-size:10px;margin-top:2px">
+    html += `<div style="display:flex;justify-content:space-between;font-size:10px;line-height:1.35">
       <span>Transfer Bank</span><span>${formatRupiah(txData.total)}</span>
     </div>`;
-    html += line(`Status: ${txData.paymentStatus === 'transfer_confirmed' ? 'TERKONFIRMASI ✅' : 'MENUNGGU KONFIRMASI ⏳'}`, false, 'center', '9px');
+    html += `<div style="text-align:center;font-size:9px;margin-top:2px">Status: ${txData.paymentStatus === 'transfer_confirmed' ? 'TERKONFIRMASI ✅' : 'MENUNGGU KONFIRMASI ⏳'}</div>`;
   } else if (txData.paymentMethod === 'debt') {
-    html += `<div style="display:flex;justify-content:space-between;font-size:10px;margin-top:2px">
+    html += `<div style="display:flex;justify-content:space-between;font-size:10px;line-height:1.35">
       <span>DP Dibayar</span><span>${formatRupiah(txData.paidAmount || 0)}</span>
     </div>`;
-    html += `<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:#000">
+    html += `<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:800;line-height:1.35">
       <span>Sisa Hutang</span><span>${formatRupiah(txData.remainingDebt || 0)}</span>
     </div>`;
   }
 
   html += sep();
-  html += empty();
-  html += line('Terima kasih atas kunjungan Anda!', true, 'center', '10px');
-  html += line(settings.shopName || 'Blue Mountain Refilling Station', false, 'center', '9px');
-  html += empty();
+  html += `<div style="text-align:center;margin-top:4px">
+    <div style="font-size:10px;font-weight:700;line-height:1.35">Terima kasih sudah berbelanja!</div>
+    <div style="font-size:9px;font-weight:800;letter-spacing:0.5px;margin-top:2px">BLUE MOUNTAIN REFILLING STATION</div>
+  </div>`;
+  html += `<div style="height:4px"></div>`;
   html += `</div>`;
 
   return html;
@@ -342,6 +349,25 @@ export const buildESCPOSBuffer = (txData, paperSize = null) => {
     return left + ' '.repeat(space) + right;
   };
 
+  const wrapText = (str, width = colWidth) => {
+    if (!str) return [];
+    const words = str.split(' ');
+    const lines = [];
+    let current = '';
+    for (const w of words) {
+      if (!current) {
+        current = w;
+      } else if ((current + ' ' + w).length <= width) {
+        current += ' ' + w;
+      } else {
+        lines.push(current);
+        current = w;
+      }
+    }
+    if (current) lines.push(current);
+    return lines;
+  };
+
   let buffer = [];
   const pushCmd = (arr) => buffer.push(...arr);
   const pushBytes = (arr) => {
@@ -355,37 +381,48 @@ export const buildESCPOSBuffer = (txData, paperSize = null) => {
   // 1. Init Printer
   pushCmd([0x1B, 0x40]); // ESC @
 
-  // 2. Prepend ESC/POS 1-bit Monochrome Raster Logo (160x160 px)
+  // 2. Prepend ESC/POS 1-bit Monochrome Raster Logo (160x160 px, exact 3211 bytes)
   pushBytes(LOGO_ESCPOS_RASTER);
 
-  // 3. Shop Header (Center, Double Height)
+  // 3. Shop Header (Center, ALL CAPS, Bold)
   pushCmd([0x1B, 0x61, 0x01]); // Align Center
   const rawShopName = settings.shopName || 'Blue Mountain Refilling Station';
   if (rawShopName.toLowerCase().includes('blue mountain') && rawShopName.toLowerCase().includes('refilling station')) {
+    pushCmd([0x1B, 0x45, 0x01]); // Bold ON
     pushCmd([0x1B, 0x21, 0x10]); // Double Height
-    pushText('Blue Mountain');
+    pushText('BLUE MOUNTAIN');
     pushCmd([0x1B, 0x21, 0x00]); // Normal
-    pushCmd([0x1B, 0x45, 0x01]); // Bold
-    pushText('Refilling Station');
-    pushCmd([0x1B, 0x45, 0x00]); // Normal
+    pushCmd([0x1B, 0x45, 0x01]); // Bold ON
+    pushText('REFILLING STATION');
+    pushCmd([0x1B, 0x45, 0x00]); // Bold OFF
   } else {
+    pushCmd([0x1B, 0x45, 0x01]); // Bold ON
     pushCmd([0x1B, 0x21, 0x10]); // Double Height
-    const lines = rawShopName.split('\n');
+    const lines = rawShopName.toUpperCase().split('\n');
     lines.forEach(l => pushText(l.trim()));
     pushCmd([0x1B, 0x21, 0x00]); // Normal
+    pushCmd([0x1B, 0x45, 0x00]); // Bold OFF
   }
-  if (settings.shopAddress) pushText(settings.shopAddress);
+
+  // Distinct gap before address
+  pushCmd([0x1B, 0x4A, 14]); // ESC J 14: Feed 14 dots (~1.75mm clean gap)
+
+  // Address wrapped cleanly at word boundaries
+  if (settings.shopAddress) {
+    const addrLines = wrapText(settings.shopAddress, colWidth);
+    addrLines.forEach(l => pushText(l));
+  }
   if (settings.shopPhone) pushText(`Telp: ${settings.shopPhone}`);
   
   // 4. Divider
   pushCmd([0x1B, 0x61, 0x00]); // Align Left
   pushText('-'.repeat(colWidth));
 
-  // 5. Invoice Meta
-  pushText(padLR(`No: ${txData.invoiceNo || '-'}`, ''));
-  pushText(padLR(`Tgl: ${formatDateTime(new Date(txData.date || Date.now()))}`, ''));
-  if (txData.customerName) pushText(padLR(`Cust: ${txData.customerName}`, ''));
-  if (txData.cashier)      pushText(padLR(`Kasir: ${txData.cashier}`, ''));
+  // 5. Invoice Meta (Aligned colons)
+  pushText(`No   : ${txData.invoiceNo || '-'}`);
+  pushText(`Tgl  : ${formatDateTime(new Date(txData.date || Date.now()))}`);
+  if (txData.customerName) pushText(`Cust : ${txData.customerName}`);
+  if (txData.cashier)      pushText(`Kasir: ${txData.cashier}`);
   pushText('-'.repeat(colWidth));
 
   // 6. Items
@@ -419,6 +456,9 @@ export const buildESCPOSBuffer = (txData, paperSize = null) => {
     pushCmd([0x1B, 0x45, 0x01]);
     pushText(padLR('Kembali', formatRupiah(txData.change || 0)));
     pushCmd([0x1B, 0x45, 0x00]);
+  } else if (txData.paymentMethod === 'transfer') {
+    pushText(padLR('Transfer Bank', formatRupiah(txData.total)));
+    pushText(padLR('Status', txData.paymentStatus === 'transfer_confirmed' ? 'TERKONFIRMASI' : 'MENUNGGU'));
   } else if (txData.paymentMethod === 'debt') {
     pushText(padLR('DP Dibayar', formatRupiah(txData.paidAmount || 0)));
     pushCmd([0x1B, 0x45, 0x01]);
@@ -429,8 +469,10 @@ export const buildESCPOSBuffer = (txData, paperSize = null) => {
   // 8. Footer
   pushText('-'.repeat(colWidth));
   pushCmd([0x1B, 0x61, 0x01]); // Align Center
+  pushCmd([0x1B, 0x45, 0x01]); // Bold ON
   pushText('Terima kasih sudah berbelanja!');
-  pushText(settings.shopName || 'Blue Mountain Refilling Station');
+  pushText('BLUE MOUNTAIN REFILLING STATION');
+  pushCmd([0x1B, 0x45, 0x00]); // Bold OFF
   
   // Feed 3 lines and cut
   pushCmd([0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x42, 0x00]);
