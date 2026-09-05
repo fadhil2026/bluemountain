@@ -53,7 +53,7 @@ export const renderProducts = async () => {
 
 const renderProductCard = (p) => {
   const thumb = p.image
-    ? `<img src="${p.image}" class="product-thumb" alt="${esc(p.name)}" style="width:40px;height:40px;object-fit:cover;border-radius:8px;border:1.5px solid var(--border-subtle)">`
+    ? `<img src="${esc(p.image)}" class="product-thumb" alt="${esc(p.name)}" style="width:40px;height:40px;object-fit:cover;border-radius:8px;border:1.5px solid var(--border-subtle)">`
     : `<span class="product-emoji-large">${p.emoji || '📦'}</span>`;
 
   return `
@@ -262,7 +262,7 @@ const showProductForm = (product = null, allProducts = []) => {
       if (!file) return;
       try {
         currentImage = await compressImage(file, 128, 0.85);
-        previewEl.innerHTML = `<img src="${currentImage}" style="width:100%;height:100%;object-fit:cover">`;
+        previewEl.innerHTML = `<img src="${esc(currentImage)}" style="width:100%;height:100%;object-fit:cover">`;
         window.showToast('Foto produk berhasil dimuat', 'success');
       } catch (err) {
         window.showToast(err.message || 'Gagal memproses gambar', 'error');

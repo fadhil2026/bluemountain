@@ -156,7 +156,7 @@ const renderProductGrid = () => {
 
   grid.innerHTML = products.map(p => {
     const thumb = p.image
-      ? `<img src="${p.image}" class="product-card__thumb" alt="${esc(p.name)}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;margin-bottom:2px">`
+      ? `<img src="${esc(p.image)}" class="product-card__thumb" alt="${esc(p.name)}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;margin-bottom:2px">`
       : `<div class="product-card__emoji">${p.emoji || '📦'}</div>`;
 
     return `

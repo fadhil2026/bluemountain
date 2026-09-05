@@ -583,16 +583,18 @@ END $$;`;
   });
 
   document.getElementById('btn-reset-all')?.addEventListener('click', async () => {
-    const confirmed = confirm('⚠️ HAPUS SEMUA DATA?\n\nSemua transaksi, pengeluaran, dan produk akan dihapus permanen.\nTindakan ini TIDAK dapat dibatalkan!');
-    if (confirmed) {
+    const keyword = prompt('⚠️ KONFIRMASI PENGHAPUSAN PERMANEN\n\nTindakan ini akan menghapus SELURUH data lokal (transaksi, pelanggan, pengeluaran, dan produk).\n\nKetik kata "HAPUS" dengan huruf besar untuk melanjutkan:');
+    if (keyword === 'HAPUS') {
       try {
         await clearAllData();
-        window.showToast('Semua data berhasil dihapus. Reloading...', 'error');
+        window.showToast('Semua data lokal berhasil dihapus. Memuat ulang...', 'error');
         setTimeout(() => window.location.reload(), 1500);
       } catch (err) {
         console.error('[reset]', err);
         window.showToast('Gagal menghapus data', 'error');
       }
+    } else if (keyword !== null) {
+      window.showToast('Penghapusan dibatalkan (kata sandi konfirmasi salah)', 'info');
     }
   });
 };

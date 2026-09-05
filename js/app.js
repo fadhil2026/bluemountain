@@ -13,6 +13,7 @@ import { initReports, renderReports }                from './views/reports.js';
 import { initSettings, renderSettings }              from './views/settings.js';
 import { initFinance, renderFinance }                from './views/finance.js';
 import { syncInitialData, setupRealtimeSubscription } from './supabase.js';
+import { esc }                                        from './utils/sanitize.js';
 
 /* ── PWA: Register Service Worker (handled by vite-plugin-pwa) ── */
 // vite-plugin-pwa injects registration automatically via registerType: 'autoUpdate'
@@ -51,8 +52,8 @@ window.showToast = (message, type = 'info', title = '') => {
   toast.innerHTML = `
     <span class="toast__icon">${icons[type] ?? 'ℹ️'}</span>
     <div class="toast__text">
-      ${title ? `<div class="toast__title">${title}</div>` : ''}
-      <div class="toast__msg">${message}</div>
+      ${title ? `<div class="toast__title">${esc(title)}</div>` : ''}
+      <div class="toast__msg">${esc(message)}</div>
     </div>
   `;
   container.appendChild(toast);
