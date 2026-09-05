@@ -12,6 +12,9 @@ import {
   getPrintSchemeUrl,
   getRawBTSchemeUrl,
   getWhatsAppReceiptUrl,
+  shareReceiptViaWhatsApp,
+  shareReceiptPNG,
+  launchBTApp,
   printThermalDirect,
   printViaWebBluetooth,
   printViaWebUSB
@@ -530,14 +533,14 @@ const showTxDetail = (tx) => {
     <div class="modal-footer" style="flex-wrap:wrap;gap:8px;justify-content:flex-end">
       <button class="btn btn--secondary" id="td-close-btn">✕ Tutup</button>
       <button class="btn btn--secondary" id="btn-save-png">🖼️ PNG / Share</button>
-      <a class="btn btn--secondary" href="${getWhatsAppReceiptUrl(tx)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;font-size:11px;display:flex;align-items:center;gap:4px;background:#dcfce7;border:1.5px solid #86efac;color:#166534;font-weight:700">
+      <button class="btn btn--secondary" id="btn-td-whatsapp" style="font-size:11px;display:flex;align-items:center;gap:4px;background:#dcfce7;border:1.5px solid #86efac;color:#166534;font-weight:700">
         💬 WhatsApp
-      </a>
+      </button>
       <button class="btn btn--secondary" id="btn-td-ble" style="font-size:11px">📲 Web BLE</button>
       <button class="btn btn--secondary" id="btn-td-usb" style="font-size:11px">🔌 USB</button>
-      <a class="btn btn--secondary" href="${printUrl}" style="text-decoration:none;font-size:11px;display:flex;align-items:center;gap:4px">
+      <button class="btn btn--secondary" id="btn-td-btapp" style="font-size:11px;display:flex;align-items:center;gap:4px">
         🌐 BT App
-      </a>
+      </button>
       <a class="btn btn--secondary" href="${rawbtUrl}" style="text-decoration:none;font-size:11px;display:flex;align-items:center;gap:4px">
         ⚡ RawBT
       </a>
@@ -567,35 +570,27 @@ const showTxDetail = (tx) => {
       } catch (e) { window.showToast(e.message || 'Gagal Bluetooth', 'error'); }
     });
 
-    // WebUSB
+    // WebUSB (with auto-system print fallback)
     document.getElementById('btn-td-usb')?.addEventListener('click', async () => {
       try {
         window.showToast('Koneksi USB...', 'info');
         await printViaWebUSB(tx);
-        window.showToast('Struk terkirim ke printer USB!', 'success');
       } catch (e) { window.showToast(e.message || 'Gagal USB', 'error'); }
     });
 
-    // PNG export via npm html2canvas
-    document.getElementById('btn-save-png')?.addEventListener('click', async () => {
-      const btn = document.getElementById('btn-save-png');
-      btn.textContent = '⏳...'; btn.disabled = true;
-      try {
-        const { default: html2canvas } = await import('html2canvas');
-        const el     = document.getElementById('receipt-capture');
-        const canvas = await html2canvas(el, { backgroundColor: '#fff', scale: 2, useCORS: true, logging: false });
-        const blob   = await new Promise(r => canvas.toBlob(r, 'image/png'));
-        const fname  = `Struk-${tx.invoiceNo || tx.id}.png`;
-        if (navigator.canShare?.({ files: [new File([blob], fname, { type: 'image/png' })] })) {
-          await navigator.share({ title: `Struk ${tx.invoiceNo}`, files: [new File([blob], fname, { type: 'image/png' })] });
-        } else {
-          const url = URL.createObjectURL(blob);
-          Object.assign(document.createElement('a'), { href: url, download: fname }).click();
-          setTimeout(() => URL.revokeObjectURL(url), 2000);
-          window.showToast('PNG tersimpan!', 'success');
-        }
-      } catch (err) { console.error('[png]', err); window.showToast('Gagal buat PNG', 'error'); }
-      finally { btn.textContent = '🖼️ PNG / Share'; btn.disabled = false; }
+    // WhatsApp with image attachment on mobile / clipboard on PC
+    document.getElementById('btn-td-whatsapp')?.addEventListener('click', () => {
+      shareReceiptViaWhatsApp(tx);
+    });
+
+    // BT App with offline RawBT auto-fallback
+    document.getElementById('btn-td-btapp')?.addEventListener('click', () => {
+      launchBTApp(tx);
+    });
+
+    // Precision unclipped PNG export / share
+    document.getElementById('btn-save-png')?.addEventListener('click', () => {
+      shareReceiptPNG(tx);
     });
   }, 0);
 };

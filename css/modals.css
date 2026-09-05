@@ -633,12 +633,17 @@
   color: #111;
   font-family: 'Courier New', Courier, monospace;
   font-size: 12px;
-  padding: var(--space-4);
+  padding: var(--space-3);
   border-radius: var(--radius-md);
   border: 1.5px solid var(--border-default);
-  max-height: 55vh;
+  max-height: 52vh;
   overflow-y: auto;
-  line-height: 1.65;
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
+.receipt-preview .thermal-receipt {
+  max-width: 100%;
 }
 
 .receipt-preview .separator {

@@ -12,6 +12,9 @@ import {
   getPrintSchemeUrl,
   getRawBTSchemeUrl,
   getWhatsAppReceiptUrl,
+  shareReceiptViaWhatsApp,
+  shareReceiptPNG,
+  launchBTApp,
   printThermalDirect,
   printViaWebBluetooth,
   printViaWebUSB
@@ -493,18 +496,21 @@ const showSuccessOverlay = (txData) => {
       <button class="btn btn--success" id="btn-print-direct" style="flex:1;min-width:150px;font-weight:700;box-shadow:0 4px 12px rgba(16,185,129,0.3)">
         🖨️ Cetak Struk (${paperSize})
       </button>
-      <a class="btn btn--secondary" href="${getWhatsAppReceiptUrl(txData)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;font-size:12px;display:flex;align-items:center;gap:4px;background:#dcfce7;border:1.5px solid #86efac;color:#166534;font-weight:700">
+      <button class="btn btn--secondary" id="btn-mo-png" style="font-size:12px">
+        🖼️ PNG / Share
+      </button>
+      <button class="btn btn--secondary" id="btn-mo-whatsapp" style="font-size:12px;display:flex;align-items:center;gap:4px;background:#dcfce7;border:1.5px solid #86efac;color:#166534;font-weight:700">
         💬 WhatsApp
-      </a>
+      </button>
       <button class="btn btn--secondary" id="btn-print-ble" style="font-size:12px;display:flex;align-items:center;gap:4px">
         📲 Web BLE
       </button>
       <button class="btn btn--secondary" id="btn-print-usb" style="font-size:12px;display:flex;align-items:center;gap:4px">
-        🔌 WebUSB
+        🔌 USB
       </button>
-      <a class="btn btn--secondary" href="${printUrl}" style="text-decoration:none;font-size:12px;display:flex;align-items:center;gap:4px">
+      <button class="btn btn--secondary" id="btn-mo-btapp" style="font-size:12px;display:flex;align-items:center;gap:4px">
         🌐 BT App
-      </a>
+      </button>
       <a class="btn btn--secondary" href="${rawbtUrl}" style="text-decoration:none;font-size:12px;display:flex;align-items:center;gap:4px">
         ⚡ RawBT
       </a>
@@ -539,6 +545,16 @@ const showSuccessOverlay = (txData) => {
     printThermalDirect(txData);
   });
 
+  // WhatsApp with image attachment on mobile / clipboard on PC
+  document.getElementById('btn-mo-whatsapp')?.addEventListener('click', () => {
+    shareReceiptViaWhatsApp(txData);
+  });
+
+  // Precision unclipped PNG export / share
+  document.getElementById('btn-mo-png')?.addEventListener('click', () => {
+    shareReceiptPNG(txData);
+  });
+
   // Web Bluetooth
   document.getElementById('btn-print-ble')?.addEventListener('click', async () => {
     try {
@@ -551,16 +567,20 @@ const showSuccessOverlay = (txData) => {
     }
   });
 
-  // WebUSB
+  // WebUSB (with auto-system print fallback)
   document.getElementById('btn-print-usb')?.addEventListener('click', async () => {
     try {
       window.showToast('Menghubungkan ke printer USB...', 'info');
       await printViaWebUSB(txData);
-      window.showToast('Struk terkirim ke printer USB!', 'success');
     } catch (err) {
       console.warn('[usb-print]', err);
       window.showToast(err.message || 'Gagal koneksi WebUSB', 'error');
     }
+  });
+
+  // BT App with offline RawBT auto-fallback
+  document.getElementById('btn-mo-btapp')?.addEventListener('click', () => {
+    launchBTApp(txData);
   });
 
   document.getElementById('btn-new-tx')?.addEventListener('click', () => {

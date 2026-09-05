@@ -60,13 +60,10 @@ export const getRawBTSchemeUrl = (txData) => {
 };
 
 /**
- * Generate WhatsApp Text Invoice Link (wa.me)
+ * Generate formatted plain-text receipt for WhatsApp message
  */
-export const getWhatsAppReceiptUrl = (txData, targetPhone = '') => {
+export const getWhatsAppReceiptText = (txData) => {
   const s = store.state.settings || {};
-  const phone = (targetPhone || txData.customerPhone || '').replace(/\D/g, '');
-  const cleanPhone = phone.startsWith('08') ? '62' + phone.slice(1) : (phone.startsWith('8') ? '62' + phone : phone);
-  
   let msg = `*STRUK PEMBELIAN — ${s.shopName || 'BLUE MOUNTAIN'}*\n`;
   msg += `--------------------------------\n`;
   msg += `No. Invoice : ${txData.invoiceNo || '-'}\n`;
@@ -99,10 +96,21 @@ export const getWhatsAppReceiptUrl = (txData, targetPhone = '') => {
   }
 
   msg += `--------------------------------\n`;
-  msg += `Terima kasih atas kunjungan Anda!\n`;
+  msg += `Terima kasih sudah berbelanja!\n`;
+  msg += `BLUE MOUNTAIN REFILLING STATION\n`;
   if (s.shopAddress) msg += `${s.shopAddress}\n`;
   if (s.shopPhone)   msg += `Telp: ${s.shopPhone}\n`;
 
+  return msg;
+};
+
+/**
+ * Generate WhatsApp Text Invoice Link (wa.me)
+ */
+export const getWhatsAppReceiptUrl = (txData, targetPhone = '') => {
+  const phone = (targetPhone || txData.customerPhone || '').replace(/\D/g, '');
+  const cleanPhone = phone.startsWith('08') ? '62' + phone.slice(1) : (phone.startsWith('8') ? '62' + phone : phone);
+  const msg = getWhatsAppReceiptText(txData);
   const encoded = encodeURIComponent(msg);
   return cleanPhone ? `https://wa.me/${cleanPhone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
 };
@@ -481,6 +489,146 @@ export const buildESCPOSBuffer = (txData, paperSize = null) => {
 };
 
 /**
+ * Render an unclipped, razor-sharp 3x resolution thermal receipt PNG Blob
+ * Works across HP, Tablet, and Desktop without clipping or scrollbar truncation
+ */
+export const generateReceiptImageBlob = async (txData) => {
+  const { default: html2canvas } = await import('html2canvas');
+
+  // Dedicated off-screen container with NO scroll or viewport height limitations
+  const offscreen = document.createElement('div');
+  offscreen.style.position = 'fixed';
+  offscreen.style.left = '-9999px';
+  offscreen.style.top = '0';
+  offscreen.style.width = '240px';
+  offscreen.style.maxHeight = 'none';
+  offscreen.style.overflow = 'visible';
+  offscreen.style.background = '#ffffff';
+  offscreen.style.padding = '10px 8px';
+  offscreen.style.boxSizing = 'border-box';
+  offscreen.style.zIndex = '-9999';
+
+  offscreen.innerHTML = getReceiptPreviewHTML(txData, '58mm');
+  document.body.appendChild(offscreen);
+
+  try {
+    const canvas = await html2canvas(offscreen, {
+      backgroundColor: '#ffffff',
+      scale: 3, // 300 DPI razor-sharp print quality
+      useCORS: true,
+      logging: false,
+      windowWidth: 320,
+    });
+
+    return await new Promise((resolve, reject) => {
+      canvas.toBlob((b) => {
+        if (b) resolve(b);
+        else reject(new Error('Gagal membuat blob gambar'));
+      }, 'image/png', 1.0);
+    });
+  } finally {
+    offscreen.remove();
+  }
+};
+
+/**
+ * Share receipt image + formatted text to WhatsApp
+ * Mobile: Native Web Share with PNG file attachment
+ * Desktop: Copies PNG to clipboard and opens WhatsApp Web
+ */
+export const shareReceiptViaWhatsApp = async (txData) => {
+  if (window.showToast) window.showToast('Menyiapkan gambar struk WhatsApp...', 'info');
+  try {
+    const blob = await generateReceiptImageBlob(txData);
+    const fname = `Struk-${txData.invoiceNo || Date.now()}.png`;
+    const file = new File([blob], fname, { type: 'image/png' });
+    const textCaption = getWhatsAppReceiptText(txData);
+
+    // If device can share file directly to WhatsApp:
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        title: `Struk ${txData.invoiceNo || ''}`,
+        text: textCaption,
+        files: [file],
+      });
+      if (window.showToast) window.showToast('Struk gambar berhasil dibagikan!', 'success');
+      return;
+    }
+
+    // On Desktop PC (where navigator.share file is unsupported in Windows Chrome):
+    // Copy image directly to Clipboard so user can Ctrl+V in WhatsApp Web
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        if (window.showToast) window.showToast('📋 Gambar struk telah disalin ke clipboard! Tempel (Ctrl+V) di chat WhatsApp.', 'success');
+      }
+    } catch (clipErr) {
+      console.warn('[clipboard-write]', clipErr);
+    }
+
+    // Open WhatsApp Web with prefilled message
+    const waUrl = getWhatsAppReceiptUrl(txData);
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+  } catch (err) {
+    console.error('[share-whatsapp]', err);
+    const waUrl = getWhatsAppReceiptUrl(txData);
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+  }
+};
+
+/**
+ * Export unclipped PNG receipt image
+ */
+export const shareReceiptPNG = async (txData) => {
+  if (window.showToast) window.showToast('Membuat PNG struk presisi...', 'info');
+  try {
+    const blob = await generateReceiptImageBlob(txData);
+    const fname = `Struk-${txData.invoiceNo || Date.now()}.png`;
+    const file = new File([blob], fname, { type: 'image/png' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        title: `Struk ${txData.invoiceNo || ''}`,
+        files: [file],
+      });
+      if (window.showToast) window.showToast('Struk berhasil dibagikan!', 'success');
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fname;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+      if (window.showToast) window.showToast('PNG struk berhasil disimpan!', 'success');
+    }
+  } catch (err) {
+    console.error('[share-png]', err);
+    if (window.showToast) window.showToast('Gagal membuat PNG struk', 'error');
+  }
+};
+
+/**
+ * Launch BT App with smart offline RawBT fallback
+ */
+export const launchBTApp = (txData) => {
+  const settings = store.state.settings || {};
+  if (settings.printerUrl && !settings.printerUrl.includes('receipt-data.html')) {
+    window.location.href = `my.bluetoothprint.scheme://${settings.printerUrl}`;
+  } else {
+    // Bluetooth Print App requires an HTTP endpoint serving pure JSON.
+    // RawBT works 100% offline with zero server required by passing data in URI.
+    if (window.showToast) {
+      window.showToast('BT App perlu server JSON. Mengalihkan ke RawBT (cetak langsung offline)...', 'info');
+    }
+    setTimeout(() => {
+      window.location.href = getRawBTSchemeUrl(txData);
+    }, 800);
+  }
+};
+
+/**
  * Direct Web Bluetooth ESC/POS Direct Print (Zero App Required)
  */
 export const printViaWebBluetooth = async (txData) => {
@@ -488,73 +636,127 @@ export const printViaWebBluetooth = async (txData) => {
     throw new Error('Web Bluetooth tidak didukung pada browser ini. Gunakan Chrome di Android/PC atau gunakan opsi Cetak Direct.');
   }
 
-  const device = await navigator.bluetooth.requestDevice({
-    filters: [
-      { services: ['000018f0-0000-1000-8000-00805f9b34fb'] },
-      { services: ['e7810a71-73ae-499d-8c15-faa9aef0c3f2'] },
-      { namePrefix: 'MPT' },
-      { namePrefix: 'RP' },
-      { namePrefix: 'POS' },
-      { namePrefix: 'Thermal' },
-      { namePrefix: 'Bluetooth' },
-      { namePrefix: 'Printer' },
-    ],
-    optionalServices: [
-      '000018f0-0000-1000-8000-00805f9b34fb',
-      'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
-      '49535343-fe7d-4ae5-8fa9-9fafd205e455',
-    ]
-  });
+  let device;
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [
+        '000018f0-0000-1000-8000-00805f9b34fb', // Standard POS Printer Service
+        'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // Alternate POS Service
+        '49535343-fe7d-4ae5-8fa9-9fafd205e455', // ISSC Transparent UART
+        '0000ff00-0000-1000-8000-00805f9b34fb', // Custom Thermal POS Service
+        '0000ae30-0000-1000-8000-00805f9b34fb', // Portable POS Service
+        '0000fee7-0000-1000-8000-00805f9b34fb', // Tencent POS Service
+        '0000ffe0-0000-1000-8000-00805f9b34fb', // HM-10 / CC2541 BLE module
+        '0000fff0-0000-1000-8000-00805f9b34fb', // General BLE serial
+      ]
+    });
+  } catch (err) {
+    if (err.name === 'NotFoundError') return; // User closed picker
+    throw err;
+  }
 
   const server = await device.gatt.connect();
-  const services = await server.getPrimaryServices();
   let writeChar = null;
 
-  for (const service of services) {
-    const chars = await service.getCharacteristics();
-    for (const c of chars) {
-      if (c.properties.write || c.properties.writeWithoutResponse) {
-        writeChar = c;
-        break;
+  try {
+    const services = await server.getPrimaryServices();
+    for (const service of services) {
+      try {
+        const chars = await service.getCharacteristics();
+        for (const c of chars) {
+          if (c.properties.write || c.properties.writeWithoutResponse) {
+            writeChar = c;
+            break;
+          }
+        }
+        if (writeChar) break;
+      } catch (_) {}
+    }
+
+    if (!writeChar) {
+      throw new Error('Karakteristik penulisan printer Bluetooth tidak ditemukan.');
+    }
+
+    const data = buildESCPOSBuffer(txData);
+    const chunkSize = 64;
+    for (let i = 0; i < data.length; i += chunkSize) {
+      const chunk = data.slice(i, i + chunkSize);
+      if (writeChar.properties.write) {
+        await writeChar.writeValueWithResponse(chunk);
+      } else {
+        await writeChar.writeValueWithoutResponse(chunk);
       }
     }
-    if (writeChar) break;
-  }
-
-  if (!writeChar) {
-    throw new Error('Karakteristik printer Bluetooth tidak ditemukan.');
-  }
-
-  const data = buildESCPOSBuffer(txData);
-  const chunkSize = 64;
-  for (let i = 0; i < data.length; i += chunkSize) {
-    const chunk = data.slice(i, i + chunkSize);
-    if (writeChar.properties.write) {
-      await writeChar.writeValueWithResponse(chunk);
-    } else {
-      await writeChar.writeValueWithoutResponse(chunk);
+  } finally {
+    if (server?.connected) {
+      server.disconnect();
     }
   }
-
-  await server.disconnect();
 };
 
 /**
- * Direct WebUSB ESC/POS Printing (USB Cable / OTG)
+ * Direct WebUSB ESC/POS Printing (USB Cable / OTG) with graceful OS driver fallback
  */
 export const printViaWebUSB = async (txData) => {
   if (!navigator.usb) {
     throw new Error('WebUSB tidak didukung pada browser ini. Gunakan Chrome/Edge.');
   }
 
-  const device = await navigator.usb.requestDevice({ filters: [] });
-  await device.open();
-  await device.selectConfiguration(1);
-  await device.claimInterface(0);
+  let device;
+  try {
+    device = await navigator.usb.requestDevice({ filters: [] });
+  } catch (err) {
+    if (err.name === 'NotFoundError') return; // User closed picker
+    throw err;
+  }
 
-  const data = buildESCPOSBuffer(txData);
-  await device.transferOut(1, data);
-  await device.close();
+  try {
+    await device.open();
+  } catch (openErr) {
+    console.warn('[WebUSB] Open failed, likely Windows driver conflict:', openErr);
+    // Specifically catch Windows Access denied / SecurityError (kernel driver usbprint.sys owns device)
+    if (openErr.message?.toLowerCase().includes('access denied') || openErr.name === 'SecurityError') {
+      if (window.showToast) {
+        window.showToast('Printer USB Windows dikelola driver sistem. Mengalihkan otomatis ke Cetak Langsung...', 'info');
+      }
+      printThermalDirect(txData);
+      return;
+    }
+    throw openErr;
+  }
+
+  try {
+    if (device.configuration === null) {
+      await device.selectConfiguration(1);
+    }
+
+    let ifaceNum = 0;
+    let endpointOut = 1;
+    const config = device.configuration;
+    if (config?.interfaces) {
+      for (const iface of config.interfaces) {
+        for (const alt of iface.alternates) {
+          const outEp = alt.endpoints.find(e => e.direction === 'out');
+          if (outEp) {
+            ifaceNum = iface.interfaceNumber;
+            endpointOut = outEp.endpointNumber;
+            break;
+          }
+        }
+      }
+    }
+
+    await device.claimInterface(ifaceNum);
+    const data = buildESCPOSBuffer(txData);
+    await device.transferOut(endpointOut, data);
+    await device.close();
+    if (window.showToast) window.showToast('Struk terkirim ke printer USB!', 'success');
+  } catch (transferErr) {
+    console.warn('[WebUSB] Transfer error, falling back to direct print:', transferErr);
+    if (window.showToast) window.showToast('Mengalihkan ke Cetak Langsung via sistem...', 'info');
+    printThermalDirect(txData);
+  }
 };
 
 /**
