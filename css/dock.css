@@ -244,8 +244,18 @@
     inset 0 1px 1.5px rgba(255, 255, 255, 0.6);
 }
 
-/* Hover & Focus Glow Overlay */
-.dock-item:hover .dock-icon,
+/* Hover & Focus Glow Overlay (Only on true hover pointers) */
+@media (hover: hover) {
+  .dock-item:hover .dock-icon {
+    filter: brightness(1.08) contrast(1.04);
+    box-shadow:
+      0 0 0 2px rgba(255, 255, 255, 0.7),
+      0 12px 28px rgba(15, 23, 42, 0.22),
+      0 4px 10px rgba(15, 23, 42, 0.12),
+      inset 0 1px 1.5px rgba(255, 255, 255, 0.9);
+  }
+}
+
 .dock-item:focus-visible .dock-icon {
   filter: brightness(1.08) contrast(1.04);
   box-shadow:
@@ -321,7 +331,12 @@
   border-top-color: rgba(15, 23, 42, 0.82);
 }
 
-.dock-item:hover .dock-label,
+@media (hover: hover) {
+  .dock-item:hover .dock-label {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
 .dock-item:focus-visible .dock-label {
   opacity: 1;
   transform: translateX(-50%) translateY(0) scale(1);

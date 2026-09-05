@@ -304,18 +304,30 @@ const init = async () => {
   };
 
   dockEl?.addEventListener('mousemove', (e) => {
+    if (e.pointerType === 'touch' || isMobile()) return;
     if (!isDragging) {
       calculateWaveTargets(e.clientX);
       startAnim();
     }
   }, { passive: true });
 
-  dockEl?.addEventListener('mouseleave', () => {
+  const returnDockToShelf = () => {
     if (!isDragging) {
       resetTargets();
-      startAnim();
+      current = dockItems.map(() => 1);
+      dockItems.forEach((it) => {
+        it.style.transform = '';
+        it.style.zIndex = '';
+        try { it.blur(); } catch (_) {}
+      });
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
     }
-  });
+  };
+
+  dockEl?.addEventListener('mouseleave', returnDockToShelf);
+  dockEl?.addEventListener('pointerup', returnDockToShelf);
+  dockEl?.addEventListener('touchend', returnDockToShelf);
+  dockEl?.addEventListener('pointercancel', returnDockToShelf);
 
   // ── Precision Slot-Based FLIP Drag Engine ──
   let activeDragItem   = null;
@@ -450,6 +462,16 @@ const init = async () => {
         }
       }
 
+      // CRITICAL: Always blur and reset wave targets so icons NEVER hang in the air after click or tap
+      try { item.blur(); } catch (_) {}
+      resetTargets();
+      current = dockItems.map(() => 1);
+      dockItems.forEach((it) => {
+        it.style.transform = '';
+        it.style.zIndex = '';
+      });
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+
       activeDragItem   = null;
       dragOriginIndex  = -1;
       currentDropIndex = -1;
@@ -461,8 +483,19 @@ const init = async () => {
   });
 
   // Keyboard navigation & accessibility focus preview
+  let isKeyNavigating = false;
+  window.addEventListener('keydown', (e) => {
+    if (['ArrowLeft', 'ArrowRight', 'Tab', 'Home', 'End'].includes(e.key)) {
+      isKeyNavigating = true;
+    }
+  }, { passive: true });
+  window.addEventListener('pointerdown', () => {
+    isKeyNavigating = false;
+  }, { passive: true });
+
   dockItems.forEach((item) => {
     item.addEventListener('focus', () => {
+      if (!isKeyNavigating) return;
       const idx = dockItems.indexOf(item);
       dockItems.forEach((_, i) => {
         const d = Math.abs(i - idx);
@@ -499,6 +532,114 @@ const init = async () => {
       }
     });
   });
+
+  /* ── Touch & Pointer Swipe Navigation (Mobile, Tablet, Touchscreen) ── */
+  const initSwipeNavigation = () => {
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+    let isSwipeCanceled = false;
+
+    const getDockViewOrder = () => {
+      const items = dockEl ? [...dockEl.querySelectorAll('.dock-item')] : [];
+      const order = items.map(it => it.dataset.view).filter(Boolean);
+      return order.length ? order : ['pos', 'products', 'customers', 'transactions', 'reports', 'settings', 'finance'];
+    };
+
+    const isInsideScrollableTableOrModal = (el) => {
+      let curr = el;
+      while (curr && curr !== document.body) {
+        if (curr.classList && (
+          curr.classList.contains('modal-overlay') ||
+          curr.classList.contains('modal') ||
+          curr.classList.contains('dock') ||
+          curr.classList.contains('dock-container')
+        )) {
+          return true;
+        }
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(curr.tagName)) {
+          return true;
+        }
+        // Horizontal scrollable containers (e.g. data tables, cards)
+        if (curr.scrollWidth > curr.clientWidth + 10) {
+          const style = window.getComputedStyle(curr);
+          if (style.overflowX === 'auto' || style.overflowX === 'scroll') {
+            return true;
+          }
+        }
+        curr = curr.parentElement;
+      }
+      return false;
+    };
+
+    window.addEventListener('touchstart', (e) => {
+      if (!e.touches || e.touches.length !== 1) {
+        isSwipeCanceled = true;
+        return;
+      }
+      const t = e.touches[0];
+      touchStartX = t.clientX;
+      touchStartY = t.clientY;
+      touchStartTime = Date.now();
+      isSwipeCanceled = isInsideScrollableTableOrModal(e.target);
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+      if (isSwipeCanceled || !e.touches || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - touchStartX;
+      const dy = t.clientY - touchStartY;
+      // Cancel if vertical scrolling dominates
+      if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 12) {
+        isSwipeCanceled = true;
+      }
+    }, { passive: true });
+
+    window.addEventListener('touchend', (e) => {
+      if (isSwipeCanceled || !e.changedTouches || !e.changedTouches.length) return;
+      const t = e.changedTouches[0];
+      const deltaX = t.clientX - touchStartX;
+      const deltaY = t.clientY - touchStartY;
+      const duration = Date.now() - touchStartTime;
+
+      const minDistance = 50; // pixels
+      const maxDuration = 550; // ms
+
+      if (Math.abs(deltaX) >= minDistance && Math.abs(deltaX) > Math.abs(deltaY) * 1.35 && duration <= maxDuration) {
+        const order = getDockViewOrder();
+        const curView = store.state.currentView || sessionStorage.getItem('activeView') || 'pos';
+        const curIdx = order.indexOf(curView);
+
+        if (curIdx !== -1) {
+          let nextIdx = -1;
+          if (deltaX < 0 && curIdx < order.length - 1) {
+            // Swipe Left -> Next view
+            nextIdx = curIdx + 1;
+          } else if (deltaX > 0 && curIdx > 0) {
+            // Swipe Right -> Previous view
+            nextIdx = curIdx - 1;
+          }
+
+          if (nextIdx !== -1) {
+            const nextView = order[nextIdx];
+            try { navigator.vibrate?.(12); } catch (_) {}
+
+            const targetDockItem = dockEl?.querySelector(`.dock-item[data-view="${nextView}"]`);
+            if (targetDockItem) {
+              targetDockItem.classList.remove('bouncing');
+              void targetDockItem.offsetWidth;
+              targetDockItem.classList.add('bouncing');
+              targetDockItem.addEventListener('animationend', () => targetDockItem.classList.remove('bouncing'), { once: true });
+            }
+
+            navigateTo(nextView);
+          }
+        }
+      }
+    }, { passive: true });
+  };
+
+  initSwipeNavigation();
 
   // Navigate to saved active view or fallback to 'pos' on start
   const savedView = sessionStorage.getItem('activeView') || 'pos';
