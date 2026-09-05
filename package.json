@@ -1,6 +1,6 @@
 {
   "name": "blue-mountain-pos",
-  "version": "3.0.50",
+  "version": "3.0.51",
   "type": "module",
   "private": true,
   "description": "Sistem Kasir POS — Blue Mountain Refilling Station",
@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "verify": "node scripts/verify.js",
-    "test": "npm run verify"
+    "test": "npm run verify",
+    "supabase:admin": "node scripts/supabase-admin.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",

@@ -9,7 +9,7 @@ import store from './store.js';
 
 // Default Supabase Configuration (fadhil2026's Project)
 export const SUPABASE_URL = 'https://wiapnhpdgjbtkblowfig.supabase.co';
-export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndpYXBuaHBkZ2pidGtibG93ZmlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwOTAzNTEsImV4cCI6MjEwMzY2NjM1MX0.eX4w7L3oZ4VZTdv0bd3LrWQOP5EivV7LBCOv3XVoTDc';
+export const SUPABASE_ANON_KEY = 'sb_publishable_BBEJNs18ooZ-IHRPxJtDUA_KiKLcQ-g';
 
 let supabaseClient = null;
 let realtimeChannel = null;

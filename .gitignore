@@ -26,3 +26,9 @@ node_modules
 .DS_Store
 _backup_*.zip
 *.zip
+
+# Secrets & Environment variables (never commit to public repos)
+.env
+.env.*
+!.env.example
+backups/
