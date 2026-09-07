@@ -111,7 +111,7 @@
       40%            { transform: scale(1);   opacity: 1; }
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-CyqDktKq.js"></script>
+  <script type="module" crossorigin src="./assets/index-DfgbjDkk.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/vendor-db-1iEchKay.js">
   <link rel="modulepreload" crossorigin href="./assets/vendor-pdf-DV7uGGo9.js">
   <link rel="stylesheet" crossorigin href="./assets/index-B0ngdSBQ.css">
@@ -152,7 +152,11 @@
         </div>
       </div>
 
-      <div class="topbar__right">
+      <div class="topbar__right" style="display: flex; gap: 10px; align-items: center;">
+        <div class="operator-badge" id="operator-badge" role="button" tabindex="0" title="Klik untuk beralih operator / ganti PIN" style="cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 20px; background: rgba(37, 99, 235, 0.1); border: 1px solid rgba(37, 99, 235, 0.25); font-size: 12px; font-weight: 600; color: #2563eb; transition: all 0.2s;">
+          <span id="operator-icon">👤</span>
+          <span id="operator-name">Operator</span>
+        </div>
         <div class="status-badge" id="status-badge">Sistem Online</div>
       </div>
     </header>
@@ -180,6 +184,9 @@
 
       <!-- Finance View -->
       <section id="view-finance" class="view" aria-label="Keuangan"></section>
+
+      <!-- Users / Staff View -->
+      <section id="view-users" class="view" aria-label="Manajemen Akun"></section>
 
     </main>
 
@@ -227,6 +234,12 @@
           <div class="dock-icon">💰</div>
           <div class="dock-dot"></div>
           <div class="dock-label">Keuangan</div>
+        </div>
+
+        <div class="dock-item" data-view="users" id="dock-users" role="button" tabindex="0" aria-label="Akun Staf">
+          <div class="dock-icon">🔑</div>
+          <div class="dock-dot"></div>
+          <div class="dock-label">Akun Staf</div>
         </div>
 
       </div>

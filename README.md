@@ -3,7 +3,7 @@
 Sistem Kasir POS canggih dengan tampilan macOS-style yang mengadopsi arsitektur **Offline-First Hybrid Sync**. Dirancang khusus untuk toko air isi ulang dengan kehandalan tanpa henti meski koneksi internet terputus.
 
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/fadhil2026/bluemountain/deploy.yml?label=CI%2FCD%20Deploy&style=for-the-badge)
-![Version](https://img.shields.io/badge/version-v3.0.54-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-v3.1.55-blue?style=for-the-badge)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-fadhil2026.github.io%2Fbluemountain-brightgreen?style=for-the-badge)](https://fadhil2026.github.io/bluemountain/)
 
 ## ✨ Fitur Utama

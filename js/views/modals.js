@@ -6,7 +6,8 @@ import QRCode                 from 'qrcode';
 import { generateDynamicQRIS } from '../utils/qris.js';
 import { formatRupiah }       from '../utils/currency.js';
 import { esc }                from '../utils/sanitize.js';
-import { saveTransaction, getAllCustomers, addCustomer, updateCustomer } from '../db.js';
+import { saveTransaction, getAllCustomers, addCustomer, updateCustomer, getAllUsers, seedDefaultUsers } from '../db.js';
+import { verifyPin }           from '../utils/crypto.js';
 import {
   getReceiptPreviewHTML,
   getPrintSchemeUrl,
@@ -589,4 +590,223 @@ const showSuccessOverlay = (txData) => {
   });
 
   setTimeout(() => { if (overlay.parentNode) closeOverlay(); }, 20000);
+};
+
+/* ─────────────────────────────────────────
+   Operator Switch & Login Modal (RBAC PIN)
+   ───────────────────────────────────────── */
+export const openLoginModal = async ({ onLogin = null, forceLock = false } = {}) => {
+  let users = await getAllUsers();
+  if (users.length === 0) {
+    await seedDefaultUsers();
+    users = await getAllUsers();
+  }
+
+  const activeUsers = users.filter(u => u.isActive !== false);
+  if (activeUsers.length === 0) {
+    window.showToast?.('Tidak ada akun operator aktif.', 'error');
+    return;
+  }
+
+  let selectedUserId = activeUsers[0].id;
+  let enteredPin = '';
+
+  const modalId = 'modal-login-operator';
+  const roleColors = {
+    owner: { color: '#8b5cf6', label: '👑 Owner' },
+    supervisor: { color: '#2563eb', label: '⭐ Supervisor' },
+    cashier: { color: '#10b981', label: '👤 Kasir' }
+  };
+
+  const renderModalContent = () => `
+    <div style="padding: 24px; text-align: center;">
+      <div style="font-size: 36px; margin-bottom: 8px;">🔐</div>
+      <h2 style="font-size: 20px; font-weight: 800; margin: 0 0 6px 0; color: var(--text-primary, #1e293b);">
+        ${forceLock ? 'Sistem Terkunci' : 'Beralih Operator Kasir'}
+      </h2>
+      <p style="font-size: 13px; color: var(--text-muted, #64748b); margin: 0 0 20px 0;">
+        Pilih nama operator dan masukkan 4-6 digit PIN masuk Anda
+      </p>
+
+      <!-- Operator Selection Grid -->
+      <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px;">
+        ${activeUsers.map(u => {
+          const isSelected = String(u.id) === String(selectedUserId);
+          const r = roleColors[u.role] || roleColors.cashier;
+          return `
+            <button type="button" class="btn-select-operator" data-id="${u.id}" style="
+              padding: 10px 14px;
+              border-radius: 12px;
+              border: 2px solid ${isSelected ? 'var(--primary, #2563eb)' : 'var(--border, #e2e8f0)'};
+              background: ${isSelected ? 'rgba(37, 99, 235, 0.08)' : 'var(--bg-card, #ffffff)'};
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              transition: all 0.2s;
+            ">
+              <div style="width: 32px; height: 32px; border-radius: 50%; background: ${r.color}; color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;">
+                ${(u.name || 'U').charAt(0).toUpperCase()}
+              </div>
+              <div style="text-align: left;">
+                <div style="font-weight: 700; font-size: 13px; color: var(--text-primary);">${esc(u.name)}</div>
+                <div style="font-size: 11px; color: ${r.color}; font-weight: 600;">${r.label}</div>
+              </div>
+            </button>
+          `;
+        }).join('')}
+      </div>
+
+      <!-- PIN Display -->
+      <div id="pin-display-box" style="margin-bottom: 20px;">
+        <div style="display: flex; justify-content: center; gap: 12px; margin-bottom: 8px;">
+          ${[0, 1, 2, 3, 4, 5].map(i => `
+            <span class="pin-dot" style="
+              width: 16px;
+              height: 16px;
+              border-radius: 50%;
+              border: 2px solid var(--primary, #2563eb);
+              background: ${i < enteredPin.length ? 'var(--primary, #2563eb)' : 'transparent'};
+              display: inline-block;
+              transition: background 0.15s;
+            "></span>
+          `).join('')}
+        </div>
+        <div id="pin-error-msg" style="min-height: 18px; font-size: 12px; font-weight: 600; color: #dc2626;"></div>
+      </div>
+
+      <!-- Numpad -->
+      <div style="max-width: 260px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+        ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `
+          <button type="button" class="btn-numpad" data-val="${n}" style="
+            height: 52px;
+            font-size: 20px;
+            font-weight: 700;
+            border-radius: 12px;
+            border: 1px solid var(--border, #cbd5e1);
+            background: var(--bg-card, #ffffff);
+            color: var(--text-primary, #1e293b);
+            cursor: pointer;
+          ">${n}</button>
+        `).join('')}
+        <button type="button" class="btn-numpad" data-val="clear" style="
+          height: 52px;
+          font-size: 16px;
+          font-weight: 700;
+          border-radius: 12px;
+          border: 1px solid #fecaca;
+          background: #fff1f2;
+          color: #dc2626;
+          cursor: pointer;
+        ">C</button>
+        <button type="button" class="btn-numpad" data-val="0" style="
+          height: 52px;
+          font-size: 20px;
+          font-weight: 700;
+          border-radius: 12px;
+          border: 1px solid var(--border, #cbd5e1);
+          background: var(--bg-card, #ffffff);
+          color: var(--text-primary, #1e293b);
+          cursor: pointer;
+        ">0</button>
+        <button type="button" class="btn-numpad" data-val="submit" style="
+          height: 52px;
+          font-size: 18px;
+          font-weight: 700;
+          border-radius: 12px;
+          border: none;
+          background: var(--primary, #2563eb);
+          color: white;
+          cursor: pointer;
+        ">✓</button>
+      </div>
+
+      ${!forceLock ? `
+        <div style="margin-top: 20px;">
+          <button type="button" id="btn-cancel-login" style="
+            background: transparent;
+            border: none;
+            color: var(--text-muted, #64748b);
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: underline;
+          ">Tutup / Batal</button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+
+  openModal(renderModalContent(), modalId, 'modal--login');
+
+  const updateDots = () => {
+    const dots = document.querySelectorAll('#pin-display-box .pin-dot');
+    dots.forEach((dot, idx) => {
+      dot.style.background = idx < enteredPin.length ? 'var(--primary, #2563eb)' : 'transparent';
+    });
+  };
+
+  const handleVerify = async () => {
+    const targetUser = activeUsers.find(u => String(u.id) === String(selectedUserId));
+    if (!targetUser) return;
+
+    if (!enteredPin || enteredPin.length < 4) {
+      const err = document.getElementById('pin-error-msg');
+      if (err) err.textContent = 'Masukkan minimal 4 digit PIN';
+      return;
+    }
+
+    const isValid = await verifyPin(enteredPin, targetUser.pinSalt, targetUser.pinHash);
+    if (isValid) {
+      store.login(targetUser);
+      closeModal(modalId);
+      window.showToast?.(`Operator aktif: ${targetUser.name} (${targetUser.role})`, 'success');
+      if (typeof onLogin === 'function') onLogin(targetUser);
+    } else {
+      const err = document.getElementById('pin-error-msg');
+      if (err) err.textContent = 'PIN salah! Silakan coba lagi.';
+      enteredPin = '';
+      updateDots();
+    }
+  };
+
+  const bindEvents = () => {
+    document.querySelectorAll('.btn-select-operator').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedUserId = btn.getAttribute('data-id');
+        enteredPin = '';
+        const container = document.getElementById(modalId);
+        if (container) {
+          container.innerHTML = renderModalContent();
+          bindEvents();
+        }
+      });
+    });
+
+    document.querySelectorAll('.btn-numpad').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.getAttribute('data-val');
+        const err = document.getElementById('pin-error-msg');
+        if (err) err.textContent = '';
+
+        if (val === 'clear') {
+          enteredPin = '';
+          updateDots();
+        } else if (val === 'submit') {
+          handleVerify();
+        } else if (enteredPin.length < 6) {
+          enteredPin += val;
+          updateDots();
+          if (enteredPin.length === 4) {
+            handleVerify();
+          }
+        }
+      });
+    });
+
+    document.getElementById('btn-cancel-login')?.addEventListener('click', () => {
+      closeModal(modalId);
+    });
+  };
+
+  bindEvents();
 };

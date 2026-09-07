@@ -45,7 +45,7 @@ const adminClient = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
   auth: { persistSession: false }
 });
 
-const TABLES = ['products', 'transactions', 'expenses', 'customers'];
+const TABLES = ['products', 'transactions', 'expenses', 'customers', 'app_users'];
 
 const getStatus = async () => {
   console.log(`📡 [Supabase Cloud Status] (${SUPABASE_URL})`);

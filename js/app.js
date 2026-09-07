@@ -2,7 +2,7 @@
  * app.js — Main application bootstrap
  * Blue Mountain Refilling Station POS
  */
-import { openDB, seedDefaultProducts, getSetting } from './db.js';
+import { openDB, seedDefaultProducts, seedDefaultUsers, getSetting, db } from './db.js';
 import store                                         from './store.js';
 import { formatDate, formatTime }                    from './utils/date.js';
 import { initPOS, refreshPOS }                       from './views/pos.js';
@@ -12,6 +12,8 @@ import { initTransactions, renderTransactions }      from './views/transactions.
 import { initReports, renderReports }                from './views/reports.js';
 import { initSettings, renderSettings }              from './views/settings.js';
 import { initFinance, renderFinance }                from './views/finance.js';
+import { initUsers, renderUsers }                    from './views/users.js';
+import { openLoginModal }                            from './views/modals.js';
 import { syncInitialData, setupRealtimeSubscription } from './supabase.js';
 import { esc }                                        from './utils/sanitize.js';
 
@@ -83,6 +85,7 @@ const VIEWS = {
   reports:      { init: initReports,      refresh: renderReports },
   settings:     { init: initSettings,     refresh: renderSettings },
   finance:      { init: initFinance,      refresh: renderFinance },
+  users:        { init: initUsers,        refresh: renderUsers },
 };
 
 const _initialized = new Set();
@@ -90,6 +93,13 @@ const _initialized = new Set();
 const navigateTo = async (viewName) => {
   const handler = VIEWS[viewName];
   if (!handler) return;
+
+  // RBAC Access Restriction Check
+  if (!store.canAccess(viewName)) {
+    window.showToast('Akses dibatasi untuk peran Anda. Silakan hubungi Owner/Supervisor.', 'warning', 'Peran Terbatas');
+    openLoginModal({ onLogin: () => navigateTo(viewName) });
+    return;
+  }
 
   // Set active dock item
   document.querySelectorAll('.dock-item').forEach(item => {
@@ -161,17 +171,66 @@ document.addEventListener('focusin', (e) => {
   }
 });
 
+/* ── Operator Badge & RBAC UI ── */
+const updateOperatorUI = (user) => {
+  const badge = document.getElementById('operator-badge');
+  const nameEl = document.getElementById('operator-name');
+  const iconEl = document.getElementById('operator-icon');
+  if (!badge || !nameEl) return;
+
+  if (user) {
+    nameEl.textContent = `${user.name} (${user.role})`;
+    iconEl.textContent = user.role === 'owner' ? '👑' : (user.role === 'supervisor' ? '⭐' : '👤');
+    badge.style.display = 'flex';
+    badge.style.color = user.role === 'owner' ? '#8b5cf6' : (user.role === 'supervisor' ? '#2563eb' : '#10b981');
+    badge.style.background = user.role === 'owner' ? 'rgba(139, 92, 246, 0.12)' : (user.role === 'supervisor' ? 'rgba(37, 99, 235, 0.12)' : 'rgba(16, 185, 129, 0.12)');
+    badge.style.borderColor = user.role === 'owner' ? 'rgba(139, 92, 246, 0.3)' : (user.role === 'supervisor' ? 'rgba(37, 99, 235, 0.3)' : 'rgba(16, 185, 129, 0.3)');
+  } else {
+    nameEl.textContent = 'Belum Masuk';
+    iconEl.textContent = '🔒';
+  }
+
+  const dockUsers = document.getElementById('dock-users');
+  if (dockUsers) {
+    dockUsers.style.display = user && user.role === 'owner' ? 'flex' : 'none';
+  }
+};
+
+store.on('auth:change', updateOperatorUI);
+
 /* ── Main Init ── */
 const init = async () => {
   try {
     // Open DB and seed
     await openDB();
     await seedDefaultProducts();
+    await seedDefaultUsers();
   } catch (err) {
     console.error('[DB] Failed to open database:', err);
     window.showToast('Database gagal dibuka. Coba reload halaman.', 'error', 'Database Error');
     return;
   }
+
+  // Restore operator session or auto-login default owner
+  let session = store.restoreSession();
+  if (!session) {
+    try {
+      const defaultAdmin = await db.users.where('username').equalsIgnoreCase('admin').first();
+      if (defaultAdmin) {
+        store.login(defaultAdmin);
+      }
+    } catch (_) {}
+  }
+  updateOperatorUI(store.state.currentUser);
+
+  // Bind operator badge click
+  document.getElementById('operator-badge')?.addEventListener('click', () => {
+    openLoginModal();
+  });
+
+  window.addEventListener('request-operator-switch', () => {
+    openLoginModal();
+  });
 
   // Load settings from DB
   const settingKeys = [

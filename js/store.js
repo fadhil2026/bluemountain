@@ -13,6 +13,8 @@ const store = {
     customers:        [],
     transactions:     [],
     expenses:         [],
+    users:            [],
+    currentUser:      null,
     currentView:      'pos',
     discount:         0,
     customerName:     '',
@@ -190,6 +192,76 @@ const store = {
   updateSettings(partial) {
     Object.assign(this.state.settings, partial);
     this.emit('settings:change', this.state.settings);
+  },
+
+  // ── Users & RBAC ──
+  setUsers(users) {
+    this.state.users = users;
+    this.emit('users:change', users);
+  },
+
+  addUser(user) {
+    this.state.users = [...this.state.users, user];
+    this.emit('users:change', this.state.users);
+  },
+
+  updateUser(id, patch) {
+    const idx = this.state.users.findIndex(u => String(u.id) === String(id));
+    if (idx >= 0) {
+      this.state.users[idx] = { ...this.state.users[idx], ...patch };
+      this.emit('users:change', this.state.users);
+    }
+  },
+
+  removeUser(id) {
+    this.state.users = this.state.users.filter(u => String(u.id) !== String(id));
+    this.emit('users:change', this.state.users);
+  },
+
+  login(user) {
+    const sessionData = {
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      role: user.role || 'cashier',
+    };
+    this.state.currentUser = sessionData;
+    try {
+      sessionStorage.setItem('bm_active_user', JSON.stringify(sessionData));
+    } catch (_) {}
+    this.emit('auth:change', sessionData);
+  },
+
+  logout() {
+    this.state.currentUser = null;
+    try {
+      sessionStorage.removeItem('bm_active_user');
+    } catch (_) {}
+    this.emit('auth:change', null);
+  },
+
+  restoreSession() {
+    try {
+      const saved = sessionStorage.getItem('bm_active_user');
+      if (saved) {
+        this.state.currentUser = JSON.parse(saved);
+        this.emit('auth:change', this.state.currentUser);
+        return this.state.currentUser;
+      }
+    } catch (_) {}
+    return null;
+  },
+
+  canAccess(viewKey) {
+    const user = this.state.currentUser;
+    if (!user) return false;
+    const role = user.role || 'cashier';
+    if (role === 'owner') return true;
+    if (role === 'supervisor') {
+      return ['pos', 'products', 'customers', 'transactions', 'reports'].includes(viewKey);
+    }
+    // Cashier
+    return ['pos', 'customers', 'transactions'].includes(viewKey);
   },
 };
 

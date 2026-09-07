@@ -13,7 +13,10 @@ import {
   pushExpenseToCloud,
   deleteExpenseFromCloud,
   pushSettingToCloud,
+  pushUserToCloud,
+  deleteUserFromCloud,
 } from './supabase.js';
+import { generateSalt, hashPin } from './utils/crypto.js';
 
 export const db = new Dexie('BlueMountainPOS');
 
@@ -31,6 +34,38 @@ db.version(3).stores({
   settings:     'key',
   expenses:     '++id, dateKey, category',
 });
+
+db.version(4).stores({
+  products:     '++id, category, sku',
+  customers:    '++id, name, phone, category, totalDebt',
+  transactions: '++id, dateKey, paymentStatus, paymentMethod, customerName',
+  settings:     'key',
+  expenses:     '++id, dateKey, category',
+  users:        '++id, username, role, isActive',
+});
+
+// ── Users (RBAC) ──
+export const getAllUsers        = () => db.users.toArray();
+export const getUserById        = (id) => db.users.get(id);
+export const getUserByUsername  = (username) => db.users.where('username').equalsIgnoreCase(String(username).trim()).first();
+export const addUser            = async (u) => {
+  const id = await db.users.add(u);
+  pushUserToCloud({ ...u, id }).catch(() => {});
+  return id;
+};
+export const updateUser         = async (u) => {
+  const res = await db.users.put(u);
+  pushUserToCloud(u).catch(() => {});
+  return res;
+};
+export const deleteUser         = async (id) => {
+  const user = await db.users.get(id);
+  const res = await db.users.delete(id);
+  if (user && user.username) {
+    deleteUserFromCloud(user.username).catch(() => {});
+  }
+  return res;
+};
 
 // ── Customers ──
 export const getAllCustomers = () => db.customers.toArray();
@@ -128,6 +163,26 @@ export const seedDefaultProducts = async () => {
   ]);
 };
 
+// ── Seed Default Users (Owner Admin) ──
+export const seedDefaultUsers = async () => {
+  const count = await db.users.count();
+  if (count > 0) return;
+  const salt = generateSalt();
+  const pinHash = await hashPin('1234', salt);
+  const defaultAdmin = {
+    username: 'admin',
+    name: 'Owner / Administrator',
+    role: 'owner',
+    pinHash,
+    pinSalt: salt,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  const id = await db.users.add(defaultAdmin);
+  pushUserToCloud({ ...defaultAdmin, id }).catch(() => {});
+};
+
 // ── Clear All Data (Robust Reset) ──
 export const clearAllData = async () => {
   await Promise.all([
@@ -136,6 +191,7 @@ export const clearAllData = async () => {
     db.transactions.clear(),
     db.expenses.clear(),
     db.settings.clear(),
+    db.users.clear(),
   ]);
   sessionStorage.clear();
   localStorage.clear();
@@ -143,12 +199,13 @@ export const clearAllData = async () => {
 
 // ── Export Full Backup JSON (Cross-device sync) ──
 export const exportFullBackup = async () => {
-  const [products, customers, transactions, expenses, settings] = await Promise.all([
+  const [products, customers, transactions, expenses, settings, users] = await Promise.all([
     db.products.toArray(),
     db.customers.toArray(),
     db.transactions.toArray(),
     db.expenses.toArray(),
     db.settings.toArray(),
+    db.users.toArray(),
   ]);
 
   const shopSetting = settings.find(s => s.key === 'shopName');
@@ -156,7 +213,7 @@ export const exportFullBackup = async () => {
 
   return {
     app: 'Blue Mountain POS',
-    version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.0.0',
+    version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.1.0',
     exportedAt: new Date().toISOString(),
     shopName,
     data: {
@@ -165,6 +222,7 @@ export const exportFullBackup = async () => {
       transactions,
       expenses,
       settings,
+      users,
     },
     meta: {
       productCount: products.length,
@@ -172,6 +230,7 @@ export const exportFullBackup = async () => {
       transactionCount: transactions.length,
       expenseCount: expenses.length,
       settingCount: settings.length,
+      userCount: users.length,
     },
   };
 };
@@ -187,7 +246,8 @@ export const importFullBackup = async (backupJson, mode = 'replace') => {
     customers = [],
     transactions = [],
     expenses = [],
-    settings = []
+    settings = [],
+    users = []
   } = backupJson.data;
 
   if (mode === 'replace') {
@@ -197,6 +257,7 @@ export const importFullBackup = async (backupJson, mode = 'replace') => {
       db.transactions.clear(),
       db.expenses.clear(),
       db.settings.clear(),
+      db.users.clear(),
     ]);
 
     if (products.length)     await db.products.bulkAdd(products);
@@ -204,12 +265,14 @@ export const importFullBackup = async (backupJson, mode = 'replace') => {
     if (transactions.length) await db.transactions.bulkAdd(transactions);
     if (expenses.length)     await db.expenses.bulkAdd(expenses);
     if (settings.length)     await db.settings.bulkPut(settings);
+    if (users.length)        await db.users.bulkAdd(users);
   } else if (mode === 'merge') {
     if (products.length)     await db.products.bulkPut(products);
     if (customers.length)    await db.customers.bulkPut(customers);
     if (transactions.length) await db.transactions.bulkPut(transactions);
     if (expenses.length)     await db.expenses.bulkPut(expenses);
     if (settings.length)     await db.settings.bulkPut(settings);
+    if (users.length)        await db.users.bulkPut(users);
   }
 
   return {
@@ -218,6 +281,7 @@ export const importFullBackup = async (backupJson, mode = 'replace') => {
     transactions: transactions.length,
     expenses: expenses.length,
     settings: settings.length,
+    users: users.length,
   };
 };
 

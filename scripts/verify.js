@@ -16,9 +16,9 @@ try {
   if (gitCount && gitCount !== '0') {
     const pkgPath = './package.json';
     const pkgData = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-    const parts = (pkgData.version || '3.0.0').split('.');
+    const parts = (pkgData.version || '3.1.0').split('.');
     const major = parts[0] || '3'; // Major (Arsitektur)
-    const minor = parts[1] || '0'; // Minor (Fitur Sedang)
+    const minor = parts[1] || '1'; // Minor (Fitur Sedang)
     const patch = Number(gitCount) + (isDirty ? 1 : 0); // Patch (Revisi Ringan)
     const nextVer = `${major}.${minor}.${patch}`;
 
@@ -49,7 +49,7 @@ try {
       for (const docFile of docFiles) {
         const fullDoc = path.join(docsDir, docFile);
         let docContent = fs.readFileSync(fullDoc, 'utf8');
-        const updated = docContent.replace(/v3\.0\.\d+/g, `v${nextVer}`);
+        const updated = docContent.replace(/v3\.\d+\.\d+/g, `v${nextVer}`);
         if (updated !== docContent) {
           fs.writeFileSync(fullDoc, updated, 'utf8');
           console.log(`  ✓ Sinkronisasi versi dokumen ${docFile} -> v${nextVer}`);

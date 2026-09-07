@@ -3,7 +3,7 @@
  * Supabase PostgreSQL + WebSocket Realtime + Offline Dexie Cache
  */
 import { createClient } from '@supabase/supabase-js';
-import { db, getAllProducts, getAllTransactions, getAllExpenses, getAllCustomers, getSetting, setSetting } from './db.js';
+import { db, getAllProducts, getAllTransactions, getAllExpenses, getAllCustomers, getAllUsers, getSetting, setSetting } from './db.js';
 import { todayKey } from './utils/date.js';
 import store from './store.js';
 
@@ -129,6 +129,19 @@ const formatCustomerForCloud = (c) => ({
   credit_limit: Number(c.creditLimit || c.credit_limit) || 0,
   galon_loaned: Number(c.galonLoaned || c.galon_loaned) || 0,
   notes: c.notes || '',
+  updated_at: new Date().toISOString(),
+});
+
+/**
+ * Normalize user object for Supabase
+ */
+const formatUserForCloud = (u) => ({
+  username: String(u.username || '').toLowerCase().trim(),
+  name: String(u.name || ''),
+  role: String(u.role || 'cashier'),
+  pin_hash: String(u.pinHash || u.pin_hash || ''),
+  pin_salt: String(u.pinSalt || u.pin_salt || ''),
+  is_active: u.isActive !== undefined ? Boolean(u.isActive) : (u.is_active !== undefined ? Boolean(u.is_active) : true),
   updated_at: new Date().toISOString(),
 });
 
@@ -290,6 +303,39 @@ export const syncInitialData = async () => {
       }
     } catch (_) {}
 
+    // 5. Sync Users (2-Way)
+    try {
+      const [localUsers, { data: cloudUsers, error: userErr }] = await Promise.all([
+        getAllUsers ? getAllUsers() : db.users.toArray(),
+        supabase.from('app_users').select('*'),
+      ]);
+
+      if (!userErr && cloudUsers) {
+        const cloudUsernames = new Set(cloudUsers.map(u => String(u.username).toLowerCase()));
+        const unpushedUsers = localUsers.filter(l => !cloudUsernames.has(String(l.username).toLowerCase()));
+        if (unpushedUsers.length > 0) {
+          await supabase.from('app_users').upsert(unpushedUsers.map(formatUserForCloud), { onConflict: 'username' });
+        }
+
+        for (const cu of cloudUsers) {
+          const existing = await db.users.where('username').equalsIgnoreCase(cu.username).first();
+          await db.users.put({
+            id: existing ? existing.id : undefined,
+            username: cu.username,
+            name: cu.name,
+            role: cu.role,
+            pinHash: cu.pin_hash,
+            pinSalt: cu.pin_salt,
+            isActive: cu.is_active,
+            createdAt: cu.created_at,
+            updatedAt: cu.updated_at,
+          });
+        }
+        const freshUsers = await db.users.toArray();
+        store.setUsers?.(freshUsers);
+      }
+    } catch (_) {}
+
     updateSyncBadge('online', '🟢 Cloud Realtime');
   } catch (err) {
     console.warn('[Supabase Sync] Warning during initial sync:', err);
@@ -425,6 +471,33 @@ export const setupRealtimeSubscription = () => {
       const updated = await getAllCustomers();
       store.setCustomers?.(updated);
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'app_users' }, async (payload) => {
+      if (payload.eventType === 'DELETE') {
+        const cu = payload.old;
+        if (cu && cu.username) {
+          const local = await db.users.where('username').equalsIgnoreCase(cu.username).first();
+          if (local) await db.users.delete(local.id);
+        }
+      } else {
+        const cu = payload.new;
+        if (cu && cu.username) {
+          const existing = await db.users.where('username').equalsIgnoreCase(cu.username).first();
+          await db.users.put({
+            id: existing ? existing.id : undefined,
+            username: cu.username,
+            name: cu.name,
+            role: cu.role,
+            pinHash: cu.pin_hash,
+            pinSalt: cu.pin_salt,
+            isActive: cu.is_active,
+            createdAt: cu.created_at,
+            updatedAt: cu.updated_at,
+          });
+        }
+      }
+      const freshUsers = await db.users.toArray();
+      store.setUsers?.(freshUsers);
+    })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         updateSyncBadge('online', '🟢 Cloud Realtime');
@@ -517,3 +590,20 @@ export const pushSettingToCloud = async (key, value) => {
     });
   } catch (_) {}
 };
+
+export const pushUserToCloud = async (user) => {
+  if (!navigator.onLine) return;
+  try {
+    const supabase = getSupabase();
+    await supabase.from('app_users').upsert(formatUserForCloud(user), { onConflict: 'username' });
+  } catch (_) {}
+};
+
+export const deleteUserFromCloud = async (username) => {
+  if (!navigator.onLine) return;
+  try {
+    const supabase = getSupabase();
+    await supabase.from('app_users').delete().eq('username', String(username).toLowerCase().trim());
+  } catch (_) {}
+};
+
