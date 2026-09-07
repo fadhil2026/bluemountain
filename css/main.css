@@ -148,35 +148,38 @@ body::before {
 /* ── Top Bar ── */
 .topbar {
   height: var(--topbar-height);
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--space-5);
+  padding: 0 var(--space-4);
   background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 60%, #f0f4ff 100%);
   border-bottom: 1.5px solid rgba(37,99,235,0.12);
   flex-shrink: 0;
   position: relative;
   z-index: 200;
-  box-shadow: 0 2px 16px rgba(30,58,138,0.1);
+  box-shadow: 0 2px 16px rgba(30,58,138,0.08);
   gap: var(--space-3);
   overflow: hidden;
 }
 
 .topbar__brand {
+  grid-column: 1;
   display: flex;
   align-items: center;
   gap: var(--space-3);
   min-width: 0;
   flex-shrink: 0;
+  justify-self: start;
 }
 
 .topbar__logo {
-  height: calc(var(--topbar-height) - 6px);
+  height: calc(var(--topbar-height) - 10px);
   width: auto;
   max-width: 180px;
   object-fit: contain;
   flex-shrink: 0;
   mix-blend-mode: multiply;
+  display: block;
 }
 
 .topbar__name {
@@ -206,20 +209,17 @@ body::before {
 }
 
 .topbar__center {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   pointer-events: none;
   white-space: nowrap;
-  z-index: 1;
-}
-
-/* Hide center clock on tablets, split-screens, and laptops (< 1080px) to prevent any overlap */
-@media (max-width: 1080px) {
-  .topbar__center {
-    display: none !important;
-  }
+  min-width: 0;
+  justify-self: center;
+  user-select: none;
 }
 
 .topbar__time {
@@ -228,25 +228,31 @@ body::before {
   color: var(--blue-800);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
+  line-height: 1.2;
 }
 
 .topbar__date {
   font-size: var(--text-xs);
   color: var(--blue-500);
+  font-weight: 500;
   margin-top: 1px;
+  line-height: 1.2;
 }
 
 .topbar__right {
+  grid-column: 3;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   flex-shrink: 0;
-  margin-left: auto;
+  min-width: 0;
+  justify-self: end;
   z-index: 2;
 }
 
 .operator-badge {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 5px 12px;
@@ -260,12 +266,22 @@ body::before {
   white-space: nowrap;
   transition: all 0.2s;
   max-width: 220px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.operator-badge #operator-icon {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .operator-badge #operator-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .operator-badge:hover {
@@ -276,6 +292,7 @@ body::before {
 .btn-topbar-auth {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   padding: 5px 12px;
   border-radius: 20px;
@@ -284,6 +301,7 @@ body::before {
   white-space: nowrap;
   cursor: pointer;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 
 .btn-topbar-auth:hover {
@@ -304,7 +322,7 @@ body::before {
 }
 
 .status-badge {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 4px 10px;
@@ -316,6 +334,7 @@ body::before {
   color: var(--blue-700);
   white-space: nowrap;
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .status-badge::before {
@@ -641,12 +660,13 @@ select.input { cursor: pointer; }
 /* ── Mobile: <600px ── */
 @media (max-width: 599px) {
   :root {
-    --topbar-height:  50px;
+    --topbar-height:  48px;
     --dock-height:    70px;
     --dock-icon-size: 44px;
   }
 
   .topbar {
+    grid-template-columns: auto 1fr;
     padding: 0 10px;
     gap: 6px;
   }
@@ -654,19 +674,22 @@ select.input { cursor: pointer; }
     display: none !important;
   }
   .topbar__logo {
-    height: 34px;
-    max-width: 100px;
+    height: 28px;
+    max-width: 95px;
   }
   .topbar__name span {
     display: none;
   }
   .topbar__right {
+    grid-column: 2;
+    justify-self: end;
     gap: 5px;
   }
   .operator-badge {
-    max-width: 115px;
+    max-width: 110px;
     padding: 3px 8px;
     font-size: 11px;
+    gap: 4px;
   }
   .status-badge {
     display: none !important;
@@ -674,6 +697,7 @@ select.input { cursor: pointer; }
   .btn-topbar-auth {
     padding: 4px 8px;
     font-size: 12px;
+    border-radius: 10px;
   }
   .btn-topbar-auth .btn-text {
     display: none; /* Icon-only on mobile */
@@ -706,8 +730,54 @@ select.input { cursor: pointer; }
   }
 }
 
-/* ── Tablet & Small Screens: 600–1080px ── */
-@media (min-width: 600px) and (max-width: 1080px) {
+/* ── Small Tablet & Phablets: 600–767px ── */
+@media (min-width: 600px) and (max-width: 767px) {
+  :root {
+    --topbar-height:  50px;
+    --dock-height:    74px;
+    --dock-icon-size: 46px;
+  }
+
+  .topbar {
+    grid-template-columns: auto 1fr;
+    padding: 0 12px;
+    gap: 8px;
+  }
+  .topbar__center {
+    display: none !important;
+  }
+  .topbar__logo {
+    height: 32px;
+    max-width: 120px;
+  }
+  .topbar__right {
+    grid-column: 2;
+    justify-self: end;
+    gap: 6px;
+  }
+  .operator-badge {
+    max-width: 130px;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+  .btn-topbar-auth {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+  .status-badge {
+    max-width: 110px;
+    padding: 3px 8px;
+    font-size: 10.5px;
+  }
+  .view {
+    padding: var(--space-3);
+    padding-bottom: calc(var(--dock-height) + var(--space-5));
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ── Tablet & Medium Screens: 768–1024px ── */
+@media (min-width: 768px) and (max-width: 1024px) {
   :root {
     --topbar-height:  54px;
     --dock-height:    76px;
@@ -715,31 +785,39 @@ select.input { cursor: pointer; }
   }
 
   .topbar {
+    grid-template-columns: auto 1fr auto;
     padding: 0 var(--space-3);
-    gap: 8px;
+    gap: 10px;
   }
   .topbar__center {
-    display: none !important; /* Eliminate collision with right elements */
+    display: flex;
+  }
+  .topbar__date {
+    display: none; /* Hide date on tablet to keep center lean */
+  }
+  .topbar__time {
+    font-size: 13px;
   }
   .topbar__logo {
-    height: 40px;
+    height: 36px;
     max-width: 140px;
   }
   .topbar__right {
     gap: 6px;
   }
   .operator-badge {
-    max-width: 160px;
+    max-width: 150px;
     padding: 4px 10px;
-    font-size: 11px;
+    font-size: 11.5px;
   }
   .btn-topbar-auth {
     padding: 4px 10px;
-    font-size: 11px;
+    font-size: 11.5px;
   }
   .status-badge {
     padding: 3px 8px;
     font-size: 11px;
+    max-width: 120px;
   }
 
   .view {
@@ -752,12 +830,31 @@ select.input { cursor: pointer; }
 /* ── Landscape mobile (height < 500px) ── */
 @media (max-height: 499px) and (orientation: landscape) {
   :root {
-    --topbar-height:  44px;
-    --dock-height:    60px;
-    --dock-icon-size: 38px;
+    --topbar-height:  42px;
+    --dock-height:    58px;
+    --dock-icon-size: 36px;
   }
 
-  .topbar__date { display: none; }
+  .topbar {
+    grid-template-columns: auto 1fr;
+    padding: 0 10px;
+  }
+  .topbar__center {
+    display: none !important;
+  }
+  .topbar__logo {
+    height: 26px;
+    max-width: 90px;
+  }
+  .operator-badge {
+    max-width: 120px;
+    font-size: 10.5px;
+    padding: 2px 7px;
+  }
+  .btn-topbar-auth {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
   .view {
     padding: var(--space-2) var(--space-3);
     padding-bottom: calc(var(--dock-height) + var(--space-3));
