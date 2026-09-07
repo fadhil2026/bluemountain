@@ -28,6 +28,14 @@ export const initLogin = async () => {
   _isVerifying = false;
   await renderLogin();
   bindGlobalKeyboard();
+
+  // Re-render automatically when users are synchronized from cloud
+  store.on('users:change', () => {
+    const loginView = document.getElementById('view-login');
+    if (loginView && loginView.classList.contains('active')) {
+      renderLogin();
+    }
+  });
 };
 
 /**

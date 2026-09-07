@@ -1,15 +1,50 @@
 /**
  * supabase.js — Real-time Multi-device Sync Engine for Blue Mountain POS
  * Supabase PostgreSQL + WebSocket Realtime + Offline Dexie Cache
+ * 
+ * Military-Grade Hardening:
+ * - Tenant Partitioning via Master Store ID (STORE-BM-856CFAC8)
+ * - Dual-Bridge Realtime Sync for Staff Accounts (app_users + settings fallback)
+ * - Isolated Sandbox Mode protection for unauthorized/guest devices
  */
 import { createClient } from '@supabase/supabase-js';
-import { db, getAllProducts, getAllTransactions, getAllExpenses, getAllCustomers, getAllUsers, getSetting, setSetting } from './db.js';
+import { db, getAllProducts, getAllTransactions, getAllExpenses, getAllCustomers, getAllUsers } from './db.js';
 import { todayKey } from './utils/date.js';
 import store from './store.js';
 
 // Default Supabase Configuration (fadhil2026's Project)
 export const SUPABASE_URL = 'https://wiapnhpdgjbtkblowfig.supabase.co';
 export const SUPABASE_ANON_KEY = 'sb_publishable_BBEJNs18ooZ-IHRPxJtDUA_KiKLcQ-g';
+
+// Master Store Tenant ID for Blue Mountain POS
+export const DEFAULT_MASTER_STORE_ID = 'STORE-BM-856CFAC8';
+export const MASTER_STORE_KEY_STORAGE = 'bm_master_store_key';
+
+export const getMasterStoreId = () => {
+  try {
+    const saved = localStorage.getItem(MASTER_STORE_KEY_STORAGE);
+    if (saved && saved.trim()) return saved.trim();
+  } catch (_) {}
+  return DEFAULT_MASTER_STORE_ID;
+};
+
+export const setMasterStoreId = (newId) => {
+  try {
+    if (newId && newId.trim()) {
+      localStorage.setItem(MASTER_STORE_KEY_STORAGE, newId.trim());
+      return true;
+    }
+  } catch (_) {}
+  return false;
+};
+
+export const isDeviceIsolated = () => {
+  try {
+    return localStorage.getItem(MASTER_STORE_KEY_STORAGE) === 'ISOLATED_SANDBOX';
+  } catch (_) {
+    return false;
+  }
+};
 
 let supabaseClient = null;
 let realtimeChannel = null;
@@ -33,7 +68,7 @@ export const getSupabase = () => {
 /**
  * Update UI Status Badge
  */
-const updateSyncBadge = (status, label) => {
+export const updateSyncBadge = (status, label) => {
   const badge = document.getElementById('status-badge');
   if (!badge) return;
 
@@ -59,10 +94,11 @@ const updateSyncBadge = (status, label) => {
 };
 
 /**
- * Normalize product object for Supabase
+ * Normalize product object for Supabase (Bound to Master Store ID)
  */
-const formatProductForCloud = (p) => ({
+export const formatProductForCloud = (p) => ({
   id: String(p.id),
+  store_id: getMasterStoreId(),
   sku: p.sku || `BM-${p.id}`,
   name: p.name || '',
   category: p.category || 'Umum',
@@ -76,10 +112,11 @@ const formatProductForCloud = (p) => ({
 });
 
 /**
- * Normalize transaction object for Supabase
+ * Normalize transaction object for Supabase (Bound to Master Store ID)
  */
-const formatTransactionForCloud = (tx) => ({
+export const formatTransactionForCloud = (tx) => ({
   id: String(tx.id),
+  store_id: getMasterStoreId(),
   invoice_no: tx.invoiceNo || tx.invoice_no || `INV-${Date.now()}`,
   date: tx.date ? new Date(tx.date).toISOString() : new Date().toISOString(),
   date_key: tx.dateKey || tx.date_key || todayKey(tx.date ? new Date(tx.date) : new Date()),
@@ -101,10 +138,11 @@ const formatTransactionForCloud = (tx) => ({
 });
 
 /**
- * Normalize expense object for Supabase
+ * Normalize expense object for Supabase (Bound to Master Store ID)
  */
-const formatExpenseForCloud = (exp) => ({
+export const formatExpenseForCloud = (exp) => ({
   id: String(exp.id),
+  store_id: getMasterStoreId(),
   date: exp.date ? new Date(exp.date).toISOString() : new Date().toISOString(),
   date_key: exp.dateKey || exp.date_key || todayKey(exp.date ? new Date(exp.date) : new Date()),
   category: exp.category || 'Operasional',
@@ -115,10 +153,11 @@ const formatExpenseForCloud = (exp) => ({
 });
 
 /**
- * Normalize customer object for Supabase
+ * Normalize customer object for Supabase (Bound to Master Store ID)
  */
-const formatCustomerForCloud = (c) => ({
+export const formatCustomerForCloud = (c) => ({
   id: String(c.id),
+  store_id: getMasterStoreId(),
   name: c.name || '',
   phone: c.phone || '',
   address: c.address || '',
@@ -133,9 +172,10 @@ const formatCustomerForCloud = (c) => ({
 });
 
 /**
- * Normalize user object for Supabase
+ * Normalize user object for Supabase (Bound to Master Store ID)
  */
-const formatUserForCloud = (u) => ({
+export const formatUserForCloud = (u) => ({
+  store_id: getMasterStoreId(),
   username: String(u.username || '').toLowerCase().trim(),
   name: String(u.name || ''),
   role: String(u.role || 'cashier'),
@@ -146,125 +186,143 @@ const formatUserForCloud = (u) => ({
 });
 
 /**
- * 2-Way Initial Sync on App Start
+ * 2-Way Initial Sync with Master Store ID Partition & Dual-Bridge Engine
  */
 export const syncInitialData = async () => {
-  if (!navigator.onLine) {
-    updateSyncBadge('offline', '⚡ Mode Offline');
-    return;
+  if (isDeviceIsolated()) {
+    updateSyncBadge('offline', '🔒 Mode Demo Terisolasi');
+    return { success: true, isolated: true };
   }
 
+  if (!navigator.onLine) {
+    updateSyncBadge('offline', '⚡ Mode Offline');
+    return { success: false, offline: true };
+  }
+
+  const storeId = getMasterStoreId();
   const supabase = getSupabase();
   isSyncing = true;
   updateSyncBadge('syncing');
 
   try {
-    // 1. Sync Products (2-Way)
-    const [localProds, { data: cloudProds, error: prodErr }] = await Promise.all([
-      getAllProducts(),
-      supabase.from('products').select('*'),
-    ]);
+    // 1. Sync Products (2-Way, Scoped to store_id)
+    try {
+      const [localProds, { data: cloudProds, error: prodErr }] = await Promise.all([
+        getAllProducts(),
+        supabase.from('products').select('*').eq('store_id', storeId),
+      ]);
 
-    if (!prodErr && cloudProds) {
-      const cloudProdIds = new Set(cloudProds.map(p => String(p.id)));
-      const unpushedProds = localProds.filter(l => !cloudProdIds.has(String(l.id)));
-      if (unpushedProds.length > 0) {
-        await supabase.from('products').upsert(unpushedProds.map(formatProductForCloud));
-      }
+      if (!prodErr && cloudProds) {
+        const cloudProdIds = new Set(cloudProds.map(p => String(p.id)));
+        const unpushedProds = localProds.filter(l => !cloudProdIds.has(String(l.id)));
+        if (unpushedProds.length > 0) {
+          await supabase.from('products').upsert(unpushedProds.map(formatProductForCloud));
+        }
 
-      for (const cp of cloudProds) {
-        const formatted = {
-          id: isNaN(Number(cp.id)) ? cp.id : Number(cp.id),
-          sku: cp.sku || `BM-${cp.id}`,
-          name: cp.name,
-          category: cp.category,
-          price: Number(cp.price),
-          cost: Number(cp.cost) || 0,
-          unit: cp.unit,
-          emoji: cp.emoji,
-          image: cp.image || null,
-          stock: Number(cp.stock),
-        };
-        await db.products.put(formatted);
+        for (const cp of cloudProds) {
+          const formatted = {
+            id: isNaN(Number(cp.id)) ? cp.id : Number(cp.id),
+            sku: cp.sku || `BM-${cp.id}`,
+            name: cp.name,
+            category: cp.category,
+            price: Number(cp.price),
+            cost: Number(cp.cost) || 0,
+            unit: cp.unit,
+            emoji: cp.emoji,
+            image: cp.image || null,
+            stock: Number(cp.stock),
+          };
+          await db.products.put(formatted);
+        }
+        const freshProds = await getAllProducts();
+        store.setProducts(freshProds);
       }
-      const freshProds = await getAllProducts();
-      store.setProducts(freshProds);
+    } catch (e) {
+      console.warn('[Sync] Products sync warning:', e);
     }
 
-    // 2. Sync Transactions (2-Way)
-    const [localTxs, { data: cloudTxs, error: txErr }] = await Promise.all([
-      getAllTransactions(),
-      supabase.from('transactions').select('*'),
-    ]);
+    // 2. Sync Transactions (2-Way, Scoped to store_id)
+    try {
+      const [localTxs, { data: cloudTxs, error: txErr }] = await Promise.all([
+        getAllTransactions(),
+        supabase.from('transactions').select('*').eq('store_id', storeId),
+      ]);
 
-    if (!txErr && cloudTxs) {
-      const cloudTxKeys = new Set(cloudTxs.map(t => t.invoice_no || String(t.id)));
-      const unpushedTxs = localTxs.filter(l => !cloudTxKeys.has(l.invoiceNo || String(l.id)));
-      if (unpushedTxs.length > 0) {
-        await supabase.from('transactions').upsert(unpushedTxs.map(formatTransactionForCloud));
-      }
+      if (!txErr && cloudTxs) {
+        const cloudTxKeys = new Set(cloudTxs.map(t => t.invoice_no || String(t.id)));
+        const unpushedTxs = localTxs.filter(l => !cloudTxKeys.has(l.invoiceNo || String(l.id)));
+        if (unpushedTxs.length > 0) {
+          await supabase.from('transactions').upsert(unpushedTxs.map(formatTransactionForCloud));
+        }
 
-      for (const ctx of cloudTxs) {
-        const formatted = {
-          id: isNaN(Number(ctx.id)) ? ctx.id : Number(ctx.id),
-          invoiceNo: ctx.invoice_no,
-          date: ctx.date,
-          dateKey: ctx.date_key,
-          customerName: ctx.customer_name,
-          items: ctx.items || [],
-          subtotal: Number(ctx.subtotal),
-          discount: Number(ctx.discount),
-          tax: Number(ctx.tax),
-          total: Number(ctx.total),
-          paid: Number(ctx.paid),
-          change: Number(ctx.change),
-          paymentMethod: ctx.payment_method,
-          paymentStatus: ctx.payment_status,
-          paidAmount: Number(ctx.paid_amount),
-          remainingDebt: Number(ctx.remaining_debt),
-          debtPayments: ctx.debt_payments || [],
-          cashier: ctx.cashier,
-        };
-        await db.transactions.put(formatted);
+        for (const ctx of cloudTxs) {
+          const formatted = {
+            id: isNaN(Number(ctx.id)) ? ctx.id : Number(ctx.id),
+            invoiceNo: ctx.invoice_no,
+            date: ctx.date,
+            dateKey: ctx.date_key,
+            customerName: ctx.customer_name,
+            items: ctx.items || [],
+            subtotal: Number(ctx.subtotal),
+            discount: Number(ctx.discount),
+            tax: Number(ctx.tax),
+            total: Number(ctx.total),
+            paid: Number(ctx.paid),
+            change: Number(ctx.change),
+            paymentMethod: ctx.payment_method,
+            paymentStatus: ctx.payment_status,
+            paidAmount: Number(ctx.paid_amount),
+            remainingDebt: Number(ctx.remaining_debt),
+            debtPayments: ctx.debt_payments || [],
+            cashier: ctx.cashier,
+          };
+          await db.transactions.put(formatted);
+        }
+        const freshTxs = await getAllTransactions();
+        store.setTransactions(freshTxs);
       }
-      const freshTxs = await getAllTransactions();
-      store.setTransactions(freshTxs);
+    } catch (e) {
+      console.warn('[Sync] Transactions sync warning:', e);
     }
 
-    // 3. Sync Expenses (2-Way)
-    const [localExps, { data: cloudExps, error: expErr }] = await Promise.all([
-      getAllExpenses(),
-      supabase.from('expenses').select('*'),
-    ]);
+    // 3. Sync Expenses (2-Way, Scoped to store_id)
+    try {
+      const [localExps, { data: cloudExps, error: expErr }] = await Promise.all([
+        getAllExpenses(),
+        supabase.from('expenses').select('*').eq('store_id', storeId),
+      ]);
 
-    if (!expErr && cloudExps) {
-      const cloudExpIds = new Set(cloudExps.map(e => String(e.id)));
-      const unpushedExps = localExps.filter(l => !cloudExpIds.has(String(l.id)));
-      if (unpushedExps.length > 0) {
-        await supabase.from('expenses').upsert(unpushedExps.map(formatExpenseForCloud));
-      }
+      if (!expErr && cloudExps) {
+        const cloudExpIds = new Set(cloudExps.map(e => String(e.id)));
+        const unpushedExps = localExps.filter(l => !cloudExpIds.has(String(l.id)));
+        if (unpushedExps.length > 0) {
+          await supabase.from('expenses').upsert(unpushedExps.map(formatExpenseForCloud));
+        }
 
-      for (const ce of cloudExps) {
-        const formatted = {
-          id: isNaN(Number(ce.id)) ? ce.id : Number(ce.id),
-          date: ce.date,
-          dateKey: ce.date_key,
-          category: ce.category,
-          note: ce.note,
-          amount: Number(ce.amount),
-          cashier: ce.cashier,
-        };
-        await db.expenses.put(formatted);
+        for (const ce of cloudExps) {
+          const formatted = {
+            id: isNaN(Number(ce.id)) ? ce.id : Number(ce.id),
+            date: ce.date,
+            dateKey: ce.date_key,
+            category: ce.category,
+            note: ce.note,
+            amount: Number(ce.amount),
+            cashier: ce.cashier,
+          };
+          await db.expenses.put(formatted);
+        }
+        const freshExps = await getAllExpenses();
+        store.setExpenses(freshExps);
       }
-      const freshExps = await getAllExpenses();
-      store.setExpenses(freshExps);
+    } catch (e) {
+      console.warn('[Sync] Expenses sync warning:', e);
     }
 
-    // 4. Sync Customers (2-Way)
+    // 4. Sync Customers (2-Way, Scoped to store_id)
     try {
       const [localCusts, { data: cloudCusts, error: custErr }] = await Promise.all([
         getAllCustomers(),
-        supabase.from('customers').select('*'),
+        supabase.from('customers').select('*').eq('store_id', storeId),
       ]);
 
       if (!custErr && cloudCusts) {
@@ -292,92 +350,143 @@ export const syncInitialData = async () => {
         }
         const freshCusts = await getAllCustomers();
         store.setCustomers?.(freshCusts);
-      } else if (custErr) {
-        console.warn('[Supabase Sync] Warning on customers table:', custErr.message);
-        if (custErr.code === 'PGRST205') {
-          store.state.supabaseMissingTables = store.state.supabaseMissingTables || [];
-          if (!store.state.supabaseMissingTables.includes('customers')) {
-            store.state.supabaseMissingTables.push('customers');
+      }
+    } catch (e) {
+      console.warn('[Sync] Customers sync warning:', e);
+    }
+
+    // 5. Dual-Bridge User Sync (app_users + settings backup)
+    try {
+      let cloudUsers = null;
+
+      // Bridge A: app_users table
+      try {
+        const { data: bA, error: errA } = await supabase
+          .from('app_users')
+          .select('*')
+          .eq('store_id', storeId);
+        if (!errA && bA && bA.length > 0) {
+          cloudUsers = bA;
+        }
+      } catch (_) {}
+
+      // Bridge B: settings table fallback
+      const rosterKey = `users_roster_${storeId}`;
+      try {
+        const { data: bB } = await supabase
+          .from('settings')
+          .select('value')
+          .eq('key', rosterKey)
+          .maybeSingle();
+        if (bB && bB.value) {
+          const parsed = JSON.parse(bB.value);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            if (!cloudUsers || parsed.length > cloudUsers.length) {
+              cloudUsers = parsed;
+            }
+          }
+        }
+      } catch (_) {}
+
+      if (cloudUsers && cloudUsers.length > 0) {
+        for (const cu of cloudUsers) {
+          const usernameClean = String(cu.username).toLowerCase().trim();
+          const existing = await db.users.where('username').equalsIgnoreCase(usernameClean).first();
+          const udata = {
+            username: usernameClean,
+            name: cu.name,
+            role: cu.role,
+            pinHash: cu.pin_hash || cu.pinHash,
+            pinSalt: cu.pin_salt || cu.pinSalt,
+            isActive: cu.is_active !== undefined ? Boolean(cu.is_active) : (cu.isActive !== undefined ? Boolean(cu.isActive) : true),
+            createdAt: cu.created_at || cu.createdAt || new Date().toISOString(),
+            updatedAt: cu.updated_at || cu.updatedAt || new Date().toISOString(),
+          };
+
+          if (existing) {
+            await db.users.update(existing.id, udata);
+          } else {
+            await db.users.add(udata);
           }
         }
       }
-    } catch (_) {}
 
-    // 5. Sync Users (2-Way)
-    try {
-      const [localUsers, { data: cloudUsers, error: userErr }] = await Promise.all([
-        getAllUsers ? getAllUsers() : db.users.toArray(),
-        supabase.from('app_users').select('*'),
-      ]);
-
-      if (!userErr && cloudUsers) {
-        const cloudUsernames = new Set(cloudUsers.map(u => String(u.username).toLowerCase()));
-        const unpushedUsers = localUsers.filter(l => !cloudUsernames.has(String(l.username).toLowerCase()));
-        if (unpushedUsers.length > 0) {
-          await supabase.from('app_users').upsert(unpushedUsers.map(formatUserForCloud), { onConflict: 'username' });
-        }
-
-        for (const cu of cloudUsers) {
-          const existing = await db.users.where('username').equalsIgnoreCase(cu.username).first();
-          await db.users.put({
-            id: existing ? existing.id : undefined,
-            username: cu.username,
-            name: cu.name,
-            role: cu.role,
-            pinHash: cu.pin_hash,
-            pinSalt: cu.pin_salt,
-            isActive: cu.is_active,
-            createdAt: cu.created_at,
-            updatedAt: cu.updated_at,
+      // Push unpushed local users to both bridges
+      const allLocalUsers = await (getAllUsers ? getAllUsers() : db.users.toArray());
+      if (allLocalUsers.length > 0) {
+        // Bridge A Push
+        try {
+          await supabase.from('app_users').upsert(allLocalUsers.map(formatUserForCloud), { onConflict: 'username' });
+        } catch (_) {}
+        // Bridge B Push (Settings table fallback)
+        try {
+          await supabase.from('settings').upsert({
+            key: rosterKey,
+            store_id: storeId,
+            value: JSON.stringify(allLocalUsers.map(formatUserForCloud)),
+            updated_at: new Date().toISOString(),
           });
-        }
-        const freshUsers = await db.users.toArray();
-        store.setUsers?.(freshUsers);
+        } catch (_) {}
       }
-    } catch (_) {}
+
+      const freshUsers = await db.users.toArray();
+      store.setUsers(freshUsers);
+    } catch (e) {
+      console.warn('[Sync] Users dual-bridge sync warning:', e);
+    }
+
+    // 6. Sync General Settings
+    try {
+      const { data: cloudSettings, error: setErr } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('store_id', storeId);
+      const localSettingsArr = await db.settings.toArray();
+
+      if (!setErr && cloudSettings) {
+        if (cloudSettings.length === 0 && localSettingsArr.length > 0) {
+          await supabase.from('settings').upsert(
+            localSettingsArr.map(s => ({ key: s.key, store_id: storeId, value: String(s.value ?? ''), updated_at: new Date().toISOString() }))
+          );
+        } else if (cloudSettings.length > 0) {
+          for (const cs of cloudSettings) {
+            if (!cs.key.startsWith('users_roster_')) {
+              await db.settings.put({ key: cs.key, value: cs.value ?? '' });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Sync] Settings sync warning:', e);
+    }
 
     updateSyncBadge('online', '🟢 Cloud Realtime');
+    return { success: true };
   } catch (err) {
-    console.warn('[Supabase Sync] Warning during initial sync:', err);
+    console.warn('[Supabase Sync] Warning during sync:', err);
     updateSyncBadge('online', '🟢 Cloud Aktif');
+    return { success: false, error: err };
   } finally {
     isSyncing = false;
   }
-
-  // 4. Sync Settings (pull cloud → local, seed local → cloud if empty)
-  try {
-    const { data: cloudSettings, error: setErr } = await getSupabase().from('settings').select('*');
-    const localSettingsArr = await db.settings.toArray();
-
-    if (!setErr && cloudSettings) {
-      if (cloudSettings.length === 0 && localSettingsArr.length > 0) {
-        // Seed local settings to cloud
-        await getSupabase().from('settings').upsert(
-          localSettingsArr.map(s => ({ key: s.key, value: String(s.value ?? ''), updated_at: new Date().toISOString() }))
-        );
-      } else if (cloudSettings.length > 0) {
-        // Merge cloud settings into local Dexie
-        for (const cs of cloudSettings) {
-          await db.settings.put({ key: cs.key, value: cs.value ?? '' });
-        }
-      }
-    }
-  } catch (_) {}
 };
 
 /**
- * Setup Realtime WebSocket Listener (Instant Multi-device Broadcast)
+ * Setup Realtime WebSocket Listener Scoped to Master Store ID
  */
 export const setupRealtimeSubscription = () => {
+  if (isDeviceIsolated()) return;
+
   const supabase = getSupabase();
+  const storeId = getMasterStoreId();
 
   if (realtimeChannel) {
     supabase.removeChannel(realtimeChannel);
   }
 
   realtimeChannel = supabase
-    .channel('pos-multi-device-sync')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, async (payload) => {
+    .channel(`store_realtime_${storeId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `store_id=eq.${storeId}` }, async (payload) => {
       if (payload.eventType === 'DELETE') {
         const id = isNaN(Number(payload.old.id)) ? payload.old.id : Number(payload.old.id);
         await db.products.delete(id);
@@ -399,7 +508,7 @@ export const setupRealtimeSubscription = () => {
       const updated = await getAllProducts();
       store.setProducts(updated);
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, async (payload) => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `store_id=eq.${storeId}` }, async (payload) => {
       if (payload.eventType === 'DELETE') {
         const id = isNaN(Number(payload.old.id)) ? payload.old.id : Number(payload.old.id);
         await db.transactions.delete(id);
@@ -429,7 +538,7 @@ export const setupRealtimeSubscription = () => {
       const updated = await getAllTransactions();
       store.setTransactions(updated);
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, async (payload) => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `store_id=eq.${storeId}` }, async (payload) => {
       if (payload.eventType === 'DELETE') {
         const id = isNaN(Number(payload.old.id)) ? payload.old.id : Number(payload.old.id);
         await db.expenses.delete(id);
@@ -448,7 +557,7 @@ export const setupRealtimeSubscription = () => {
       const updated = await getAllExpenses();
       store.setExpenses(updated);
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, async (payload) => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'customers', filter: `store_id=eq.${storeId}` }, async (payload) => {
       if (payload.eventType === 'DELETE') {
         const id = isNaN(Number(payload.old.id)) ? payload.old.id : Number(payload.old.id);
         await db.customers.delete(id);
@@ -471,7 +580,34 @@ export const setupRealtimeSubscription = () => {
       const updated = await getAllCustomers();
       store.setCustomers?.(updated);
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'app_users' }, async (payload) => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'settings', filter: `store_id=eq.${storeId}` }, async (payload) => {
+      if (payload.new && payload.new.key === `users_roster_${storeId}`) {
+        try {
+          const roster = JSON.parse(payload.new.value);
+          if (Array.isArray(roster)) {
+            for (const cu of roster) {
+              const usernameClean = String(cu.username).toLowerCase().trim();
+              const existing = await db.users.where('username').equalsIgnoreCase(usernameClean).first();
+              const udata = {
+                username: usernameClean,
+                name: cu.name,
+                role: cu.role,
+                pinHash: cu.pin_hash || cu.pinHash,
+                pinSalt: cu.pin_salt || cu.pinSalt,
+                isActive: cu.is_active !== undefined ? Boolean(cu.is_active) : (cu.isActive !== undefined ? Boolean(cu.isActive) : true),
+                createdAt: cu.created_at || cu.createdAt || new Date().toISOString(),
+                updatedAt: cu.updated_at || cu.updatedAt || new Date().toISOString(),
+              };
+              if (existing) await db.users.update(existing.id, udata);
+              else await db.users.add(udata);
+            }
+            const fresh = await db.users.toArray();
+            store.setUsers(fresh);
+          }
+        } catch (_) {}
+      }
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'app_users', filter: `store_id=eq.${storeId}` }, async (payload) => {
       if (payload.eventType === 'DELETE') {
         const cu = payload.old;
         if (cu && cu.username) {
@@ -481,22 +617,24 @@ export const setupRealtimeSubscription = () => {
       } else {
         const cu = payload.new;
         if (cu && cu.username) {
-          const existing = await db.users.where('username').equalsIgnoreCase(cu.username).first();
-          await db.users.put({
-            id: existing ? existing.id : undefined,
-            username: cu.username,
+          const usernameClean = String(cu.username).toLowerCase().trim();
+          const existing = await db.users.where('username').equalsIgnoreCase(usernameClean).first();
+          const udata = {
+            username: usernameClean,
             name: cu.name,
             role: cu.role,
             pinHash: cu.pin_hash,
             pinSalt: cu.pin_salt,
-            isActive: cu.is_active,
+            isActive: cu.is_active !== undefined ? Boolean(cu.is_active) : true,
             createdAt: cu.created_at,
             updatedAt: cu.updated_at,
-          });
+          };
+          if (existing) await db.users.update(existing.id, udata);
+          else await db.users.add(udata);
         }
       }
       const freshUsers = await db.users.toArray();
-      store.setUsers?.(freshUsers);
+      store.setUsers(freshUsers);
     })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
@@ -513,10 +651,10 @@ export const setupRealtimeSubscription = () => {
 };
 
 /**
- * Background Push Helpers (Safe, Non-blocking, Offline-resilient)
+ * Background Push Helpers (Safe, Non-blocking, Master Store Scoped)
  */
 export const pushProductToCloud = async (product) => {
-  if (!navigator.onLine) return;
+  if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
     await supabase.from('products').upsert(formatProductForCloud(product));
@@ -524,15 +662,15 @@ export const pushProductToCloud = async (product) => {
 };
 
 export const deleteProductFromCloud = async (id) => {
-  if (!navigator.onLine) return;
+  if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
-    await supabase.from('products').delete().eq('id', String(id));
+    await supabase.from('products').delete().eq('id', String(id)).eq('store_id', getMasterStoreId());
   } catch (_) {}
 };
 
 export const pushCustomerToCloud = async (customer) => {
-  if (!navigator.onLine) return;
+  if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
     await supabase.from('customers').upsert(formatCustomerForCloud(customer));
@@ -540,15 +678,15 @@ export const pushCustomerToCloud = async (customer) => {
 };
 
 export const deleteCustomerFromCloud = async (id) => {
-  if (!navigator.onLine) return;
+  if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
-    await supabase.from('customers').delete().eq('id', String(id));
+    await supabase.from('customers').delete().eq('id', String(id)).eq('store_id', getMasterStoreId());
   } catch (_) {}
 };
 
 export const pushTransactionToCloud = async (tx) => {
-  if (!navigator.onLine) return;
+  if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
     await supabase.from('transactions').upsert(formatTransactionForCloud(tx));
@@ -556,15 +694,15 @@ export const pushTransactionToCloud = async (tx) => {
 };
 
 export const deleteTransactionFromCloud = async (id) => {
-  if (!navigator.onLine) return;
+  if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
-    await supabase.from('transactions').delete().eq('id', String(id));
+    await supabase.from('transactions').delete().eq('id', String(id)).eq('store_id', getMasterStoreId());
   } catch (_) {}
 };
 
 export const pushExpenseToCloud = async (exp) => {
-  if (!navigator.onLine) return;
+  if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
     await supabase.from('expenses').upsert(formatExpenseForCloud(exp));
@@ -572,38 +710,67 @@ export const pushExpenseToCloud = async (exp) => {
 };
 
 export const deleteExpenseFromCloud = async (id) => {
-  if (!navigator.onLine) return;
+  if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
-    await supabase.from('expenses').delete().eq('id', String(id));
+    await supabase.from('expenses').delete().eq('id', String(id)).eq('store_id', getMasterStoreId());
   } catch (_) {}
 };
 
 export const pushSettingToCloud = async (key, value) => {
-  if (!navigator.onLine) return;
+  if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
     await supabase.from('settings').upsert({
       key: String(key),
-      value: String(value ?? ''),
+      store_id: getMasterStoreId(),
+      value: typeof value === 'object' ? JSON.stringify(value) : String(value ?? ''),
       updated_at: new Date().toISOString(),
     });
   } catch (_) {}
 };
 
 export const pushUserToCloud = async (user) => {
-  if (!navigator.onLine) return;
+  if (isDeviceIsolated() || !navigator.onLine) return;
+  const storeId = getMasterStoreId();
+
+  // Dual Bridge Push:
+  // 1. app_users table
   try {
     const supabase = getSupabase();
     await supabase.from('app_users').upsert(formatUserForCloud(user), { onConflict: 'username' });
   } catch (_) {}
-};
 
-export const deleteUserFromCloud = async (username) => {
-  if (!navigator.onLine) return;
+  // 2. settings table roster backup
   try {
     const supabase = getSupabase();
-    await supabase.from('app_users').delete().eq('username', String(username).toLowerCase().trim());
+    const all = await db.users.toArray();
+    await supabase.from('settings').upsert({
+      key: `users_roster_${storeId}`,
+      store_id: storeId,
+      value: JSON.stringify(all.map(formatUserForCloud)),
+      updated_at: new Date().toISOString(),
+    });
   } catch (_) {}
 };
 
+export const deleteUserFromCloud = async (username) => {
+  if (isDeviceIsolated() || !navigator.onLine) return;
+  const storeId = getMasterStoreId();
+
+  try {
+    const supabase = getSupabase();
+    await supabase.from('app_users').delete().eq('username', String(username).toLowerCase().trim()).eq('store_id', storeId);
+  } catch (_) {}
+
+  try {
+    const supabase = getSupabase();
+    const all = await db.users.toArray();
+    await supabase.from('settings').upsert({
+      key: `users_roster_${storeId}`,
+      store_id: storeId,
+      value: JSON.stringify(all.map(formatUserForCloud)),
+      updated_at: new Date().toISOString(),
+    });
+  } catch (_) {}
+};

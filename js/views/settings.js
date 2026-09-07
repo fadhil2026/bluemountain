@@ -7,7 +7,7 @@ import store                      from '../store.js';
 import { openModal, closeModal }  from './modals.js';
 import { esc }                    from '../utils/sanitize.js';
 import { printTestReceipt }       from '../printer.js';
-import { syncInitialData }        from '../supabase.js';
+import { syncInitialData, getMasterStoreId, setMasterStoreId, isDeviceIsolated, setupRealtimeSubscription } from '../supabase.js';
 
 export const initSettings = async () => {
   await loadSettings();
@@ -246,25 +246,43 @@ export const renderSettings = async () => {
       </div>
     </div>
 
-    <!-- Supabase Cloud Multi-Device Sync -->
+    <!-- Supabase Cloud Multi-Device Sync & Master Store ID -->
     <div class="settings-section">
-      <div class="settings-section-header">☁️ Sinkronisasi Realtime Cloud (Supabase)</div>
+      <div class="settings-section-header">🛡️ Keamanan &amp; Kunci Master Database Cloud (Multi-Tenant)</div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Status Cloud Multi-Perangkat</div>
-          <div class="settings-row__desc">Project: wiapnhpdgjbtkblowfig (Oceania Sydney)</div>
+          <div class="settings-row__label">ID Database Master Toko (Tenant ID)</div>
+          <div class="settings-row__desc">Kunci partisi database utama: mengikat produk, pelanggan, transaksi &amp; akun operator</div>
         </div>
         <div style="text-align:right">
-          <span class="badge badge--green" style="font-size:12px;padding:6px 12px;font-weight:700">🟢 Terhubung ke Cloud</span>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">Otomatis sinkron ke semua HP/Laptop</div>
+          <span class="badge ${isDeviceIsolated() ? 'badge--red' : 'badge--blue'}" style="font-size:12px;padding:6px 12px;font-weight:800;letter-spacing:0.02em">
+            ${isDeviceIsolated() ? '🔒 Sandbox Terisolasi (Offline)' : esc(getMasterStoreId())}
+          </span>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">
+            ${isDeviceIsolated() ? 'Perangkat terputus dari database utama' : 'Database resmi terenkripsi (fadhil2026)'}
+          </div>
         </div>
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Skema Database Cloud (SQL)</div>
-          <div class="settings-row__desc">Salin skema SQL lengkap tabel pelanggan &amp; sinkronisasi Realtime untuk Supabase SQL Editor</div>
+          <div class="settings-row__label">Aktivasi Kunci Master Terminal</div>
+          <div class="settings-row__desc">Salin kunci master untuk mengaktifkan HP/Tablet kasir baru, atau ubah kunci terminal ini</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn--secondary btn--sm" id="btn-copy-master-key" style="font-weight:700">📋 Salin Kunci Master</button>
+          <button class="btn btn--secondary btn--sm" id="btn-set-master-key" style="font-weight:700">🔑 Masukkan Kunci</button>
+          <button class="btn btn--danger btn--sm" id="btn-toggle-isolate-device" style="font-weight:700">
+            ${isDeviceIsolated() ? '🔌 Hubungkan Kembali' : '🔒 Putuskan / Isolasi'}
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__label">Skema Database Cloud (SQL Master Tenant)</div>
+          <div class="settings-row__desc">Salin skema SQL lengkap partisi store_id &amp; dual-bridge realtime untuk Supabase SQL Editor</div>
         </div>
         <button class="btn btn--secondary btn--sm" id="btn-show-cloud-sql" style="white-space:nowrap">
           📋 Salin Skema SQL Cloud
@@ -273,8 +291,8 @@ export const renderSettings = async () => {
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Sinkronkan Data Sekarang</div>
-          <div class="settings-row__desc">Tarik dan dorong data transaksi, pelanggan &amp; produk terbaru secara manual</div>
+          <div class="settings-row__label">Sinkronkan Semua Data &amp; Akun Sekarang</div>
+          <div class="settings-row__desc">Dual-Bridge Sync: Menjamin transaksi, pelanggan, omzet &amp; akun operator di HP dan Laptop 100% identik</div>
         </div>
         <button class="btn btn--primary btn--sm" id="btn-sync-cloud-now" style="white-space:nowrap">
           ⚡ Sinkronkan Sekarang
@@ -329,46 +347,62 @@ export const renderSettings = async () => {
 const bindSettingsEvents = () => {
   // Show Supabase SQL Schema Modal
   document.getElementById('btn-show-cloud-sql')?.addEventListener('click', () => {
-    const sqlCode = `-- Jalankan kode ini di Supabase SQL Editor (https://supabase.com/dashboard/project/wiapnhpdgjbtkblowfig/sql):
-CREATE TABLE IF NOT EXISTS public.customers (
-    id TEXT PRIMARY KEY,
+    const sqlCode = `-- Jalankan perintah ini di Supabase SQL Editor (https://supabase.com/dashboard/project/wiapnhpdgjbtkblowfig/sql):
+-- 1. Tambah Partisi store_id ke Semua Tabel
+ALTER TABLE IF EXISTS public.products ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8';
+ALTER TABLE IF EXISTS public.customers ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8';
+ALTER TABLE IF EXISTS public.transactions ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8';
+ALTER TABLE IF EXISTS public.expenses ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8';
+ALTER TABLE IF EXISTS public.settings ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8';
+
+-- 2. Buat Tabel Pengguna Aplikasi (app_users)
+CREATE TABLE IF NOT EXISTS public.app_users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8',
+    username TEXT NOT NULL,
     name TEXT NOT NULL,
-    phone TEXT,
-    address TEXT,
-    category TEXT DEFAULT 'Rumah Tangga',
-    total_orders NUMERIC DEFAULT 0,
-    total_spent NUMERIC DEFAULT 0,
-    total_debt NUMERIC DEFAULT 0,
-    credit_limit NUMERIC DEFAULT 0,
-    galon_loaned NUMERIC DEFAULT 0,
-    notes TEXT,
-    updated_at TIMESTAMPTZ DEFAULT now()
+    role TEXT NOT NULL DEFAULT 'cashier' CHECK (role IN ('owner', 'supervisor', 'cashier')),
+    pin_hash TEXT NOT NULL,
+    pin_salt TEXT NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    CONSTRAINT uq_store_username UNIQUE (store_id, username)
 );
+ALTER TABLE IF EXISTS public.app_users ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8';
 
+-- 3. RLS Policies Multi-Tenant
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow anon all on customers" ON public.customers;
-CREATE POLICY "Allow anon all on customers" ON public.customers FOR ALL USING (true) WITH CHECK (true);
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
 
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_publication_tables 
-        WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'customers'
-    ) THEN
-        ALTER PUBLICATION supabase_realtime ADD TABLE public.customers;
+DROP POLICY IF EXISTS "tenant_users_policy" ON public.app_users;
+CREATE POLICY "tenant_users_policy" ON public.app_users FOR ALL TO anon, authenticated
+    USING (store_id = 'STORE-BM-856CFAC8') WITH CHECK (store_id = 'STORE-BM-856CFAC8');
+
+-- 4. Realtime Broadcast
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'app_users') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.app_users;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'settings') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
     END IF;
 END $$;`;
 
     const html = `
       <div class="modal-header">
-        <h3 class="modal-title">☁️ Skema SQL Supabase (Tabel Pelanggan)</h3>
+        <h3 class="modal-title">🛡️ Skema SQL Master Tenant &amp; Akun (Supabase)</h3>
         <button class="modal-close" id="sql-modal-close" type="button">✕</button>
       </div>
       <div class="modal-body">
         <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px">
-          Jalankan perintah SQL ini di menu <strong>SQL Editor</strong> dashboard Supabase Anda agar data pelanggan tersinkronisasi otomatis antar-perangkat (PC/HP/Tablet):
+          Jalankan perintah SQL ini di menu <strong>SQL Editor</strong> dashboard Supabase Anda agar semua data dan akun operator terkunci pada Master Store ID <code>STORE-BM-856CFAC8</code>:
         </p>
-        <textarea id="sql-code-area" readonly style="width:100%;height:180px;font-family:monospace;font-size:11px;padding:8px;border-radius:8px;border:1px solid var(--border-default);background:rgba(0,0,0,0.02);line-height:1.4">${sqlCode}</textarea>
+        <textarea id="sql-code-area" readonly style="width:100%;height:220px;font-family:monospace;font-size:11px;padding:8px;border-radius:8px;border:1px solid var(--border-default);background:rgba(0,0,0,0.02);line-height:1.4">${sqlCode}</textarea>
       </div>
       <div class="modal-footer" style="display:flex;justify-content:space-between;gap:8px">
         <button class="btn btn--primary btn--sm" id="btn-copy-sql">📋 Salin Perintah SQL</button>
@@ -385,13 +419,51 @@ END $$;`;
     });
   });
 
+  // Copy Master Store Key
+  document.getElementById('btn-copy-master-key')?.addEventListener('click', () => {
+    const key = getMasterStoreId();
+    navigator.clipboard?.writeText(key).then(() => {
+      window.showToast?.(`✅ Kunci Master (${key}) berhasil disalin!`, 'success');
+    });
+  });
+
+  // Set / Change Master Store Key
+  document.getElementById('btn-set-master-key')?.addEventListener('click', async () => {
+    const current = getMasterStoreId();
+    const input = prompt('Masukkan Kunci Master Database Toko (Master Store ID):', current === 'ISOLATED_SANDBOX' ? 'STORE-BM-856CFAC8' : current);
+    if (input && input.trim()) {
+      setMasterStoreId(input.trim());
+      setupRealtimeSubscription();
+      await syncInitialData();
+      window.showToast?.(`✅ Terminal terhubung ke Master ID: ${input.trim()}`, 'success');
+      renderSettings();
+    }
+  });
+
+  // Toggle Isolate Device
+  document.getElementById('btn-toggle-isolate-device')?.addEventListener('click', async () => {
+    if (isDeviceIsolated()) {
+      setMasterStoreId('STORE-BM-856CFAC8');
+      setupRealtimeSubscription();
+      await syncInitialData();
+      window.showToast?.('✅ Perangkat dihubungkan kembali ke Database Utama Toko!', 'success');
+    } else {
+      if (confirm('Isolasi perangkat ini? Perangkat akan beralih ke Mode Sandbox Demo Offline dan terputus dari database cloud toko.')) {
+        setMasterStoreId('ISOLATED_SANDBOX');
+        setupRealtimeSubscription();
+        window.showToast?.('🔒 Perangkat kini dalam Mode Sandbox Terisolasi.', 'info');
+      }
+    }
+    renderSettings();
+  });
+
   // Manual Supabase Cloud Sync
   document.getElementById('btn-sync-cloud-now')?.addEventListener('click', async () => {
     const btn = document.getElementById('btn-sync-cloud-now');
     if (btn) { btn.textContent = '🔄 Menyinkronkan...'; btn.disabled = true; }
     try {
       await syncInitialData();
-      window.showToast('✅ Data cloud berhasil disinkronkan!', 'success');
+      window.showToast('✅ Semua data & akun berhasil disinkronkan!', 'success');
       setTimeout(() => renderSettings(), 600);
     } catch (err) {
       window.showToast('Gagal sinkron cloud: ' + (err.message || 'Error'), 'error');

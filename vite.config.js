@@ -5,19 +5,13 @@ import { execSync } from 'node:child_process';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8'));
 
-// Dynamic version derived from git commit count & hash
-let gitCommitCount = '';
-let gitCommitHash  = '';
+// Dynamic version derived from SemVer engine / package.json
+let gitCommitHash = '';
 try {
-  gitCommitCount = execSync('git rev-list --count HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-  gitCommitHash  = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  gitCommitHash = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
 } catch (_) {}
 
-const parts = (pkg.version || '3.0.0').split('.');
-const major = parts[0] || '3';
-const minor = parts[1] || '0';
-const patch = parts[2] || (gitCommitCount && gitCommitCount !== '0' ? gitCommitCount : '0');
-const dynamicAppVersion = `${major}.${minor}.${patch}`;
+const dynamicAppVersion = pkg.version || '3.2.0';
 
 const buildTimestamp = new Date().toISOString();
 

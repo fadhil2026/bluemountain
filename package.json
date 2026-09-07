@@ -1,6 +1,6 @@
 {
   "name": "blue-mountain-pos",
-  "version": "3.1.59",
+  "version": "3.2.0",
   "type": "module",
   "private": true,
   "description": "Sistem Kasir POS — Blue Mountain Refilling Station",
@@ -10,6 +10,9 @@
     "preview": "vite preview",
     "verify": "node scripts/verify.js",
     "test": "npm run verify",
+    "semver": "node scripts/semver-engine.js",
+    "semver:analyze": "node scripts/semver-engine.js --analyze",
+    "semver:bump": "node scripts/semver-engine.js --bump auto",
     "supabase:admin": "node scripts/supabase-admin.js",
     "deploy:cf": "npx wrangler pages deploy dist --project-name=bluemountain-pos"
   },

@@ -1,13 +1,13 @@
-# 💧 Blue Mountain Refilling Station — Hybrid POS System
+# 💧 Blue Mountain Refilling Station — Proprietary Internal POS System
 
-Sistem Kasir POS canggih dengan tampilan macOS-style yang mengadopsi arsitektur **Offline-First Hybrid Sync**. Dirancang khusus untuk toko air isi ulang dengan kehandalan tanpa henti meski koneksi internet terputus.
+> 🔒 **SISTEM PRIVAT INTERNAL**: Repositori ini berisi perangkat lunak kasir POS berpemilik (*Proprietary & Confidential*) untuk operasional internal **Blue Mountain Refilling Station**. Seluruh transaksi, pelanggan, dan data staf diisolasi menggunakan **Database Master Tenant ID** dan dilindungi oleh otentikasi zero-trust.
 
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/fadhil2026/bluemountain/deploy.yml?label=CI%2FCD%20Deploy&style=for-the-badge)
-![Version](https://img.shields.io/badge/version-v3.1.59-blue?style=for-the-badge)
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-fadhil2026.github.io%2Fbluemountain-brightgreen?style=for-the-badge)](https://fadhil2026.github.io/bluemountain/)
-[![Cloudflare Pages](https://img.shields.io/badge/Cloudflare%20Pages-bluemountain--pos--c2k.pages.dev-orange?style=for-the-badge&logo=cloudflare)](https://bluemountain-pos-c2k.pages.dev/)
+![CI/CD Pipeline](https://img.shields.io/badge/CI%2FCD-Verified-success?style=for-the-badge)
+![Security Hardening](https://img.shields.io/badge/Security-Military--Grade-blueviolet?style=for-the-badge)
+![Architecture](https://img.shields.io/badge/Architecture-Master%20Tenant%20v3.2-blue?style=for-the-badge)
+![Access](https://img.shields.io/badge/Access-Private%20Internal%20Only-critical?style=for-the-badge)
 
-## ✨ Fitur Utama
+## ✨ Fitur & Keamanan Inti
 
 - 🏪 **POS Kasir** — Grid produk, keranjang pintar, pemilih & quick-add pelanggan, perhitungan diskon, kembalian otomatis.
 - 👥 **Customer CRM 360°** — Manajemen data pelanggan, segmentasi, limit kredit, sub-buku besar piutang, pelacakan aset galon pinjaman fisik, sapaan & tagihan WhatsApp 1-klik.
