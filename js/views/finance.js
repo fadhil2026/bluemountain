@@ -358,7 +358,7 @@ export const renderFinance = async () => {
       </div>
     `;
 
-    bindFinanceEvents(txs);
+    bindFinanceEvents(txs, expenses, journal);
   } finally {
     _rendering = false;
   }
@@ -531,7 +531,7 @@ const buildJournal = (txs, expenses) => {
   return entries.sort((a, b) => new Date(b.date) - new Date(a.date));
 };
 
-const bindFinanceEvents = (txs) => {
+const bindFinanceEvents = (txs, expenses = [], journal = []) => {
   document.getElementById('btn-refresh-finance')?.addEventListener('click', renderFinance);
 
   // Piutang Pagination

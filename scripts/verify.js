@@ -35,7 +35,7 @@ const getJsFiles = (dir) => {
   return results;
 };
 
-const jsFiles = [...getJsFiles('./js'), './vite.config.js'];
+const jsFiles = [...getJsFiles('./js'), ...getJsFiles('./scripts'), './vite.config.js'];
 let hasError = false;
 
 for (const file of jsFiles) {
@@ -61,4 +61,13 @@ if (!fs.existsSync('./index.html')) {
 }
 console.log('  ✓ File index.html terverifikasi');
 
-console.log('\n✅ [Sukses] Semua verifikasi awal lolos tanpa bug/error sintaks.\n');
+// 3. Run E2E Business Logic, Cryptography, Math & Accounting Audit
+try {
+  execSync('node scripts/audit-e2e.js', { stdio: 'inherit' });
+  console.log('  ✓ Audit logika bisnis, kripto, matematika & akuntansi lolos 100%');
+} catch (err) {
+  console.error('\n🚨 [Gagal] Audit logika bisnis / matematika gagal.');
+  process.exit(1);
+}
+
+console.log('\n✅ [Sukses] Semua verifikasi dan audit lolos tanpa bug/error sintaks/matematika.\n');

@@ -2,8 +2,10 @@
  * currency.js — Format Rupiah
  */
 export const formatRupiah = (amount) => {
-  if (isNaN(amount)) return 'Rp 0';
-  return 'Rp ' + Math.round(amount).toLocaleString('id-ID');
+  const num = Number(amount);
+  if (isNaN(num)) return 'Rp 0';
+  const rounded = Math.round(Math.abs(num)).toLocaleString('id-ID');
+  return (num < 0 ? '-Rp ' : 'Rp ') + rounded;
 };
 
 export const parseRupiah = (str) => {

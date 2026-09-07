@@ -1,7 +1,7 @@
 /**
  * views/transactions.js — Full CRUD + Realtime + Date Range Filter + Pagination (10/page)
  */
-import { getAllTransactions, deleteTransaction, updateTransaction, getAllCustomers, updateCustomer } from '../db.js';
+import { getAllTransactions, deleteTransaction, updateTransaction, getAllCustomers, updateCustomer, updateProduct, getAllProducts, db } from '../db.js';
 import { formatRupiah }          from '../utils/currency.js';
 import { formatDateTime, todayKey } from '../utils/date.js';
 import { esc }                   from '../utils/sanitize.js';
@@ -368,7 +368,20 @@ const bindTxEvents = (allTxs) => {
           }
         }
 
-        window.showToast('Transaksi dihapus', 'success');
+        // Restore inventory stock for deleted transaction
+        for (const item of (txObj.items || [])) {
+          if (item.product && item.product.id) {
+            const p = await db.products.get(item.product.id);
+            if (p && typeof p.stock === 'number') {
+              const newStock = p.stock + (Number(item.qty) || 1);
+              await updateProduct({ ...p, stock: newStock });
+            }
+          }
+        }
+        const freshProducts = await getAllProducts();
+        store.setProducts(freshProducts);
+
+        window.showToast('Transaksi dihapus & stok dikembalikan', 'success');
       } catch (err) { console.error('[tx]', err); window.showToast('Gagal menghapus', 'error'); }
     }
   });

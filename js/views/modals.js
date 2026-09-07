@@ -6,7 +6,7 @@ import QRCode                 from 'qrcode';
 import { generateDynamicQRIS } from '../utils/qris.js';
 import { formatRupiah }       from '../utils/currency.js';
 import { esc }                from '../utils/sanitize.js';
-import { saveTransaction, getAllCustomers, addCustomer, updateCustomer, getAllUsers, seedDefaultUsers, updateUser } from '../db.js';
+import { saveTransaction, getAllCustomers, addCustomer, updateCustomer, getAllUsers, seedDefaultUsers, updateUser, updateProduct, getAllProducts, db } from '../db.js';
 import { verifyPin, generateSalt, hashPin } from '../utils/crypto.js';
 import {
   getReceiptPreviewHTML,
@@ -445,6 +445,19 @@ export const showPaymentModal = (method = 'cash') => {
         const savedId = await saveTransaction(txData);
         txData.id = savedId;
         store.addTransaction(txData);
+
+        // Reduce inventory stock for purchased products
+        for (const item of (txData.items || [])) {
+          if (item.product && item.product.id) {
+            const p = await db.products.get(item.product.id);
+            if (p && typeof p.stock === 'number') {
+              const newStock = Math.max(0, p.stock - (Number(item.qty) || 1));
+              await updateProduct({ ...p, stock: newStock });
+            }
+          }
+        }
+        const freshProducts = await getAllProducts();
+        store.setProducts(freshProducts);
 
         closeModal('payment-modal');
         store.clearCart();
