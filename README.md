@@ -90,9 +90,14 @@ KASIR/
 │   ├── 01_SYSTEM_BLUEPRINT.md       # Cetak biru arsitektur sistem & state management
 │   ├── 02_ACCOUNTING_LOGIC.md       # Logika matematika, akuntansi double-entry, & saldo kas
 │   ├── 03_MILITARY_VERIFICATION.md  # Protokol QA gate & 14 aturan mutlak pra-deploy
-│   └── 04_BUSINESS_TIMELINE.md      # Roadmap strategi bisnis, benchmark open-source, & gap
-└── scripts/
-    └── verify.js           # Skrip audit CI/CD Quality Gate & sinkronisasi versi otomatis
+│   ├── 04_BUSINESS_TIMELINE.md      # Roadmap strategi bisnis, benchmark open-source, & gap
+│   ├── 05_SECURITY_HARDENING.sql    # Skrip PostgreSQL Row Level Security (RLS) & sanitasi
+│   ├── 06_ENTERPRISE_ARCHITECTURE_AND_ECOSYSTEM.md # Arsitektur enterprise, Cloudflare, & repo benchmark
+│   └── 07_PRODUCT_REQUIREMENTS_DOCUMENT.md         # PRD standar industri, traceability matrix, & audit status
+├── scripts/
+│   ├── verify.js                    # Skrip audit CI/CD Quality Gate & sinkronisasi versi otomatis
+│   └── supabase-admin.js            # CLI automasi manajemen database Supabase lokal (Secret Key)
+├── .env.example                     # Template variabel lingkungan aman
 ```
 
 ## 📚 Dokumentasi Standar Sistem
@@ -102,6 +107,9 @@ Seluruh protokol teknis dan acuan baku tersimpan di folder `docs/`:
 - 💰 [02 — Logika Matematika, Keuangan & Akuntansi](docs/02_ACCOUNTING_LOGIC.md)
 - 🛡️ [03 — Protokol Verifikasi Militer & QA Gate](docs/03_MILITARY_VERIFICATION.md)
 - 📈 [04 — Roadmap Bisnis & Timeline Evolusi Fitur](docs/04_BUSINESS_TIMELINE.md)
+- 🔒 [05 — PostgreSQL Security & RLS Hardening](docs/05_SECURITY_HARDENING.sql)
+- ☁️ [06 — Enterprise Architecture & Cloudflare Integration](docs/06_ENTERPRISE_ARCHITECTURE_AND_ECOSYSTEM.md)
+- 📋 [07 — Product Requirements Document (PRD) & Industry Standards](docs/07_PRODUCT_REQUIREMENTS_DOCUMENT.md)
 
 ## 🖨️ Arsitektur Universal Thermal Printing
 

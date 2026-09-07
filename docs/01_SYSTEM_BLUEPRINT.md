@@ -1,5 +1,5 @@
 # 📐 01 — MASTER BLUEPRINT: ARSITEKTUR POS & CRM ENTERPRISE 2026
-**Blue Mountain Refilling Station POS & CRM — High-End Industrial Architecture (v3.0.43)**
+**Blue Mountain Refilling Station POS & CRM — High-End Industrial Architecture (v3.0.52)**
 
 ---
 
@@ -19,14 +19,21 @@
 │  ┌──────────────┐      ┌──────────────────┐      ┌─────────────────────────────┐ │
 │  │ Universal    │      │ EMVCo Dynamic    │      │ Cloud Sync Engine           │ │
 │  │ Thermal POS  │      │ QRIS Generator   │      │ (2-Way Supabase WebSocket)  │ │
-│  │ (48/58/80mm) │      │ (CRC16 TLV)      │      │                             │ │
+│  │ (WebUSB/BLE) │      │ (CRC16 TLV)      │      │                             │ │
 │  └──────────────┘      └──────────────────┘      └─────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┬────────────────┘
                                                                   │ HTTPS / WSS
                                                                   ▼
                                                       ┌────────────────────────────┐
+                                                      │ Network Edge: Cloudflare   │
+                                                      │ Anycast CDN & Anti-DDoS    │
+                                                      └─────────────┬──────────────┘
+                                                                    │
+                                                                    ▼
+                                                      ┌────────────────────────────┐
                                                       │ Supabase PostgreSQL Cloud  │
                                                       │ (Row Level Security & RLS) │
+                                                      │ Admin CLI: scripts/admin   │
                                                       └────────────────────────────┘
 ```
 
@@ -72,9 +79,12 @@
 ---
 
 ## 3. Matriks Keamanan & Hardening Industri
-
-1. **Content Security Policy (CSP)**: `default-src 'self'`, `connect-src` terisolasi ketat ke Supabase WSS/HTTPS.
-2. **Anti-XSS**: Sanitasi input ganda via `esc()` dan DOMPurify.
-3. **Production Stripping**: Esbuild otomatis menghapus `console.log` dan `debugger` di dist.
-4. **Zero Memory Leak**: Kompresi gambar client-side membatasi pemakaian RAM browser.
-5. **Reactive Event Parity**: Semua modul terhubung ke bus event (`store.on(...)`) untuk sinkronisasi seketika antar-tampilan.
+ 
+ 1. **Content Security Policy (CSP)**: `default-src 'self'`, `connect-src` terisolasi ketat ke Supabase WSS/HTTPS.
+ 2. **Anti-XSS**: Sanitasi input ganda via `esc()` dan DOMPurify.
+ 3. **Segregasi Kunci Cloud**: `sb_publishable_...` untuk client publik; `sb_secret_...` terisolasi lokal di `.env` untuk automasi `scripts/supabase-admin.js`.
+ 4. **Row Level Security (RLS)**: Hak akses tabel dibatasi ketat via SQL policies (`docs/05_SECURITY_HARDENING.sql`).
+ 5. **Production Stripping**: Esbuild otomatis menghapus `console.log` dan `debugger` di dist.
+ 6. **Zero Memory Leak**: Kompresi gambar client-side membatasi pemakaian RAM browser.
+ 7. **Reactive Event Parity**: Semua modul terhubung ke bus event (`store.on(...)`) untuk sinkronisasi seketika antar-tampilan.
+ 8. **Ergonomi Layanan Layar Sentuh**: Docking macOS otomatis kembali ke posisi bawah dan mendukung navigasi gesture swipe antar-halaman pada layar sentuh.

@@ -1,16 +1,18 @@
 # 📈 04 — ANALISIS KOMPARATIF, BENCHMARK OPEN-SOURCE & ROADMAP 2026
-**Blue Mountain Refilling Station POS & CRM — High-End Industrial Strategy (Revisi v3.0.43)**
+**Blue Mountain Refilling Station POS & CRM — High-End Industrial Strategy (Revisi v3.0.52)**
 
 ---
 
 ## 1. Analisis Komparatif: Fitur Live vs Gap Sistem Mature
 
-### A. Fitur Live Web App Kita (v3.0.43) 🌟
+### A. Fitur Live Web App Kita (v3.0.52) 🌟
 1. **Zero-Latency Pure Offline-First**:
    - IndexedDB (Dexie v3) lokal primary, 0ms latency.
    - 2-Way Sync Supabase PostgreSQL/WebSocket saat online tanpa data hilang (*Write-Ahead Persistence*).
+   - Migrasi kunci cloud ke `sb_publishable_...` dan segregasi root secret CLI.
 2. **Universal Thermal POS Engine (48mm / 58mm / 80mm)**:
    - Dukungan semua ukuran roll kertas thermal.
+   - Direct Web Bluetooth GATT, WebUSB bulk transfer, Android Intent (`rawbt:`, `bluetoothprint`), dan direct OS spooler.
    - Synchronous 1-bit embedded thermal logo Base64 anti-blank & auto-wrap struk CSS `@page`.
 3. **Customer CRM 360° & Pelacakan Aset Galon Fisik Terpadu**:
    - Master pelanggan lengkap nomor telepon (WhatsApp auto-format `628xxx`), segmentasi (*Rumah Tangga, Kantor, Reseller, VIP*).
@@ -20,18 +22,20 @@
    - Injeksi nominal dinamis Tag 54 & rekalkulasi CRC16-CCITT W3C-compliant tanpa backend perantara.
 5. **Portabilitas Data Lengkap**:
    - Cetak nota thermal, export PDF invoice formal, dan export rekap Excel/CSV untuk arsip akuntansi.
-6. **Desain Seragam & Responsif Mobile/Tablet**:
-   - Tata letak konsisten 7 modul, tabel dengan swipe/scroll horizontal responsif, dan paginasi permanen.
+6. **Desain Seragam & Ergonomi Layar Sentuh**:
+   - Tata letak konsisten 7 modul, tabel dengan swipe/scroll horizontal responsif, paginasi permanen, dan gesture swipe dock.
+7. **Pengerasan Keamanan Militer**:
+   - CSP ketat, sanitasi anti-XSS DOMPurify, dan rancangan skrip Row Level Security (RLS) PostgreSQL.
 
 ---
 
 ### B. Gap vs Sistem POS Mature (Odoo POS, Square, Loyverse, ERPNext) ⚠️
 
-| Fitur / Dimensi | POS Saat Ini (v3.0.43) | Standar Industri POS Mature | Tingkat Urgensi |
+| Fitur / Dimensi | POS Saat Ini (v3.0.52) | Standar Industri POS Mature | Tingkat Urgensi |
 |---|---|---|---|
 | **Sesi & Shift Kasir** | Timeline transaksi tercampur 24 jam tanpa sesi terpisah. | Buka shift (modal awal kasir), log cash in/out laci, hitung kas fisik (blind drop), hitung selisih lebih/kurang, cetak Struk Z-Report penutupan shift. | **Kritis** (Mencegah fraud kasir) |
 | **Keamanan & Role (RBAC)** | Operator tunggal tanpa PIN / autentikasi per aksi. | PIN switch kasir instan, hak akses berjenjang (Kasir vs Supervisor vs Owner). Restriksi void, edit harga, hapus nota, lihat laba bersih. | **Kritis** (Integritas operasional) |
-| **Cetak Hardware Direct** | Dialog cetak browser (`window.print()`). | Direct ESC/POS via WebUSB/WebBluetooth tanpa pop-up dialog; auto-pulse laci kasir RJ11 (`ESC p 0 25 250`). | **Tinggi** (Kecepatan antrean kasir) |
+| **Validasi Harga di Database** | Subtotal dihitung oleh browser client. | PostgreSQL Trigger untuk verifikasi harga saat INSERT ke Supabase, mencegah manipulasi harga dari DevTools. | **Tinggi** (Integritas data transaksi) |
 | **Input Barcode Otomatis** | Harus klik fokus ke kotak input cari. | Global USB Key-wedge listener (<35ms debounce tanpa klik kursor) & Barcode scanner kamera W3C native (`BarcodeDetector`). | **Tinggi** (Ergonomi checkout) |
 | **Split-Tender Payment** | 1 transaksi = 1 metode bayar. | Split payment (sebagian tunai + sebagian QRIS/transfer dalam satu nota). | **Sedang** (Fleksibilitas pembayaran) |
 | **Pembukuan Double-Entry SAK** | Arus kas single-entry & HPP statis saat transaksi. | General Ledger otomatis (Jurnal Debit/Kredit: Kas/Bank/Piutang vs Pendapatan, HPP vs Persediaan), FIFO / Moving Average berkala. | **Sedang** (Standar audit formal) |
