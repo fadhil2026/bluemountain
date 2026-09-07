@@ -763,7 +763,7 @@ export const printViaWebUSB = async (txData) => {
  * Instant Multi-Size Test Receipt
  */
 export const printTestReceipt = (paperSize = '58mm') => {
-  const dummyTx = {
+  const sampleTx = {
     invoiceNo: `TEST-${paperSize.toUpperCase()}-` + Math.floor(Math.random() * 8999 + 1000),
     date: new Date().toISOString(),
     customerName: 'Pelanggan Uji Coba',
@@ -780,5 +780,5 @@ export const printTestReceipt = (paperSize = '58mm') => {
       { product: { name: 'Pembersihan Galon', price: 15000 }, qty: 1 },
     ]
   };
-  printThermalDirect(dummyTx, paperSize);
+  printThermalDirect(sampleTx, paperSize);
 };

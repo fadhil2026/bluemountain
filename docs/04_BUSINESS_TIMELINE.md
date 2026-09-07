@@ -1,11 +1,11 @@
 # 📈 04 — ANALISIS KOMPARATIF, BENCHMARK OPEN-SOURCE & ROADMAP 2026
-**Blue Mountain Refilling Station POS & CRM — High-End Industrial Strategy (Revisi v3.1.55)**
+**Blue Mountain Refilling Station POS & CRM — High-End Industrial Strategy (Revisi v3.1.56)**
 
 ---
 
 ## 1. Analisis Komparatif: Fitur Live vs Gap Sistem Mature
 
-### A. Fitur Live Web App Kita (v3.1.55) 🌟
+### A. Fitur Live Web App Kita (v3.1.56) 🌟
 1. **Zero-Latency Pure Offline-First**:
    - IndexedDB (Dexie v3) lokal primary, 0ms latency.
    - 2-Way Sync Supabase PostgreSQL/WebSocket saat online tanpa data hilang (*Write-Ahead Persistence*).
@@ -31,7 +31,7 @@
 
 ### B. Gap vs Sistem POS Mature (Odoo POS, Square, Loyverse, ERPNext) ⚠️
 
-| Fitur / Dimensi | POS Saat Ini (v3.1.55) | Standar Industri POS Mature | Tingkat Urgensi |
+| Fitur / Dimensi | POS Saat Ini (v3.1.56) | Standar Industri POS Mature | Tingkat Urgensi |
 |---|---|---|---|
 | **Sesi & Shift Kasir** | Timeline transaksi tercampur 24 jam tanpa sesi terpisah. | Buka shift (modal awal kasir), log cash in/out laci, hitung kas fisik (blind drop), hitung selisih lebih/kurang, cetak Struk Z-Report penutupan shift. | **Kritis** (Mencegah fraud kasir) |
 | **Keamanan & Role (RBAC)** | Operator tunggal tanpa PIN / autentikasi per aksi. | PIN switch kasir instan, hak akses berjenjang (Kasir vs Supervisor vs Owner). Restriksi void, edit harga, hapus nota, lihat laba bersih. | **Kritis** (Integritas operasional) |
@@ -72,7 +72,7 @@
 └───────────────────┴───────────────────┴───────────────────┴─────────────────────┘
 ```
 
-### 🟢 FASE 1, 2 & 3: TELAH SELESAI & LIVE (v3.1.55)
+### 🟢 FASE 1, 2, 3 & 4 (SUB-BAGIAN RBAC): TELAH SELESAI & LIVE (v3.1.56)
 - Kasir POS responsif + Master Produk SKU WebP.
 - Cetak struk thermal raster grafik 48mm/58mm/80mm + Base64 synchronous logo.
 - Sinkronisasi Cloud 2 arah via Supabase PostgreSQL & WebSocket.
@@ -82,20 +82,18 @@
 - EMVCo Dynamic QRIS Generator (TLV Tag 54 + CRC16-CCITT).
 - Export data spreadsheet Excel (.csv) dan PDF Invoice.
 - Desain seragam & adaptasi otomatis resolusi HP/Tablet/Desktop.
+- **PIN-Based Quick Switch & Hak Akses (RBAC)**: Layar input PIN kasir (numpad masking 6-titik), kontrol peran `owner`, `supervisor`, `cashier`, CRUD staf akun lengkap, kriptografi Web Crypto Salted SHA-256 zero-plaintext, dan deployment Cloudflare Pages.
 
-### 🟡 FASE 4: Shift Kasir (X/Z Report), PIN RBAC & Direct Hardware (Prioritas Berikutnya)
+### 🟡 FASE 4 (LANJUTAN): Shift Kasir (X/Z Report) & Direct Hardware
 1. **Manajemen Sesi Kasir (Shifts & Z-Report)**:
    - Tabel `shifts` lokal & cloud (`id`, `cashier_name`, `started_at`, `closed_at`, `opening_cash`, `cash_in`, `cash_out`, `expected_cash`, `actual_cash`, `difference`, `status`).
    - Dialog input modal awal saat mulai giliran kasir.
    - Form tutup shift dengan *blind drop count* (kasir hitung uang fisik tanpa melihat total sistem untuk mencegah manipulasi).
    - Cetak Struk Penutupan Shift (Z-Report) thermal.
-2. **PIN-Based Quick Switch & Hak Akses (RBAC)**:
-   - Layar input PIN kasir (4-digit).
-   - Pembatasan otoritas: Kasir biasa tidak dapat menghapus transaksi, melihat margin laba bersih di laporan, atau melakukan void tanpa PIN Supervisor.
-3. **Hardware Direct Access (WebUSB & Web Bluetooth)**:
+2. **Hardware Direct Access (WebUSB & Web Bluetooth)**:
    - Opsi cetak cepat bypass browser print dialog menggunakan library `receipt-printer-encoder` dan `WebUSBReceiptPrinter`.
    - Auto-kick command laci uang fisik via port RJ11 printer.
-4. **Barcode Scanner Engine**:
+3. **Barcode Scanner Engine**:
    - Buffer listener keyboard-wedge USB scanner di layar POS tanpa mewajibkan kursor aktif di input teks.
    - Integrasi scanner kamera via W3C `BarcodeDetector` API.
 

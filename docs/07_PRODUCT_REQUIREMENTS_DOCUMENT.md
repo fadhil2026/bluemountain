@@ -1,5 +1,5 @@
 # 📋 07 — PRODUCT REQUIREMENTS DOCUMENT (PRD) & STANDAR INDUSTRI ENTERPRISE
-**Blue Mountain Refilling Station POS & CRM — World-Class Industrial PRD (v3.1.55)**
+**Blue Mountain Refilling Station POS & CRM — World-Class Industrial PRD (v3.1.56)**
 
 Dokumen Kebutuhan Produk (PRD), Analisis Komparasi Industri Global, dan Matriks Verifikasi Realitas antara kode sumber aktual vs standar industri POS modern.
 
@@ -10,7 +10,7 @@ Dokumen Kebutuhan Produk (PRD), Analisis Komparasi Industri Global, dan Matriks 
 | Dimensi | Spesifikasi |
 |---|---|
 | **Nama Produk** | Blue Mountain POS & CRM Engine |
-| **Versi Rilis Aktif** | `v3.1.55` (Continuous Delivery) |
+| **Versi Rilis Aktif** | `v3.1.56` (Continuous Delivery) |
 | **Domain Bisnis** | Stasiun Pengisian Air Minum (Refilling Station), Toko Grosir/Retail, & Mini Market |
 | **Prinsip Arsitektur** | *Offline-First, Zero-Latency UI, Realtime Multi-Device Sync, Zero-Cost Cloud Infra* |
 | **Target Standar Industri** | OWASP ASVS Level 2, PCI-DSS SAQ A (POS Scope), SAK EMKM Akuntansi Indonesia |
@@ -19,9 +19,9 @@ Dokumen Kebutuhan Produk (PRD), Analisis Komparasi Industri Global, dan Matriks 
 
 ## 2. Benchmark Komparasi Sistem POS Global
 
-Komparasi komprehensif antara Blue Mountain POS (`v3.1.55`) terhadap sistem POS komersial global (*Square POS, Toast, Loyverse, Odoo POS, ERPNext*):
+Komparasi komprehensif antara Blue Mountain POS (`v3.1.56`) terhadap sistem POS komersial global (*Square POS, Toast, Loyverse, Odoo POS, ERPNext*):
 
-| Dimensi Kemampuan | Blue Mountain POS (`v3.1.55`) | Square / Toast | Loyverse POS | Odoo POS / ERPNext |
+| Dimensi Kemampuan | Blue Mountain POS (`v3.1.56`) | Square / Toast | Loyverse POS | Odoo POS / ERPNext |
 |---|---|---|---|---|
 | **Model Biaya Infrastruktur** | **\$0 (100% Free Tier)** via GitHub Pages + Supabase | Berlangganan \$60–\$150/bulan + potongan 2.6% per gesek | Freemium (\$5–\$25/fitur per terminal) | Self-hosted VPS (\$10–\$40/bln) atau Cloud Enterprise |
 | **Latensi Operasional** | **0 ms (Native IndexedDB)** | 100–300 ms (Ketergantungan server) | 50–150 ms (Lokal cache SQLite) | 100–400 ms (Python/PostgreSQL) |
@@ -69,7 +69,16 @@ Audit perbandingan antara kode sumber riil di repositori vs kebutuhan sistem:
    - Sanitasi anti-XSS via DOMPurify & HTML escape utilitas.
    - Proteksi kunci root: `sb_secret_...` hanya di `.env` lokal, tidak pernah di-bundle ke client.
    - Skrip CLI automasi cloud admin ([scripts/supabase-admin.js](file:///d:/FR%20PROYEK/KASIR/scripts/supabase-admin.js)).
-9. **UI/UX & Aksesibilitas (`css/dock.css`, `css/main.css`)**:
+9. **Role-Based Access Control (RBAC) & PIN Cryptography (`js/views/users.js`, `js/utils/crypto.js`, `js/views/modals.js`)**:
+   - Multi-operator session: Peran terisolasi `owner`, `supervisor`, `cashier`.
+   - Modal ganti kasir interaktif dengan 6-titik masking PIN anti-intip & on-screen numpad.
+   - Standar keamanan Web Crypto API (16-byte random salt + SHA-256 + constant-time comparison).
+   - Zero-plaintext: PIN dan hash aman dari intipan memori, IndexedDB, Git, maupun Supabase.
+   - Skema tabel cloud Postgres terisolasi di [docs/08_USERS_MANAGEMENT_SCHEMA.sql](file:///d:/FR%20PROYEK/KASIR/docs/08_USERS_MANAGEMENT_SCHEMA.sql).
+10. **Deployment Edge Cloudflare Pages & GitHub Actions**:
+   - Continuous Deployment via GitHub Actions ke GitHub Pages (`fadhil2026.github.io/bluemountain`).
+   - Produksi Edge Anycast CDN via Cloudflare Pages (`bluemountain-pos-c2k.pages.dev`) via Wrangler CLI.
+11. **UI/UX & Aksesibilitas (`css/dock.css`, `css/main.css`)**:
    - macOS Sonoma glassmorphism dock dengan auto-return ke bawah saat klik/tap.
    - Dukungan gesture swipe layar sentuh untuk berpindah halaman pada HP/Tablet.
 
@@ -80,22 +89,19 @@ Audit perbandingan antara kode sumber riil di repositori vs kebutuhan sistem:
    - *Status*: Skrip SQL RLS telah dibuat di `docs/05_SECURITY_HARDENING.sql`, namun trigger kalkulasi otomatis di database Supabase belum di-deploy.
    - *Dampak*: Client masih menghitung subtotal transaksi; verifikasi wajib diperkuat di sisi PostgreSQL.
 2. **CORS Origin Lockdown di Dashboard Supabase**:
-   - *Status*: Memerlukan konfigurasi whitelist `https://fadhil2026.github.io` langsung di Supabase Settings.
+   - *Status*: Memerlukan konfigurasi whitelist `https://fadhil2026.github.io` dan `https://bluemountain-pos-c2k.pages.dev` langsung di Supabase Settings.
 
 ---
 
 ### C. Roadmap Fitur Masa Depan (`AKAN DATANG / ROADMAP`) 🚀
 1. **Sistem Sesi & Shift Kasir (Cashier Shift & Drawer Balancing)**:
    - Pencatatan modal awal laci (opening float), setoran tunai berkala (cash drops), dan cetak Struk Rekonsiliasi Z-Report saat tutup shift.
-2. **Role-Based Access Control (RBAC) & PIN Kasir**:
-   - Login cepat via PIN 4/6 digit untuk ganti operator kasir.
-   - Restriksi otorisasi supervisor: Kasir tidak bisa melakukan *void* transaksi, hapus item, atau melihat laporan laba bersih toko.
-3. **Split-Tender Payment (Pembayaran Terpisah)**:
+2. **Split-Tender Payment (Pembayaran Terpisah)**:
    - Satu nomor transaksi dapat dibayar dengan kombinasi tunai + QRIS atau transfer + piutang.
-4. **Integrasi Cloudflare Zero Trust & Turnstile**:
+3. **Integrasi Cloudflare Zero Trust & Turnstile**:
    - Kunci halaman admin & laporan keuangan menggunakan Cloudflare Access (SSO / OTP).
    - Turnstile anti-bot pada form pembayaran dan otentikasi PIN.
-5. **Auto-Backup Cloudflare R2**:
+4. **Auto-Backup Cloudflare R2**:
    - Pengiriman otomatis dump JSON database dan arsip struk PNG harian ke bucket Cloudflare R2 (10 GB gratis).
 
 ---
