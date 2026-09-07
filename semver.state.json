@@ -1,7 +1,7 @@
 {
-  "currentVersion": "3.2.0",
-  "lastCommitHash": "6e5e540",
-  "updatedAt": "2026-09-07T14:30:00.000Z",
+  "currentVersion": "3.2.1",
+  "lastCommitHash": "aa43c33",
+  "updatedAt": "2026-09-07T14:39:02.767Z",
   "milestones": {
     "3.0.0": "Core Architecture, Dexie Offline DB, Thermal Printing Driver",
     "3.1.0": "Cloud Sync, Supabase Realtime, Dynamic QRIS, Multi-User RBAC & Salted SHA-256 PIN",

@@ -72,48 +72,31 @@ export const renderLogin = async () => {
   const roleMeta = ROLE_BADGES[selectedUser.role] || ROLE_BADGES.cashier;
 
   container.innerHTML = `
-    <div style="min-height: calc(100vh - 100px); display: flex; align-items: center; justify-content: center; padding: 24px 16px;">
-      <div style="background: var(--bg-card, #ffffff); border: 1px solid var(--border, #e2e8f0); border-radius: 24px; max-width: 460px; width: 100%; padding: 36px 28px; box-shadow: 0 20px 50px rgba(0,0,0,0.06); text-align: center; position: relative;">
+    <div class="login-portal-wrapper">
+      <div class="login-portal-card">
         
         <!-- Brand Header -->
-        <div style="margin-bottom: 24px;">
-          <img src="assets/logo.png" alt="Blue Mountain Logo" style="width: 72px; height: 72px; object-fit: contain; margin-bottom: 12px; filter: drop-shadow(0 4px 12px rgba(37,99,235,0.15));">
-          <h1 style="font-size: 1.35rem; font-weight: 900; letter-spacing: -0.02em; color: var(--text-primary, #1e293b); margin: 0;">
-            BLUE MOUNTAIN
-          </h1>
-          <p style="font-size: 12px; font-weight: 700; color: #2563eb; letter-spacing: 0.08em; text-transform: uppercase; margin: 4px 0 0 0;">
-            Portal Masuk Operator Kasir
-          </p>
+        <div class="login-brand-header">
+          <img src="assets/logo.png" alt="Blue Mountain Logo" class="login-brand-logo">
+          <h1 class="login-brand-title">BLUE MOUNTAIN</h1>
+          <p class="login-brand-subtitle">Portal Masuk Operator Kasir</p>
         </div>
 
         <!-- Operator Selector -->
-        <div style="margin-bottom: 24px;">
-          <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-muted, #64748b); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px;">
-            Pilih Akun Operator
-          </label>
-          <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;" id="login-operator-list">
+        <div class="login-op-section">
+          <label class="login-op-label">PILIH AKUN OPERATOR</label>
+          <div class="login-operator-list" id="login-operator-list">
             ${_activeUsers.map(u => {
               const isSelected = String(u.id) === String(_selectedUserId);
               const r = ROLE_BADGES[u.role] || ROLE_BADGES.cashier;
               return `
-                <button type="button" class="btn-login-op" data-id="${u.id}" style="
-                  padding: 8px 14px;
-                  border-radius: 14px;
-                  border: 2px solid ${isSelected ? 'var(--primary, #2563eb)' : 'var(--border, #e2e8f0)'};
-                  background: ${isSelected ? 'rgba(37, 99, 235, 0.08)' : 'var(--bg-card, #ffffff)'};
-                  cursor: pointer;
-                  display: flex;
-                  align-items: center;
-                  gap: 10px;
-                  transition: all 0.2s;
-                  box-shadow: ${isSelected ? '0 4px 12px rgba(37,99,235,0.12)' : 'none'};
-                ">
-                  <div style="width: 32px; height: 32px; border-radius: 50%; background: ${r.color}; color: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">
+                <button type="button" class="btn-login-op ${isSelected ? 'selected' : ''}" data-id="${u.id}">
+                  <div class="login-op-avatar" style="background: ${r.color};">
                     ${(u.name || 'U').charAt(0).toUpperCase()}
                   </div>
                   <div style="text-align: left;">
-                    <div style="font-weight: 700; font-size: 13px; color: var(--text-primary, #1e293b);">${esc(u.name)}</div>
-                    <div style="font-size: 11px; color: ${r.color}; font-weight: 600;">${r.label}</div>
+                    <div class="login-op-name">${esc(u.name)}</div>
+                    <div class="login-op-role" style="color: ${r.color};">${r.label}</div>
                   </div>
                 </button>
               `;
@@ -122,91 +105,35 @@ export const renderLogin = async () => {
         </div>
 
         <!-- Selected User Prompt -->
-        <div style="background: var(--bg-muted, #f8fafc); border-radius: 12px; padding: 10px 14px; margin-bottom: 20px; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary, #475569);">
-          <span>🔑</span> Masukkan <strong>4 hingga 6 digit PIN</strong> untuk <strong>${esc(selectedUser.name)}</strong>
+        <div>
+          <div class="login-prompt-box">
+            <span>🔑</span> Masukkan <strong>4–6 digit PIN</strong> untuk <strong>${esc(selectedUser.name)}</strong>
+          </div>
         </div>
 
         <!-- PIN Dots Display -->
-        <div id="login-pin-box" style="margin-bottom: 20px;">
-          <div style="display: flex; justify-content: center; gap: 14px; margin-bottom: 8px;" id="login-pin-dots">
+        <div class="login-pin-box" id="login-pin-box">
+          <div class="login-pin-dots" id="login-pin-dots">
             ${[0, 1, 2, 3, 4, 5].map(i => `
-              <span class="pin-dot" style="
-                width: 16px;
-                height: 16px;
-                border-radius: 50%;
-                border: 2px solid var(--primary, #2563eb);
-                background: ${i < _enteredPin.length ? 'var(--primary, #2563eb)' : 'transparent'};
-                display: inline-block;
-                transition: all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
-                transform: ${i < _enteredPin.length ? 'scale(1.15)' : 'scale(1)'};
-              "></span>
+              <span class="pin-dot ${i < _enteredPin.length ? 'filled' : ''}"></span>
             `).join('')}
           </div>
-          <div id="login-error-msg" style="min-height: 20px; font-size: 13px; font-weight: 600; color: #dc2626;"></div>
+          <div class="login-error-msg" id="login-error-msg"></div>
         </div>
 
         <!-- Numpad Keypad -->
-        <div style="max-width: 280px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+        <div class="login-numpad-grid">
           ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `
-            <button type="button" class="btn-numpad-key" data-val="${n}" style="
-              height: 54px;
-              font-size: 22px;
-              font-weight: 700;
-              border-radius: 14px;
-              border: 1px solid var(--border, #cbd5e1);
-              background: var(--bg-card, #ffffff);
-              color: var(--text-primary, #1e293b);
-              cursor: pointer;
-              transition: transform 0.1s, background 0.15s;
-              box-shadow: 0 2px 6px rgba(0,0,0,0.03);
-            ">${n}</button>
+            <button type="button" class="btn-numpad-key" data-val="${n}">${n}</button>
           `).join('')}
-          <button type="button" class="btn-numpad-key" data-val="clear" style="
-            height: 54px;
-            font-size: 16px;
-            font-weight: 700;
-            border-radius: 14px;
-            border: 1px solid #fecaca;
-            background: #fff1f2;
-            color: #dc2626;
-            cursor: pointer;
-            transition: transform 0.1s;
-          ">C</button>
-          <button type="button" class="btn-numpad-key" data-val="0" style="
-            height: 54px;
-            font-size: 22px;
-            font-weight: 700;
-            border-radius: 14px;
-            border: 1px solid var(--border, #cbd5e1);
-            background: var(--bg-card, #ffffff);
-            color: var(--text-primary, #1e293b);
-            cursor: pointer;
-            transition: transform 0.1s;
-          ">0</button>
-          <button type="button" class="btn-numpad-key" data-val="submit" style="
-            height: 54px;
-            font-size: 20px;
-            font-weight: 800;
-            border-radius: 14px;
-            border: none;
-            background: var(--primary, #2563eb);
-            color: white;
-            cursor: pointer;
-            transition: transform 0.1s;
-            box-shadow: 0 4px 14px rgba(37,99,235,0.3);
-          ">✓</button>
+          <button type="button" class="btn-numpad-key btn-clear" data-val="clear">C</button>
+          <button type="button" class="btn-numpad-key" data-val="0">0</button>
+          <button type="button" class="btn-numpad-key btn-submit" data-val="submit">✓</button>
         </div>
 
         <!-- Emergency Owner Reset (Foolproof Rescue) -->
-        <div style="margin-top: 24px; padding-top: 16px; border-top: 1px dashed var(--border, #e2e8f0);">
-          <button type="button" id="btn-reset-owner-pin" style="
-            background: none;
-            border: none;
-            color: var(--text-muted, #64748b);
-            font-size: 12px;
-            cursor: pointer;
-            text-decoration: underline;
-          ">
+        <div class="login-footer-reset">
+          <button type="button" class="btn-reset-owner-pin" id="btn-reset-owner-pin">
             🔄 Lupa PIN? Reset PIN Owner ke default "1234"
           </button>
         </div>

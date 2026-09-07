@@ -880,7 +880,299 @@ select.input { cursor: pointer; }
 }
 
 .btn-numpad-key:active, .btn-numpad:active {
-  transform: scale(0.94) !important;
+  transform: scale(0.93) !important;
   filter: brightness(0.92);
+}
+
+/* ── Dedicated Login Portal (Fit Proper, International POS Standard) ── */
+#view-login {
+  padding: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+#view-login.active {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-portal-wrapper {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(8px, 1.8vh, 16px) clamp(10px, 2.5vw, 20px);
+  box-sizing: border-box;
+}
+
+.login-portal-card {
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: clamp(16px, 2.5vw, 20px);
+  max-width: 370px;
+  width: 100%;
+  max-height: min(96vh, 600px);
+  padding: clamp(14px, 2vh, 22px) clamp(16px, 2.5vw, 22px);
+  box-shadow: 0 16px 40px -8px rgba(15, 23, 42, 0.08), 0 2px 10px rgba(0,0,0,0.02);
+  text-align: center;
+  position: relative;
+  box-sizing: border-box;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.login-brand-header {
+  margin-bottom: clamp(6px, 1.2vh, 12px);
+}
+
+.login-brand-logo {
+  width: clamp(38px, 5.2vh, 46px);
+  height: clamp(38px, 5.2vh, 46px);
+  object-fit: contain;
+  margin-bottom: clamp(2px, 0.6vh, 6px);
+  filter: drop-shadow(0 4px 10px rgba(37,99,235,0.15));
+}
+
+.login-brand-title {
+  font-size: clamp(1.05rem, 2vh, 1.2rem);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text-primary, #1e293b);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.login-brand-subtitle {
+  font-size: clamp(9px, 1.2vh, 10.5px);
+  font-weight: 700;
+  color: #2563eb;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 2px 0 0 0;
+}
+
+.login-op-section {
+  margin-bottom: clamp(6px, 1.2vh, 10px);
+}
+
+.login-op-label {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text-muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 5px;
+}
+
+.login-operator-list {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  max-height: 72px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.btn-login-op {
+  padding: 4px 10px;
+  border-radius: 11px;
+  border: 1.5px solid var(--border, #e2e8f0);
+  background: var(--bg-card, #ffffff);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.btn-login-op.selected {
+  border-color: var(--primary, #2563eb);
+  background: rgba(37, 99, 235, 0.08);
+  box-shadow: 0 4px 12px rgba(37,99,235,0.12);
+}
+
+.login-op-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 11px;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.login-op-name {
+  font-weight: 700;
+  font-size: 11.5px;
+  color: var(--text-primary, #1e293b);
+  line-height: 1.2;
+}
+
+.login-op-role {
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.login-prompt-box {
+  background: var(--bg-muted, #f8fafc);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 8px;
+  padding: 4px 10px;
+  margin-bottom: clamp(6px, 1.2vh, 9px);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary, #475569);
+  max-width: 100%;
+}
+
+.login-pin-box {
+  margin-bottom: clamp(6px, 1.2vh, 9px);
+}
+
+.login-pin-dots {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 3px;
+}
+
+.pin-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--primary, #2563eb);
+  background: transparent;
+  display: inline-block;
+  transition: all 0.16s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.login-error-msg {
+  min-height: 15px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #dc2626;
+  line-height: 1.2;
+}
+
+.login-numpad-grid {
+  max-width: 240px;
+  width: 100%;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(5px, 0.9vh, 8px);
+}
+
+.btn-numpad-key {
+  height: clamp(36px, 4.8vh, 42px);
+  font-size: clamp(16px, 2.3vh, 19px);
+  font-weight: 700;
+  border-radius: 10px;
+  border: 1px solid var(--border, #cbd5e1);
+  background: var(--bg-card, #ffffff);
+  color: var(--text-primary, #1e293b);
+  cursor: pointer;
+  transition: transform 0.08s ease, background 0.12s ease;
+  box-shadow: 0 1.5px 4px rgba(0,0,0,0.03);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.btn-numpad-key.btn-clear {
+  font-size: 13.5px;
+  font-weight: 700;
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #dc2626;
+}
+
+.btn-numpad-key.btn-submit {
+  font-size: 17px;
+  font-weight: 800;
+  border: none;
+  background: var(--primary, #2563eb);
+  color: #ffffff;
+  box-shadow: 0 3px 10px rgba(37,99,235,0.28);
+}
+
+.login-footer-reset {
+  margin-top: clamp(6px, 1vh, 10px);
+  padding-top: clamp(4px, 0.8vh, 8px);
+  border-top: 1px dashed var(--border, #e2e8f0);
+}
+
+.btn-reset-owner-pin {
+  background: none;
+  border: none;
+  color: var(--text-muted, #64748b);
+  font-size: 10px;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.15s;
+}
+
+.btn-reset-owner-pin:hover {
+  color: var(--primary, #2563eb);
+}
+
+/* Landscape or Ultra-short Screens (< 600px height) */
+@media (max-height: 600px) {
+  .login-portal-wrapper {
+    padding: 4px 10px;
+  }
+  .login-portal-card {
+    padding: 10px 16px;
+    border-radius: 14px;
+    max-height: 98vh;
+  }
+  .login-brand-logo {
+    width: 32px;
+    height: 32px;
+    margin-bottom: 2px;
+  }
+  .login-brand-title {
+    font-size: 1rem;
+  }
+  .login-brand-subtitle {
+    font-size: 8.5px;
+  }
+  .login-brand-header {
+    margin-bottom: 4px;
+  }
+  .login-op-section {
+    margin-bottom: 4px;
+  }
+  .login-prompt-box {
+    margin-bottom: 4px;
+    padding: 2px 7px;
+    font-size: 10px;
+  }
+  .login-pin-box {
+    margin-bottom: 4px;
+  }
+  .login-numpad-grid {
+    gap: 4px;
+  }
+  .btn-numpad-key {
+    height: 32px;
+    font-size: 15px;
+  }
 }
 
