@@ -131,13 +131,6 @@ export const renderLogin = async () => {
           <button type="button" class="btn-numpad-key btn-submit" data-val="submit">✓</button>
         </div>
 
-        <!-- Emergency Owner Reset (Foolproof Rescue) -->
-        <div class="login-footer-reset">
-          <button type="button" class="btn-reset-owner-pin" id="btn-reset-owner-pin">
-            🔄 Lupa PIN? Reset PIN Owner ke default "1234"
-          </button>
-        </div>
-
       </div>
     </div>
   `;
@@ -232,36 +225,6 @@ const attachLoginEvents = () => {
       const val = btn.getAttribute('data-val');
       handleInput(val);
     });
-  });
-
-  // Reset Owner PIN button
-  document.getElementById('btn-reset-owner-pin')?.addEventListener('click', async () => {
-    const ownerUser = _activeUsers.find(u => u.role === 'owner');
-    if (!ownerUser) {
-      window.showToast?.('Akun Owner tidak ditemukan.', 'error');
-      return;
-    }
-
-    if (confirm(`Atur ulang PIN akun Owner "${ownerUser.name}" kembali ke PIN standar "1234"?`)) {
-      try {
-        const salt = generateSalt();
-        const pinHash = await hashPin('1234', salt);
-        const updated = {
-          ...ownerUser,
-          pinHash,
-          pinSalt: salt,
-          updatedAt: new Date().toISOString()
-        };
-        await updateUser(updated);
-        _activeUsers = (await getAllUsers()).filter(u => u.isActive !== false);
-        _selectedUserId = ownerUser.id;
-        _enteredPin = '';
-        renderLogin();
-        window.showToast?.('PIN Owner berhasil direset ke "1234". Silakan login.', 'success');
-      } catch (err) {
-        window.showToast?.('Gagal mereset PIN: ' + err.message, 'error');
-      }
-    }
   });
 };
 

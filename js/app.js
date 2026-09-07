@@ -114,10 +114,10 @@ const navigateTo = async (viewName) => {
     item.classList.toggle('active', item.dataset.view === viewName);
   });
 
-  // Dock visibility: hide dock on login screen for full immersion
+  // Dock visibility: hide dock on login screen or if unauthenticated
   const dockContainer = document.querySelector('.dock-container');
   if (dockContainer) {
-    dockContainer.style.display = viewName === 'login' ? 'none' : 'flex';
+    dockContainer.style.display = (viewName === 'login' || !store.state.currentUser) ? 'none' : 'flex';
   }
 
   // Set active view container
@@ -672,6 +672,11 @@ const init = async () => {
     };
 
     window.addEventListener('touchstart', (e) => {
+      // Security Hardening: Never allow swipe navigation if unauthenticated!
+      if (!store.state.currentUser) {
+        isSwipeCanceled = true;
+        return;
+      }
       if (!e.touches || e.touches.length !== 1) {
         isSwipeCanceled = true;
         return;
@@ -695,7 +700,7 @@ const init = async () => {
     }, { passive: true });
 
     window.addEventListener('touchend', (e) => {
-      if (isSwipeCanceled || !e.changedTouches || !e.changedTouches.length) return;
+      if (!store.state.currentUser || isSwipeCanceled || !e.changedTouches || !e.changedTouches.length) return;
       const t = e.changedTouches[0];
       const deltaX = t.clientX - touchStartX;
       const deltaY = t.clientY - touchStartY;

@@ -94,11 +94,10 @@ export const updateSyncBadge = (status, label) => {
 };
 
 /**
- * Normalize product object for Supabase (Bound to Master Store ID)
+ * Normalize product object for Supabase
  */
 export const formatProductForCloud = (p) => ({
   id: String(p.id),
-  store_id: getMasterStoreId(),
   sku: p.sku || `BM-${p.id}`,
   name: p.name || '',
   category: p.category || 'Umum',
@@ -112,11 +111,10 @@ export const formatProductForCloud = (p) => ({
 });
 
 /**
- * Normalize transaction object for Supabase (Bound to Master Store ID)
+ * Normalize transaction object for Supabase
  */
 export const formatTransactionForCloud = (tx) => ({
   id: String(tx.id),
-  store_id: getMasterStoreId(),
   invoice_no: tx.invoiceNo || tx.invoice_no || `INV-${Date.now()}`,
   date: tx.date ? new Date(tx.date).toISOString() : new Date().toISOString(),
   date_key: tx.dateKey || tx.date_key || todayKey(tx.date ? new Date(tx.date) : new Date()),
@@ -138,11 +136,10 @@ export const formatTransactionForCloud = (tx) => ({
 });
 
 /**
- * Normalize expense object for Supabase (Bound to Master Store ID)
+ * Normalize expense object for Supabase
  */
 export const formatExpenseForCloud = (exp) => ({
   id: String(exp.id),
-  store_id: getMasterStoreId(),
   date: exp.date ? new Date(exp.date).toISOString() : new Date().toISOString(),
   date_key: exp.dateKey || exp.date_key || todayKey(exp.date ? new Date(exp.date) : new Date()),
   category: exp.category || 'Operasional',
@@ -153,11 +150,10 @@ export const formatExpenseForCloud = (exp) => ({
 });
 
 /**
- * Normalize customer object for Supabase (Bound to Master Store ID)
+ * Normalize customer object for Supabase
  */
 export const formatCustomerForCloud = (c) => ({
   id: String(c.id),
-  store_id: getMasterStoreId(),
   name: c.name || '',
   phone: c.phone || '',
   address: c.address || '',
@@ -172,7 +168,7 @@ export const formatCustomerForCloud = (c) => ({
 });
 
 /**
- * Normalize user object for Supabase (Bound to Master Store ID)
+ * Normalize user object for Supabase
  */
 export const formatUserForCloud = (u) => ({
   store_id: getMasterStoreId(),
@@ -205,11 +201,11 @@ export const syncInitialData = async () => {
   updateSyncBadge('syncing');
 
   try {
-    // 1. Sync Products (2-Way, Scoped to store_id)
+    // 1. Sync Products (2-Way)
     try {
       const [localProds, { data: cloudProds, error: prodErr }] = await Promise.all([
         getAllProducts(),
-        supabase.from('products').select('*').eq('store_id', storeId),
+        supabase.from('products').select('*'),
       ]);
 
       if (!prodErr && cloudProds) {
@@ -241,11 +237,11 @@ export const syncInitialData = async () => {
       console.warn('[Sync] Products sync warning:', e);
     }
 
-    // 2. Sync Transactions (2-Way, Scoped to store_id)
+    // 2. Sync Transactions (2-Way)
     try {
       const [localTxs, { data: cloudTxs, error: txErr }] = await Promise.all([
         getAllTransactions(),
-        supabase.from('transactions').select('*').eq('store_id', storeId),
+        supabase.from('transactions').select('*'),
       ]);
 
       if (!txErr && cloudTxs) {
@@ -285,11 +281,11 @@ export const syncInitialData = async () => {
       console.warn('[Sync] Transactions sync warning:', e);
     }
 
-    // 3. Sync Expenses (2-Way, Scoped to store_id)
+    // 3. Sync Expenses (2-Way)
     try {
       const [localExps, { data: cloudExps, error: expErr }] = await Promise.all([
         getAllExpenses(),
-        supabase.from('expenses').select('*').eq('store_id', storeId),
+        supabase.from('expenses').select('*'),
       ]);
 
       if (!expErr && cloudExps) {
@@ -318,11 +314,11 @@ export const syncInitialData = async () => {
       console.warn('[Sync] Expenses sync warning:', e);
     }
 
-    // 4. Sync Customers (2-Way, Scoped to store_id)
+    // 4. Sync Customers (2-Way)
     try {
       const [localCusts, { data: cloudCusts, error: custErr }] = await Promise.all([
         getAllCustomers(),
-        supabase.from('customers').select('*').eq('store_id', storeId),
+        supabase.from('customers').select('*'),
       ]);
 
       if (!custErr && cloudCusts) {
@@ -359,36 +355,41 @@ export const syncInitialData = async () => {
     try {
       let cloudUsers = null;
 
-      // Bridge A: app_users table
+      // Bridge A: app_users table (if exists)
       try {
         const { data: bA, error: errA } = await supabase
           .from('app_users')
-          .select('*')
-          .eq('store_id', storeId);
+          .select('*');
         if (!errA && bA && bA.length > 0) {
           cloudUsers = bA;
         }
       } catch (_) {}
 
-      // Bridge B: settings table fallback
+      // Bridge B: settings table fallback (100% active & supported!)
       const rosterKey = `users_roster_${storeId}`;
       try {
-        const { data: bB } = await supabase
+        const { data: bB, error: errB } = await supabase
           .from('settings')
           .select('value')
           .eq('key', rosterKey)
           .maybeSingle();
-        if (bB && bB.value) {
+        if (!errB && bB && bB.value) {
           const parsed = JSON.parse(bB.value);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            if (!cloudUsers || parsed.length > cloudUsers.length) {
-              cloudUsers = parsed;
-            }
+            cloudUsers = parsed;
           }
         }
       } catch (_) {}
 
       if (cloudUsers && cloudUsers.length > 0) {
+        const cloudUsernames = new Set(cloudUsers.map(u => String(u.username).toLowerCase().trim()));
+        const localUsers = await db.users.toArray();
+        for (const lu of localUsers) {
+          if (!cloudUsernames.has(String(lu.username).toLowerCase().trim())) {
+            await db.users.delete(lu.id);
+          }
+        }
+
         for (const cu of cloudUsers) {
           const usernameClean = String(cu.username).toLowerCase().trim();
           const existing = await db.users.where('username').equalsIgnoreCase(usernameClean).first();
@@ -409,28 +410,21 @@ export const syncInitialData = async () => {
             await db.users.add(udata);
           }
         }
+        const freshUsers = await db.users.toArray();
+        store.setUsers(freshUsers);
+      } else {
+        // If cloud roster is empty, push local roster so other devices can pull it!
+        const allLocalUsers = await (getAllUsers ? getAllUsers() : db.users.toArray());
+        if (allLocalUsers.length > 0) {
+          try {
+            await supabase.from('settings').upsert({
+              key: rosterKey,
+              value: JSON.stringify(allLocalUsers.map(formatUserForCloud)),
+              updated_at: new Date().toISOString(),
+            });
+          } catch (_) {}
+        }
       }
-
-      // Push unpushed local users to both bridges
-      const allLocalUsers = await (getAllUsers ? getAllUsers() : db.users.toArray());
-      if (allLocalUsers.length > 0) {
-        // Bridge A Push
-        try {
-          await supabase.from('app_users').upsert(allLocalUsers.map(formatUserForCloud), { onConflict: 'username' });
-        } catch (_) {}
-        // Bridge B Push (Settings table fallback)
-        try {
-          await supabase.from('settings').upsert({
-            key: rosterKey,
-            store_id: storeId,
-            value: JSON.stringify(allLocalUsers.map(formatUserForCloud)),
-            updated_at: new Date().toISOString(),
-          });
-        } catch (_) {}
-      }
-
-      const freshUsers = await db.users.toArray();
-      store.setUsers(freshUsers);
     } catch (e) {
       console.warn('[Sync] Users dual-bridge sync warning:', e);
     }
@@ -439,14 +433,13 @@ export const syncInitialData = async () => {
     try {
       const { data: cloudSettings, error: setErr } = await supabase
         .from('settings')
-        .select('*')
-        .eq('store_id', storeId);
+        .select('*');
       const localSettingsArr = await db.settings.toArray();
 
       if (!setErr && cloudSettings) {
         if (cloudSettings.length === 0 && localSettingsArr.length > 0) {
           await supabase.from('settings').upsert(
-            localSettingsArr.map(s => ({ key: s.key, store_id: storeId, value: String(s.value ?? ''), updated_at: new Date().toISOString() }))
+            localSettingsArr.map(s => ({ key: s.key, value: String(s.value ?? ''), updated_at: new Date().toISOString() }))
           );
         } else if (cloudSettings.length > 0) {
           for (const cs of cloudSettings) {
@@ -486,7 +479,7 @@ export const setupRealtimeSubscription = () => {
 
   realtimeChannel = supabase
     .channel(`store_realtime_${storeId}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `store_id=eq.${storeId}` }, async (payload) => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, async (payload) => {
       if (payload.eventType === 'DELETE') {
         const id = isNaN(Number(payload.old.id)) ? payload.old.id : Number(payload.old.id);
         await db.products.delete(id);
@@ -508,7 +501,7 @@ export const setupRealtimeSubscription = () => {
       const updated = await getAllProducts();
       store.setProducts(updated);
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `store_id=eq.${storeId}` }, async (payload) => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, async (payload) => {
       if (payload.eventType === 'DELETE') {
         const id = isNaN(Number(payload.old.id)) ? payload.old.id : Number(payload.old.id);
         await db.transactions.delete(id);
@@ -538,7 +531,7 @@ export const setupRealtimeSubscription = () => {
       const updated = await getAllTransactions();
       store.setTransactions(updated);
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `store_id=eq.${storeId}` }, async (payload) => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, async (payload) => {
       if (payload.eventType === 'DELETE') {
         const id = isNaN(Number(payload.old.id)) ? payload.old.id : Number(payload.old.id);
         await db.expenses.delete(id);
@@ -557,7 +550,7 @@ export const setupRealtimeSubscription = () => {
       const updated = await getAllExpenses();
       store.setExpenses(updated);
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'customers', filter: `store_id=eq.${storeId}` }, async (payload) => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, async (payload) => {
       if (payload.eventType === 'DELETE') {
         const id = isNaN(Number(payload.old.id)) ? payload.old.id : Number(payload.old.id);
         await db.customers.delete(id);
@@ -580,11 +573,19 @@ export const setupRealtimeSubscription = () => {
       const updated = await getAllCustomers();
       store.setCustomers?.(updated);
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'settings', filter: `store_id=eq.${storeId}` }, async (payload) => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'settings' }, async (payload) => {
       if (payload.new && payload.new.key === `users_roster_${storeId}`) {
         try {
           const roster = JSON.parse(payload.new.value);
-          if (Array.isArray(roster)) {
+          if (Array.isArray(roster) && roster.length > 0) {
+            const rosterUsernames = new Set(roster.map(u => String(u.username).toLowerCase().trim()));
+            const localUsers = await db.users.toArray();
+            for (const lu of localUsers) {
+              if (!rosterUsernames.has(String(lu.username).toLowerCase().trim())) {
+                await db.users.delete(lu.id);
+              }
+            }
+
             for (const cu of roster) {
               const usernameClean = String(cu.username).toLowerCase().trim();
               const existing = await db.users.where('username').equalsIgnoreCase(usernameClean).first();
@@ -607,35 +608,6 @@ export const setupRealtimeSubscription = () => {
         } catch (_) {}
       }
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'app_users', filter: `store_id=eq.${storeId}` }, async (payload) => {
-      if (payload.eventType === 'DELETE') {
-        const cu = payload.old;
-        if (cu && cu.username) {
-          const local = await db.users.where('username').equalsIgnoreCase(cu.username).first();
-          if (local) await db.users.delete(local.id);
-        }
-      } else {
-        const cu = payload.new;
-        if (cu && cu.username) {
-          const usernameClean = String(cu.username).toLowerCase().trim();
-          const existing = await db.users.where('username').equalsIgnoreCase(usernameClean).first();
-          const udata = {
-            username: usernameClean,
-            name: cu.name,
-            role: cu.role,
-            pinHash: cu.pin_hash,
-            pinSalt: cu.pin_salt,
-            isActive: cu.is_active !== undefined ? Boolean(cu.is_active) : true,
-            createdAt: cu.created_at,
-            updatedAt: cu.updated_at,
-          };
-          if (existing) await db.users.update(existing.id, udata);
-          else await db.users.add(udata);
-        }
-      }
-      const freshUsers = await db.users.toArray();
-      store.setUsers(freshUsers);
-    })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         updateSyncBadge('online', '🟢 Cloud Realtime');
@@ -651,7 +623,7 @@ export const setupRealtimeSubscription = () => {
 };
 
 /**
- * Background Push Helpers (Safe, Non-blocking, Master Store Scoped)
+ * Background Push Helpers (Safe, Non-blocking)
  */
 export const pushProductToCloud = async (product) => {
   if (isDeviceIsolated() || !navigator.onLine) return;
@@ -665,7 +637,7 @@ export const deleteProductFromCloud = async (id) => {
   if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
-    await supabase.from('products').delete().eq('id', String(id)).eq('store_id', getMasterStoreId());
+    await supabase.from('products').delete().eq('id', String(id));
   } catch (_) {}
 };
 
@@ -681,7 +653,7 @@ export const deleteCustomerFromCloud = async (id) => {
   if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
-    await supabase.from('customers').delete().eq('id', String(id)).eq('store_id', getMasterStoreId());
+    await supabase.from('customers').delete().eq('id', String(id));
   } catch (_) {}
 };
 
@@ -697,7 +669,7 @@ export const deleteTransactionFromCloud = async (id) => {
   if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
-    await supabase.from('transactions').delete().eq('id', String(id)).eq('store_id', getMasterStoreId());
+    await supabase.from('transactions').delete().eq('id', String(id));
   } catch (_) {}
 };
 
@@ -713,7 +685,7 @@ export const deleteExpenseFromCloud = async (id) => {
   if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
-    await supabase.from('expenses').delete().eq('id', String(id)).eq('store_id', getMasterStoreId());
+    await supabase.from('expenses').delete().eq('id', String(id));
   } catch (_) {}
 };
 
@@ -723,7 +695,6 @@ export const pushSettingToCloud = async (key, value) => {
     const supabase = getSupabase();
     await supabase.from('settings').upsert({
       key: String(key),
-      store_id: getMasterStoreId(),
       value: typeof value === 'object' ? JSON.stringify(value) : String(value ?? ''),
       updated_at: new Date().toISOString(),
     });
@@ -735,23 +706,24 @@ export const pushUserToCloud = async (user) => {
   const storeId = getMasterStoreId();
 
   // Dual Bridge Push:
-  // 1. app_users table
+  // 1. app_users table (if exists)
   try {
     const supabase = getSupabase();
     await supabase.from('app_users').upsert(formatUserForCloud(user), { onConflict: 'username' });
   } catch (_) {}
 
-  // 2. settings table roster backup
+  // 2. settings table roster backup (Fail-Safe Dual-Bridge, 100% active!)
   try {
     const supabase = getSupabase();
     const all = await db.users.toArray();
     await supabase.from('settings').upsert({
       key: `users_roster_${storeId}`,
-      store_id: storeId,
       value: JSON.stringify(all.map(formatUserForCloud)),
       updated_at: new Date().toISOString(),
     });
-  } catch (_) {}
+  } catch (err) {
+    console.warn('[Sync] Failed to push user roster to settings:', err);
+  }
 };
 
 export const deleteUserFromCloud = async (username) => {
@@ -760,7 +732,7 @@ export const deleteUserFromCloud = async (username) => {
 
   try {
     const supabase = getSupabase();
-    await supabase.from('app_users').delete().eq('username', String(username).toLowerCase().trim()).eq('store_id', storeId);
+    await supabase.from('app_users').delete().eq('username', String(username).toLowerCase().trim());
   } catch (_) {}
 
   try {
@@ -768,7 +740,6 @@ export const deleteUserFromCloud = async (username) => {
     const all = await db.users.toArray();
     await supabase.from('settings').upsert({
       key: `users_roster_${storeId}`,
-      store_id: storeId,
       value: JSON.stringify(all.map(formatUserForCloud)),
       updated_at: new Date().toISOString(),
     });

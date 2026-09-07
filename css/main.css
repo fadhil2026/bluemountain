@@ -661,8 +661,8 @@ select.input { cursor: pointer; }
 @media (max-width: 599px) {
   :root {
     --topbar-height:  48px;
-    --dock-height:    70px;
-    --dock-icon-size: 44px;
+    --dock-height:    58px;
+    --dock-icon-size: clamp(30px, 8.4vw, 36px);
   }
 
   .topbar {
@@ -735,7 +735,7 @@ select.input { cursor: pointer; }
   :root {
     --topbar-height:  50px;
     --dock-height:    74px;
-    --dock-icon-size: 46px;
+    --dock-icon-size: clamp(40px, 5.5vw, 44px);
   }
 
   .topbar {
@@ -1110,26 +1110,6 @@ select.input { cursor: pointer; }
   background: var(--primary, #2563eb);
   color: #ffffff;
   box-shadow: 0 3px 10px rgba(37,99,235,0.28);
-}
-
-.login-footer-reset {
-  margin-top: clamp(6px, 1vh, 10px);
-  padding-top: clamp(4px, 0.8vh, 8px);
-  border-top: 1px dashed var(--border, #e2e8f0);
-}
-
-.btn-reset-owner-pin {
-  background: none;
-  border: none;
-  color: var(--text-muted, #64748b);
-  font-size: 10px;
-  cursor: pointer;
-  text-decoration: underline;
-  transition: color 0.15s;
-}
-
-.btn-reset-owner-pin:hover {
-  color: var(--primary, #2563eb);
 }
 
 /* Landscape or Ultra-short Screens (< 600px height) */

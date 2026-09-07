@@ -11,10 +11,14 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
-  max-width: calc(100vw - 24px);
+  max-width: calc(100vw - 16px);
+  width: auto;
   padding: 0;
   margin: 0;
   pointer-events: none;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
 }
 
 /* ── Dock Shelf (Glassmorphism macOS) ── */
@@ -22,6 +26,7 @@
   pointer-events: auto;
   display: flex;
   align-items: flex-end;
+  justify-content: center;
   gap: 10px;
   padding: 10px 18px 8px;
   background: rgba(255, 255, 255, 0.65);
@@ -38,9 +43,19 @@
     inset 0 -1px 1px rgba(0, 0, 0, 0.03);
   position: relative;
   white-space: nowrap;
-  touch-action: none;
+  touch-action: pan-x;
   transform: translateZ(0);
   will-change: transform;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  box-sizing: border-box;
+}
+
+.dock::-webkit-scrollbar {
+  display: none;
 }
 
 /* Top Specular Edge Highlight */
@@ -93,6 +108,7 @@
   -webkit-tap-highlight-color: transparent;
   outline: none;
   touch-action: none;
+  flex-shrink: 0;
 }
 
 /* ── Smooth FLIP Drag Reordering ── */
@@ -358,31 +374,50 @@
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   RESPONSIVE OPTIMIZATIONS
+   RESPONSIVE DOCK OPTIMIZATIONS (Auto-Detect Proportional)
+   Supports all resolutions: Mobile (320px - 599px), Tablet (600px - 1024px),
+   Desktop (> 1024px), Portrait & Landscape
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
 /* Tablet (600px – 1024px) */
 @media (min-width: 600px) and (max-width: 1024px) {
+  :root {
+    --dock-icon-size: clamp(40px, 5.5vw, 48px);
+    --dock-height: 74px;
+  }
+  .dock-container {
+    bottom: 10px;
+    max-width: calc(100vw - 20px);
+  }
   .dock {
-    gap: 8px;
-    padding: 9px 14px 7px;
+    gap: clamp(6px, 1.2vw, 8px);
+    padding: 8px 14px 7px;
     border-radius: 20px;
+  }
+  .dock-label {
+    font-size: 11px;
+    padding: 4px 9px;
   }
 }
 
-/* Mobile Devices (< 600px) */
+/* Mobile Devices (< 600px, e.g. 360px - 480px Portrait) */
 @media (max-width: 599px) {
+  :root {
+    /* Clamped strictly so all 8 icons + gaps fit perfectly inside 340px-360px without cut-off */
+    --dock-icon-size: clamp(30px, 8.4vw, 36px);
+    --dock-height: 58px;
+  }
   .dock-container {
     bottom: 8px;
     max-width: calc(100vw - 12px);
   }
   .dock {
-    gap: 6px;
-    padding: 7px 10px 6px;
+    gap: clamp(3px, 1.2vw, 5px);
+    padding: 5px 8px 4px;
     border-radius: 18px;
   }
   .dock-label {
-    display: none;
+    display: none; /* Tooltip suppressed on mobile touch */
   }
   .dock-dot {
     width: 3.5px;
@@ -390,28 +425,42 @@
   }
 }
 
-/* Very Small Mobile (< 360px) */
-@media (max-width: 360px) {
+/* Ultra-Compact / Narrow Mobile (< 360px) */
+@media (max-width: 359px) {
+  :root {
+    --dock-icon-size: clamp(26px, 8vw, 30px);
+    --dock-height: 52px;
+  }
+  .dock-container {
+    bottom: 6px;
+    max-width: calc(100vw - 8px);
+  }
   .dock {
-    gap: 4px;
-    padding: 6px 8px 5px;
+    gap: 3px;
+    padding: 4px 6px 4px;
+    border-radius: 16px;
   }
 }
 
-/* Landscape Mobile */
-@media (max-height: 499px) and (orientation: landscape) {
+/* Landscape Mobile or Short Screens (max-height <= 500px) */
+@media (max-height: 500px) and (orientation: landscape) {
+  :root {
+    --dock-icon-size: clamp(26px, 6.5vh, 32px);
+    --dock-height: 46px;
+  }
   .dock-container {
     bottom: 4px;
+    max-width: calc(100vw - 16px);
   }
   .dock {
-    padding: 5px 12px 4px;
-    gap: 6px;
-    border-radius: 16px;
+    padding: 4px 10px 3px;
+    gap: clamp(4px, 1vw, 7px);
+    border-radius: 14px;
   }
   .dock-label {
-    bottom: calc(100% + 8px);
+    bottom: calc(100% + 6px);
     font-size: 10px;
-    padding: 3px 8px;
+    padding: 2px 7px;
   }
   .dock::after {
     display: none;
