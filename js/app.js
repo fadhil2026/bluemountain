@@ -202,7 +202,7 @@ const updateOperatorUI = (user) => {
       badge.style.background = user.role === 'owner' ? 'rgba(139, 92, 246, 0.12)' : (user.role === 'supervisor' ? 'rgba(37, 99, 235, 0.12)' : 'rgba(16, 185, 129, 0.12)');
       badge.style.borderColor = user.role === 'owner' ? 'rgba(139, 92, 246, 0.3)' : (user.role === 'supervisor' ? 'rgba(37, 99, 235, 0.3)' : 'rgba(16, 185, 129, 0.3)');
     }
-    if (btnLogout) btnLogout.style.display = 'flex';
+    if (btnLogout) btnLogout.style.display = 'inline-flex';
     if (btnLogin) btnLogin.style.display = 'none';
   } else {
     if (nameEl) nameEl.textContent = 'Belum Masuk';
@@ -213,7 +213,7 @@ const updateOperatorUI = (user) => {
       badge.style.borderColor = 'rgba(100, 116, 139, 0.25)';
     }
     if (btnLogout) btnLogout.style.display = 'none';
-    if (btnLogin) btnLogin.style.display = 'flex';
+    if (btnLogin) btnLogin.style.display = 'inline-flex';
   }
 
   const dockUsers = document.getElementById('dock-users');
