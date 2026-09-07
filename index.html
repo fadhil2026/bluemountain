@@ -157,12 +157,21 @@
           <span id="operator-icon">👤</span>
           <span id="operator-name">Operator</span>
         </div>
+        <button id="btn-topbar-logout" title="Keluar / Kunci Kasir" style="display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 20px; background: #fff1f2; border: 1.5px solid #fca5a5; color: #e11d48; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
+          <span>🚪</span> Log Out
+        </button>
+        <button id="btn-topbar-login" title="Masuk ke Akun Kasir" style="display: none; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 20px; background: #eff6ff; border: 1.5px solid #93c5fd; color: #1d4ed8; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
+          <span>🔑</span> Log In
+        </button>
         <div class="status-badge" id="status-badge">Sistem Online</div>
       </div>
     </header>
 
     <!-- ── Main Content ── -->
     <main class="main-content" role="main">
+
+      <!-- Login View -->
+      <section id="view-login" class="view" aria-label="Halaman Login"></section>
 
       <!-- POS View -->
       <section id="view-pos" class="view" aria-label="Kasir POS"></section>

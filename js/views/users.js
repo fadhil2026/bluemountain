@@ -92,6 +92,9 @@ export const renderUsers = async () => {
         <p class="view-subtitle" style="margin: 4px 0 0 0; color: var(--text-muted, #64748b);">Kelola daftar staf kasir, supervisor, dan pemilik toko dengan enkripsi PIN aman.</p>
       </div>
       <div style="display: flex; gap: 12px; align-items: center;">
+        <button class="btn btn-secondary" id="btn-users-logout" style="display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 10px; font-weight: 700; background: #fff1f2; border: 1.5px solid #fca5a5; color: #e11d48; cursor: pointer;">
+          <span>🚪</span> Log Out
+        </button>
         <button class="btn btn-primary" id="btn-add-user" style="display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 10px; font-weight: 600;">
           <span>➕</span> Tambah Operator
         </button>
@@ -179,6 +182,11 @@ export const renderUsers = async () => {
   `;
 
   // Attach Event Handlers
+  document.getElementById('btn-users-logout')?.addEventListener('click', () => {
+    if (confirm('Keluar dari sesi operator kasir?')) {
+      window.dispatchEvent(new CustomEvent('request-logout'));
+    }
+  });
   document.getElementById('btn-add-user')?.addEventListener('click', () => openUserFormModal());
   document.getElementById('user-search-input')?.addEventListener('input', (e) => {
     _searchQuery = e.target.value;

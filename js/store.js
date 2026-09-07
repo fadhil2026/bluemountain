@@ -253,6 +253,7 @@ const store = {
   },
 
   canAccess(viewKey) {
+    if (viewKey === 'login') return true;
     const user = this.state.currentUser;
     if (!user) return false;
     const role = user.role || 'cashier';

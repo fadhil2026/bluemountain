@@ -60,6 +60,39 @@ export const renderSettings = async () => {
       <button class="btn btn--primary" id="btn-save-settings">💾 Simpan Semua</button>
     </div>
 
+    <!-- Operator & Sesi Aktif -->
+    <div class="settings-section">
+      <div class="settings-section-header">👤 Operator & Sesi Kasir</div>
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__label">Operator Saat Ini</div>
+          <div class="settings-row__desc">Akun yang mengoperasikan kasir</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-weight: 700; font-size: 14px; color: var(--text-primary);">
+            ${esc(store.state.currentUser?.name || 'Belum Masuk')}
+          </span>
+          <span style="font-size: 11px; padding: 2px 8px; border-radius: 12px; background: rgba(37, 99, 235, 0.1); color: #2563eb; font-weight: 700; text-transform: uppercase;">
+            ${esc(store.state.currentUser?.role || '-')}
+          </span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__label">Kontrol Sesi</div>
+          <div class="settings-row__desc">Ganti kasir atau keluar dari sistem</div>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn btn--secondary" id="btn-settings-switch-op" style="font-size: 12px; font-weight: 600;">
+            🔄 Beralih Operator
+          </button>
+          <button type="button" class="btn" id="btn-settings-logout" style="font-size: 12px; font-weight: 700; background: #fff1f2; border: 1.5px solid #fca5a5; color: #e11d48; cursor: pointer;">
+            🚪 Keluar / Log Out
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Toko -->
     <div class="settings-section">
       <div class="settings-section-header">🏪 Informasi Toko</div>
@@ -536,6 +569,16 @@ END $$;`;
 
     store.updateSettings(updates);
     window.showToast('Pengaturan berhasil disimpan', 'success');
+  });
+
+  document.getElementById('btn-settings-switch-op')?.addEventListener('click', () => {
+    window.dispatchEvent(new CustomEvent('request-operator-switch'));
+  });
+
+  document.getElementById('btn-settings-logout')?.addEventListener('click', () => {
+    if (confirm('Keluar dari sesi operator kasir?')) {
+      window.dispatchEvent(new CustomEvent('request-logout'));
+    }
   });
 
   document.getElementById('btn-test-48')?.addEventListener('click', () => {

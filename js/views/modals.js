@@ -6,8 +6,8 @@ import QRCode                 from 'qrcode';
 import { generateDynamicQRIS } from '../utils/qris.js';
 import { formatRupiah }       from '../utils/currency.js';
 import { esc }                from '../utils/sanitize.js';
-import { saveTransaction, getAllCustomers, addCustomer, updateCustomer, getAllUsers, seedDefaultUsers } from '../db.js';
-import { verifyPin }           from '../utils/crypto.js';
+import { saveTransaction, getAllCustomers, addCustomer, updateCustomer, getAllUsers, seedDefaultUsers, updateUser } from '../db.js';
+import { verifyPin, generateSalt, hashPin } from '../utils/crypto.js';
 import {
   getReceiptPreviewHTML,
   getPrintSchemeUrl,
@@ -721,8 +721,19 @@ export const openLoginModal = async ({ onLogin = null, forceLock = false } = {})
         ">✓</button>
       </div>
 
+      <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border, #e2e8f0);">
+        <button type="button" id="btn-modal-reset-owner" style="
+          background: none;
+          border: none;
+          color: var(--text-muted, #64748b);
+          font-size: 11px;
+          cursor: pointer;
+          text-decoration: underline;
+        ">🔄 Lupa PIN? Reset PIN Owner ke "1234"</button>
+      </div>
+
       ${!forceLock ? `
-        <div style="margin-top: 20px;">
+        <div style="margin-top: 12px;">
           <button type="button" id="btn-cancel-login" style="
             background: transparent;
             border: none;
@@ -745,25 +756,24 @@ export const openLoginModal = async ({ onLogin = null, forceLock = false } = {})
     });
   };
 
-  const handleVerify = async () => {
+  const handleVerify = async (isManual = false) => {
     const targetUser = activeUsers.find(u => String(u.id) === String(selectedUserId));
     if (!targetUser) return;
 
-    if (!enteredPin || enteredPin.length < 4) {
-      const err = document.getElementById('pin-error-msg');
-      if (err) err.textContent = 'Masukkan minimal 4 digit PIN';
-      return;
+    if (enteredPin.length >= 4) {
+      const isValid = await verifyPin(enteredPin, targetUser.pinSalt, targetUser.pinHash);
+      if (isValid) {
+        store.login(targetUser);
+        closeModal(modalId);
+        window.showToast?.(`Operator aktif: ${targetUser.name} (${targetUser.role})`, 'success');
+        if (typeof onLogin === 'function') onLogin(targetUser);
+        return;
+      }
     }
 
-    const isValid = await verifyPin(enteredPin, targetUser.pinSalt, targetUser.pinHash);
-    if (isValid) {
-      store.login(targetUser);
-      closeModal(modalId);
-      window.showToast?.(`Operator aktif: ${targetUser.name} (${targetUser.role})`, 'success');
-      if (typeof onLogin === 'function') onLogin(targetUser);
-    } else {
+    if (isManual || enteredPin.length >= 6) {
       const err = document.getElementById('pin-error-msg');
-      if (err) err.textContent = 'PIN salah! Silakan coba lagi.';
+      if (err) err.textContent = enteredPin.length < 4 ? 'Masukkan minimal 4 digit PIN' : 'PIN salah! Silakan coba lagi.';
       enteredPin = '';
       updateDots();
     }
@@ -792,13 +802,11 @@ export const openLoginModal = async ({ onLogin = null, forceLock = false } = {})
           enteredPin = '';
           updateDots();
         } else if (val === 'submit') {
-          handleVerify();
+          handleVerify(true);
         } else if (enteredPin.length < 6) {
           enteredPin += val;
           updateDots();
-          if (enteredPin.length === 4) {
-            handleVerify();
-          }
+          handleVerify(false);
         }
       });
     });
@@ -806,6 +814,68 @@ export const openLoginModal = async ({ onLogin = null, forceLock = false } = {})
     document.getElementById('btn-cancel-login')?.addEventListener('click', () => {
       closeModal(modalId);
     });
+
+    document.getElementById('btn-modal-reset-owner')?.addEventListener('click', async () => {
+      const ownerUser = activeUsers.find(u => u.role === 'owner');
+      if (!ownerUser) {
+        window.showToast?.('Akun Owner tidak ditemukan.', 'error');
+        return;
+      }
+      if (confirm(`Atur ulang PIN akun Owner "${ownerUser.name}" kembali ke default "1234"?`)) {
+        try {
+          const salt = generateSalt();
+          const pinHash = await hashPin('1234', salt);
+          const updated = {
+            ...ownerUser,
+            pinHash,
+            pinSalt: salt,
+            updatedAt: new Date().toISOString()
+          };
+          await updateUser(updated);
+          activeUsers = (await getAllUsers()).filter(u => u.isActive !== false);
+          selectedUserId = ownerUser.id;
+          enteredPin = '';
+          const container = document.getElementById(modalId);
+          if (container) {
+            container.innerHTML = renderModalContent();
+            bindEvents();
+          }
+          window.showToast?.('PIN Owner berhasil direset ke default "1234". Silakan masukkan 1234.', 'success');
+        } catch (err) {
+          window.showToast?.('Gagal mereset PIN: ' + err.message, 'error');
+        }
+      }
+    });
+
+    // Keyboard support inside modal
+    const keyHandler = (e) => {
+      const modalEl = document.getElementById(modalId);
+      if (!modalEl || !modalEl.classList.contains('active')) {
+        window.removeEventListener('keydown', keyHandler);
+        return;
+      }
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        if (enteredPin.length < 6) {
+          enteredPin += e.key;
+          updateDots();
+          handleVerify(false);
+        }
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        enteredPin = enteredPin.slice(0, -1);
+        updateDots();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        handleVerify(true);
+      } else if (e.key === 'Escape' && !forceLock) {
+        e.preventDefault();
+        closeModal(modalId);
+      }
+    };
+    window.addEventListener('keydown', keyHandler);
   };
 
   bindEvents();

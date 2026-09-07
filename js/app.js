@@ -13,6 +13,7 @@ import { initReports, renderReports }                from './views/reports.js';
 import { initSettings, renderSettings }              from './views/settings.js';
 import { initFinance, renderFinance }                from './views/finance.js';
 import { initUsers, renderUsers }                    from './views/users.js';
+import { initLogin, renderLogin }                    from './views/login.js';
 import { openLoginModal }                            from './views/modals.js';
 import { syncInitialData, setupRealtimeSubscription } from './supabase.js';
 import { esc }                                        from './utils/sanitize.js';
@@ -78,6 +79,7 @@ const updateClock = () => {
 
 /* ── Navigation ── */
 const VIEWS = {
+  login:        { init: initLogin,        refresh: renderLogin },
   pos:          { init: initPOS,          refresh: refreshPOS },
   products:     { init: initProducts,     refresh: renderProducts },
   customers:    { init: initCustomers,    refresh: renderCustomers },
@@ -91,6 +93,12 @@ const VIEWS = {
 const _initialized = new Set();
 
 const navigateTo = async (viewName) => {
+  // If not authenticated and attempting to view any protected module, enforce login screen
+  if (!store.state.currentUser && viewName !== 'login') {
+    window.showToast?.('Silakan masuk dengan akun operator untuk melanjutkan.', 'warning');
+    viewName = 'login';
+  }
+
   const handler = VIEWS[viewName];
   if (!handler) return;
 
@@ -105,6 +113,12 @@ const navigateTo = async (viewName) => {
   document.querySelectorAll('.dock-item').forEach(item => {
     item.classList.toggle('active', item.dataset.view === viewName);
   });
+
+  // Dock visibility: hide dock on login screen for full immersion
+  const dockContainer = document.querySelector('.dock-container');
+  if (dockContainer) {
+    dockContainer.style.display = viewName === 'login' ? 'none' : 'flex';
+  }
 
   // Set active view container
   document.querySelectorAll('.view').forEach(view => {
@@ -176,18 +190,30 @@ const updateOperatorUI = (user) => {
   const badge = document.getElementById('operator-badge');
   const nameEl = document.getElementById('operator-name');
   const iconEl = document.getElementById('operator-icon');
-  if (!badge || !nameEl) return;
+  const btnLogout = document.getElementById('btn-topbar-logout');
+  const btnLogin = document.getElementById('btn-topbar-login');
 
   if (user) {
-    nameEl.textContent = `${user.name} (${user.role})`;
-    iconEl.textContent = user.role === 'owner' ? '👑' : (user.role === 'supervisor' ? '⭐' : '👤');
-    badge.style.display = 'flex';
-    badge.style.color = user.role === 'owner' ? '#8b5cf6' : (user.role === 'supervisor' ? '#2563eb' : '#10b981');
-    badge.style.background = user.role === 'owner' ? 'rgba(139, 92, 246, 0.12)' : (user.role === 'supervisor' ? 'rgba(37, 99, 235, 0.12)' : 'rgba(16, 185, 129, 0.12)');
-    badge.style.borderColor = user.role === 'owner' ? 'rgba(139, 92, 246, 0.3)' : (user.role === 'supervisor' ? 'rgba(37, 99, 235, 0.3)' : 'rgba(16, 185, 129, 0.3)');
+    if (nameEl) nameEl.textContent = `${user.name} (${user.role})`;
+    if (iconEl) iconEl.textContent = user.role === 'owner' ? '👑' : (user.role === 'supervisor' ? '⭐' : '👤');
+    if (badge) {
+      badge.style.display = 'flex';
+      badge.style.color = user.role === 'owner' ? '#8b5cf6' : (user.role === 'supervisor' ? '#2563eb' : '#10b981');
+      badge.style.background = user.role === 'owner' ? 'rgba(139, 92, 246, 0.12)' : (user.role === 'supervisor' ? 'rgba(37, 99, 235, 0.12)' : 'rgba(16, 185, 129, 0.12)');
+      badge.style.borderColor = user.role === 'owner' ? 'rgba(139, 92, 246, 0.3)' : (user.role === 'supervisor' ? 'rgba(37, 99, 235, 0.3)' : 'rgba(16, 185, 129, 0.3)');
+    }
+    if (btnLogout) btnLogout.style.display = 'flex';
+    if (btnLogin) btnLogin.style.display = 'none';
   } else {
-    nameEl.textContent = 'Belum Masuk';
-    iconEl.textContent = '🔒';
+    if (nameEl) nameEl.textContent = 'Belum Masuk';
+    if (iconEl) iconEl.textContent = '🔒';
+    if (badge) {
+      badge.style.color = '#64748b';
+      badge.style.background = 'rgba(100, 116, 139, 0.1)';
+      badge.style.borderColor = 'rgba(100, 116, 139, 0.25)';
+    }
+    if (btnLogout) btnLogout.style.display = 'none';
+    if (btnLogin) btnLogin.style.display = 'flex';
   }
 
   const dockUsers = document.getElementById('dock-users');
@@ -200,6 +226,8 @@ store.on('auth:change', updateOperatorUI);
 
 /* ── Main Init ── */
 const init = async () => {
+  window.appNavigateTo = navigateTo;
+
   try {
     // Open DB and seed
     await openDB();
@@ -211,16 +239,8 @@ const init = async () => {
     return;
   }
 
-  // Restore operator session or auto-login default owner
-  let session = store.restoreSession();
-  if (!session) {
-    try {
-      const defaultAdmin = await db.users.where('username').equalsIgnoreCase('admin').first();
-      if (defaultAdmin) {
-        store.login(defaultAdmin);
-      }
-    } catch (_) {}
-  }
+  // Restore operator session
+  store.restoreSession();
   updateOperatorUI(store.state.currentUser);
 
   // Bind operator badge click
@@ -228,8 +248,27 @@ const init = async () => {
     openLoginModal();
   });
 
+  // Bind topbar explicit Log Out button
+  document.getElementById('btn-topbar-logout')?.addEventListener('click', () => {
+    if (confirm('Keluar dari sesi operator kasir saat ini?')) {
+      store.logout();
+      navigateTo('login');
+      window.showToast?.('Sesi ditutup. Silakan login kembali.', 'info');
+    }
+  });
+
+  // Bind topbar explicit Log In button
+  document.getElementById('btn-topbar-login')?.addEventListener('click', () => {
+    navigateTo('login');
+  });
+
   window.addEventListener('request-operator-switch', () => {
     openLoginModal();
+  });
+
+  window.addEventListener('request-logout', () => {
+    store.logout();
+    navigateTo('login');
   });
 
   // Load settings from DB
@@ -701,9 +740,13 @@ const init = async () => {
 
   initSwipeNavigation();
 
-  // Navigate to saved active view or fallback to 'pos' on start
-  const savedView = sessionStorage.getItem('activeView') || 'pos';
-  await navigateTo(savedView);
+  // Navigate to saved active view or enforce 'login' if unauthenticated
+  if (!store.state.currentUser) {
+    await navigateTo('login');
+  } else {
+    const savedView = sessionStorage.getItem('activeView') || 'pos';
+    await navigateTo(savedView === 'login' ? 'pos' : savedView);
+  }
 };
 
 document.addEventListener('DOMContentLoaded', init);

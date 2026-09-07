@@ -644,3 +644,16 @@ select.input { cursor: pointer; }
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+/* ── Shake Animation & Numpad Touch Effects ── */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+.btn-numpad-key:active, .btn-numpad:active {
+  transform: scale(0.94) !important;
+  filter: brightness(0.92);
+}
+
