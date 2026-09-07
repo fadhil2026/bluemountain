@@ -8,10 +8,7 @@ import path from 'path';
 
 console.log('🔍 [CI/CD Verification] Memulai audit pra-deploy...');
 
-// 0. Auto-sync dynamic package.json SemVer version: [MAJOR].[MINOR].[PATCH]
-// - MAJOR: Perubahan Arsitektur Utama / Fase Enterprise (e.g. 3)
-// - MINOR: Modul Fitur Sedang (e.g. 0)
-// - PATCH: Revisi Ringan & Bugfix (auto-sync dengan Git revision)
+// 0. Auto-sync dynamic SemVer version: [MAJOR].[MINOR].[PATCH] across package.json, README.md, and docs/
 try {
   const gitCount = execSync('git rev-list --count HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
   const statusOut = execSync('git status --porcelain', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
@@ -24,13 +21,45 @@ try {
     const minor = parts[1] || '0'; // Minor (Fitur Sedang)
     const patch = Number(gitCount) + (isDirty ? 1 : 0); // Patch (Revisi Ringan)
     const nextVer = `${major}.${minor}.${patch}`;
+
+    // A. Sync package.json
     if (pkgData.version !== nextVer) {
       pkgData.version = nextVer;
       fs.writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2) + '\n', 'utf8');
-      console.log(`  ✓ Sinkronisasi SemVer Baku (Major.Minor.Patch) -> v${nextVer} (Major: ${major}, Minor: ${minor}, Patch: ${patch})`);
+      console.log(`  ✓ Sinkronisasi SemVer package.json -> v${nextVer}`);
+    }
+
+    // B. Sync README.md badge & version text
+    const readmePath = './README.md';
+    if (fs.existsSync(readmePath)) {
+      let readme = fs.readFileSync(readmePath, 'utf8');
+      const badgeRegex = /!\[Version\]\([^)]+\)/g;
+      const targetBadge = `![Version](https://img.shields.io/badge/version-v${nextVer}-blue?style=for-the-badge)`;
+      if (readme.includes('![Version](')) {
+        readme = readme.replace(badgeRegex, targetBadge);
+      }
+      fs.writeFileSync(readmePath, readme, 'utf8');
+      console.log(`  ✓ Sinkronisasi Badge Realtime README.md -> v${nextVer}`);
+    }
+
+    // C. Sync docs/*.md versions
+    const docsDir = './docs';
+    if (fs.existsSync(docsDir)) {
+      const docFiles = fs.readdirSync(docsDir).filter(f => f.endsWith('.md'));
+      for (const docFile of docFiles) {
+        const fullDoc = path.join(docsDir, docFile);
+        let docContent = fs.readFileSync(fullDoc, 'utf8');
+        const updated = docContent.replace(/v3\.0\.\d+/g, `v${nextVer}`);
+        if (updated !== docContent) {
+          fs.writeFileSync(fullDoc, updated, 'utf8');
+          console.log(`  ✓ Sinkronisasi versi dokumen ${docFile} -> v${nextVer}`);
+        }
+      }
     }
   }
-} catch (_) {}
+} catch (err) {
+  console.warn('  ⚠️ Peringatan sinkronisasi versi:', err.message);
+}
 
 // 1. Scan and verify syntax for all JavaScript files
 const getJsFiles = (dir) => {
