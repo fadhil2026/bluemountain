@@ -265,13 +265,14 @@ export const seedDefaultProducts = async () => {
 export const seedDefaultUsers = async () => {
   const count = await db.users.count();
   if (count > 0) return;
+  // PIN default: 123456 (6 digit) — hash di-generate dari cloud reset script
   await db.users.put({
     id: 'usr_admin',
     username: 'admin',
     name: 'Fadhilah Ramadhan',
     role: 'owner',
-    pinHash: '4a13ec3aae2379fbf9a213d508bc2b4b0e2a616962eb7094a7815cafd8dcbe89',
-    pinSalt: 'd5e533e224639c18f5f7c8272b27c111',
+    pinHash: 'c3b558e7f7bd99bf1a0e50aa083c1ba8811e840dab3bf07bc020c724ce771e83',
+    pinSalt: '9bc6c2b0806a1040516484af5df10112',
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

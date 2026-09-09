@@ -190,7 +190,7 @@ export const renderLogin = async () => {
         <!-- Selected User Prompt -->
         <div>
           <div class="login-prompt-box">
-            <span>🔑</span> Masukkan <strong>4–6 digit PIN</strong> untuk <strong>${esc(selectedUser.name)}</strong>
+            <span>🔑</span> Masukkan <strong>6 digit PIN</strong> untuk <strong>${esc(selectedUser.name)}</strong>
           </div>
         </div>
 
@@ -242,6 +242,8 @@ const updateDotsUI = () => {
 
 /**
  * Trigger PIN Verification
+ * PIN is strictly 6 digits. Auto-verify when exactly 6 digits entered.
+ * Manual submit (✓ button / Enter) shows error if < 6 digits.
  */
 const processPinVerification = async (isManual = false) => {
   if (_isVerifying) return;
@@ -251,54 +253,56 @@ const processPinVerification = async (isManual = false) => {
   const errEl = document.getElementById('login-error-msg');
   if (errEl) errEl.textContent = '';
 
-  // Only verify if length is at least 4 digits
-  if (_enteredPin.length >= 4) {
-    _isVerifying = true;
-    const authResult = await authenticateWithServer(targetUser.username, _enteredPin);
-    _isVerifying = false;
-
-    if (authResult.success) {
-      // SUCCESS!
-      store.login(authResult.user, authResult.token);
-      const tag = authResult.isServerValidated ? ' (Terverifikasi Server)' : ' (Mode Offline)';
-      window.showToast?.(`Berhasil masuk sebagai ${authResult.user.name} (${authResult.user.role})${tag}`, 'success');
-      _enteredPin = '';
-      
-      // Pull fresh data from Supabase master cloud to Dexie cache
-      if (navigator.onLine) {
-        syncInitialData().catch(() => {});
-      }
-
-      // Navigate to POS
-      if (typeof window.appNavigateTo === 'function') {
-        window.appNavigateTo('pos');
-      } else {
-        const posDock = document.getElementById('dock-pos');
-        if (posDock) posDock.click();
-      }
-      return;
-    } else {
-      if (isManual || _enteredPin.length >= 6) {
-        if (errEl) {
-          errEl.textContent = authResult.error || 'PIN salah! Silakan periksa kembali.';
-        }
-        shakePinBox();
-        _enteredPin = '';
-        updateDotsUI();
-        return;
-      }
-    }
-  }
-
-  // If manual submission with under 4 digits:
-  if (isManual && _enteredPin.length < 4) {
+  // Manual submit: require exactly 6 digits
+  if (isManual && _enteredPin.length < 6) {
     if (errEl) {
-      errEl.textContent = 'Masukkan minimal 4 digit PIN';
+      errEl.textContent = `Masukkan 6 digit PIN (sudah ${_enteredPin.length} digit)`;
     }
     shakePinBox();
-    _enteredPin = '';
-    updateDotsUI();
+    return;
   }
+
+  // Auto-verify: only trigger at exactly 6 digits
+  if (!isManual && _enteredPin.length !== 6) return;
+
+  // Verify PIN (6 digits exact)
+  _isVerifying = true;
+  const submitBtn = document.querySelector('.btn-numpad-key.btn-submit');
+  if (submitBtn) submitBtn.textContent = '⏳';
+
+  const authResult = await authenticateWithServer(targetUser.username, _enteredPin);
+  _isVerifying = false;
+  if (submitBtn) submitBtn.textContent = '✓';
+
+  if (authResult.success) {
+    // SUCCESS!
+    store.login(authResult.user, authResult.token);
+    const tag = authResult.isServerValidated ? ' (Terverifikasi Server)' : ' (Mode Offline)';
+    window.showToast?.(`Berhasil masuk sebagai ${authResult.user.name} (${authResult.user.role})${tag}`, 'success');
+    _enteredPin = '';
+
+    // Pull fresh data from Supabase master cloud to Dexie cache
+    if (navigator.onLine) {
+      syncInitialData().catch(() => {});
+    }
+
+    // Navigate to POS
+    if (typeof window.appNavigateTo === 'function') {
+      window.appNavigateTo('pos');
+    } else {
+      const posDock = document.getElementById('dock-pos');
+      if (posDock) posDock.click();
+    }
+    return;
+  }
+
+  // Wrong PIN
+  if (errEl) {
+    errEl.textContent = authResult.error || 'PIN salah! Silakan periksa kembali.';
+  }
+  shakePinBox();
+  _enteredPin = '';
+  updateDotsUI();
 };
 
 /**
@@ -361,7 +365,10 @@ const handleInput = (val) => {
     if (_enteredPin.length < 6) {
       _enteredPin += val;
       updateDotsUI();
-      processPinVerification(false);
+      // Auto-submit when exactly 6 digits reached
+      if (_enteredPin.length === 6) {
+        processPinVerification(false);
+      }
     }
   }
 };
