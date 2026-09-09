@@ -71,3 +71,135 @@ export const verifyPin = async (pin, salt, expectedHash) => {
     return false;
   }
 };
+
+/**
+ * Base64URL helper compatible with Browser and Node.js
+ */
+const base64UrlEncode = (strOrBuffer) => {
+  let base64;
+  if (typeof strOrBuffer === 'string') {
+    if (typeof btoa === 'function') {
+      base64 = btoa(unescape(encodeURIComponent(strOrBuffer)));
+    } else {
+      base64 = Buffer.from(strOrBuffer, 'utf8').toString('base64');
+    }
+  } else {
+    const bytes = new Uint8Array(strOrBuffer);
+    if (typeof btoa === 'function') {
+      let binary = '';
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      base64 = btoa(binary);
+    } else {
+      base64 = Buffer.from(bytes).toString('base64');
+    }
+  }
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+
+const base64UrlDecode = (str) => {
+  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (base64.length % 4) {
+    base64 += '=';
+  }
+  if (typeof atob === 'function') {
+    return decodeURIComponent(escape(atob(base64)));
+  } else {
+    return Buffer.from(base64, 'base64').toString('utf8');
+  }
+};
+
+const base64UrlToUint8Array = (str) => {
+  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (base64.length % 4) {
+    base64 += '=';
+  }
+  let binary;
+  if (typeof atob === 'function') {
+    binary = atob(base64);
+  } else {
+    binary = Buffer.from(base64, 'base64').toString('binary');
+  }
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+};
+
+/**
+ * Create a signed JWT session token (HMAC-SHA256)
+ * @param {object} payload - Claims object (sub, username, role, name, etc.)
+ * @param {string} secret - Signing key
+ * @param {number} expiresInSeconds - Token validity duration (default 7 days)
+ * @returns {Promise<string>} Signed JWT string
+ */
+export const createSessionJWT = async (payload, secret, expiresInSeconds = 86400 * 7) => {
+  const c = getCrypto();
+  const encoder = new TextEncoder();
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const now = Math.floor(Date.now() / 1000);
+  const fullPayload = {
+    ...payload,
+    iat: now,
+    exp: now + expiresInSeconds
+  };
+
+  const headerB64 = base64UrlEncode(JSON.stringify(header));
+  const payloadB64 = base64UrlEncode(JSON.stringify(fullPayload));
+  const message = `${headerB64}.${payloadB64}`;
+
+  const key = await c.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signatureBuffer = await c.subtle.sign('HMAC', key, encoder.encode(message));
+  const signatureB64 = base64UrlEncode(signatureBuffer);
+
+  return `${message}.${signatureB64}`;
+};
+
+/**
+ * Verify signed JWT session token and return claims if valid and unexpired
+ * @param {string} token - JWT string
+ * @param {string} secret - Signing key
+ * @returns {Promise<object|null>} Decoded payload if valid, null otherwise
+ */
+export const verifySessionJWT = async (token, secret) => {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+
+  const [headerB64, payloadB64, signatureB64] = parts;
+  const message = `${headerB64}.${payloadB64}`;
+  const c = getCrypto();
+  const encoder = new TextEncoder();
+
+  try {
+    const key = await c.subtle.importKey(
+      'raw',
+      encoder.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+    const signatureBytes = base64UrlToUint8Array(signatureB64);
+    const isValid = await c.subtle.verify('HMAC', key, signatureBytes, encoder.encode(message));
+    if (!isValid) return null;
+
+    const payloadJson = base64UrlDecode(payloadB64);
+    const payload = JSON.parse(payloadJson);
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp && payload.exp < now) {
+      return null;
+    }
+    return payload;
+  } catch (_) {
+    return null;
+  }
+};
+

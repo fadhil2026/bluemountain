@@ -6,8 +6,9 @@ import QRCode                 from 'qrcode';
 import { generateDynamicQRIS } from '../utils/qris.js';
 import { formatRupiah }       from '../utils/currency.js';
 import { esc }                from '../utils/sanitize.js';
-import { saveTransaction, getAllCustomers, addCustomer, updateCustomer, getAllUsers, seedDefaultUsers, updateUser, updateProduct, getAllProducts, db } from '../db.js';
+import { saveTransaction, getAllCustomers, addCustomer, updateCustomer, getAllUsers, updateUser, updateProduct, getAllProducts, db } from '../db.js';
 import { verifyPin, generateSalt, hashPin } from '../utils/crypto.js';
+import { authenticateWithServer, syncAuthoritativeRosterToCache } from '../supabase.js';
 import {
   getReceiptPreviewHTML,
   getPrintSchemeUrl,
@@ -609,12 +610,12 @@ const showSuccessOverlay = (txData) => {
    Operator Switch & Login Modal (RBAC PIN)
    ───────────────────────────────────────── */
 export const openLoginModal = async ({ onLogin = null, forceLock = false } = {}) => {
-  let users = await getAllUsers();
-  if (users.length === 0) {
-    await seedDefaultUsers();
-    users = await getAllUsers();
+  if (navigator.onLine) {
+    try {
+      await syncAuthoritativeRosterToCache();
+    } catch (_) {}
   }
-
+  let users = await getAllUsers();
   const activeUsers = users.filter(u => u.isActive !== false);
   if (activeUsers.length === 0) {
     window.showToast?.('Tidak ada akun operator aktif.', 'error');
@@ -734,19 +735,8 @@ export const openLoginModal = async ({ onLogin = null, forceLock = false } = {})
         ">✓</button>
       </div>
 
-      <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border, #e2e8f0);">
-        <button type="button" id="btn-modal-reset-owner" style="
-          background: none;
-          border: none;
-          color: var(--text-muted, #64748b);
-          font-size: 11px;
-          cursor: pointer;
-          text-decoration: underline;
-        ">🔄 Lupa PIN? Reset PIN Owner ke "1234"</button>
-      </div>
-
       ${!forceLock ? `
-        <div style="margin-top: 12px;">
+        <div style="margin-top: 16px;">
           <button type="button" id="btn-cancel-login" style="
             background: transparent;
             border: none;
@@ -774,19 +764,28 @@ export const openLoginModal = async ({ onLogin = null, forceLock = false } = {})
     if (!targetUser) return;
 
     if (enteredPin.length >= 4) {
-      const isValid = await verifyPin(enteredPin, targetUser.pinSalt, targetUser.pinHash);
-      if (isValid) {
-        store.login(targetUser);
+      const authResult = await authenticateWithServer(targetUser.username, enteredPin);
+      if (authResult.success) {
+        store.login(authResult.user, authResult.token);
         closeModal(modalId);
-        window.showToast?.(`Operator aktif: ${targetUser.name} (${targetUser.role})`, 'success');
-        if (typeof onLogin === 'function') onLogin(targetUser);
+        const tag = authResult.isServerValidated ? ' (Terverifikasi Server)' : ' (Mode Offline)';
+        window.showToast?.(`Operator aktif: ${authResult.user.name} (${authResult.user.role})${tag}`, 'success');
+        if (typeof onLogin === 'function') onLogin(authResult.user);
         return;
+      } else {
+        if (isManual || enteredPin.length >= 6) {
+          const err = document.getElementById('pin-error-msg');
+          if (err) err.textContent = authResult.error || 'PIN salah! Silakan coba lagi.';
+          enteredPin = '';
+          updateDots();
+          return;
+        }
       }
     }
 
-    if (isManual || enteredPin.length >= 6) {
+    if (isManual && enteredPin.length < 4) {
       const err = document.getElementById('pin-error-msg');
-      if (err) err.textContent = enteredPin.length < 4 ? 'Masukkan minimal 4 digit PIN' : 'PIN salah! Silakan coba lagi.';
+      if (err) err.textContent = 'Masukkan minimal 4 digit PIN';
       enteredPin = '';
       updateDots();
     }
@@ -826,38 +825,6 @@ export const openLoginModal = async ({ onLogin = null, forceLock = false } = {})
 
     document.getElementById('btn-cancel-login')?.addEventListener('click', () => {
       closeModal(modalId);
-    });
-
-    document.getElementById('btn-modal-reset-owner')?.addEventListener('click', async () => {
-      const ownerUser = activeUsers.find(u => u.role === 'owner');
-      if (!ownerUser) {
-        window.showToast?.('Akun Owner tidak ditemukan.', 'error');
-        return;
-      }
-      if (confirm(`Atur ulang PIN akun Owner "${ownerUser.name}" kembali ke default "1234"?`)) {
-        try {
-          const salt = generateSalt();
-          const pinHash = await hashPin('1234', salt);
-          const updated = {
-            ...ownerUser,
-            pinHash,
-            pinSalt: salt,
-            updatedAt: new Date().toISOString()
-          };
-          await updateUser(updated);
-          activeUsers = (await getAllUsers()).filter(u => u.isActive !== false);
-          selectedUserId = ownerUser.id;
-          enteredPin = '';
-          const container = document.getElementById(modalId);
-          if (container) {
-            container.innerHTML = renderModalContent();
-            bindEvents();
-          }
-          window.showToast?.('PIN Owner berhasil direset ke default "1234". Silakan masukkan 1234.', 'success');
-        } catch (err) {
-          window.showToast?.('Gagal mereset PIN: ' + err.message, 'error');
-        }
-      }
     });
 
     // Keyboard support inside modal

@@ -218,7 +218,7 @@ const store = {
     this.emit('users:change', this.state.users);
   },
 
-  login(user) {
+  login(user, jwtToken = null) {
     const sessionData = {
       id: user.id,
       username: user.username,
@@ -228,6 +228,9 @@ const store = {
     this.state.currentUser = sessionData;
     try {
       sessionStorage.setItem('bm_active_user', JSON.stringify(sessionData));
+      if (jwtToken) {
+        localStorage.setItem('bm_jwt_token', jwtToken);
+      }
     } catch (_) {}
     this.emit('auth:change', sessionData);
   },
@@ -236,6 +239,7 @@ const store = {
     this.state.currentUser = null;
     try {
       sessionStorage.removeItem('bm_active_user');
+      localStorage.removeItem('bm_jwt_token');
     } catch (_) {}
     this.emit('auth:change', null);
   },

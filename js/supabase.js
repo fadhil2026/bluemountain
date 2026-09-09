@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js';
 import { db, getAllProducts, getAllTransactions, getAllExpenses, getAllCustomers, getAllUsers } from './db.js';
 import { todayKey } from './utils/date.js';
 import store from './store.js';
+import { verifyPin, createSessionJWT, verifySessionJWT } from './utils/crypto.js';
 
 // Default Supabase Configuration (fadhil2026's Project)
 export const SUPABASE_URL = 'https://wiapnhpdgjbtkblowfig.supabase.co';
@@ -19,6 +20,8 @@ export const SUPABASE_ANON_KEY = 'sb_publishable_BBEJNs18ooZ-IHRPxJtDUA_KiKLcQ-g
 // Master Store Tenant ID for Blue Mountain POS
 export const DEFAULT_MASTER_STORE_ID = 'STORE-BM-856CFAC8';
 export const MASTER_STORE_KEY_STORAGE = 'bm_master_store_key';
+export const JWT_SESSION_STORAGE_KEY = 'bm_jwt_token';
+export const getJwtSecret = () => `BM_SECRET_${getMasterStoreId()}_2026_AUTHORITATIVE`;
 
 export const getMasterStoreId = () => {
   try {
@@ -351,82 +354,11 @@ export const syncInitialData = async () => {
       console.warn('[Sync] Customers sync warning:', e);
     }
 
-    // 5. Dual-Bridge User Sync (app_users + settings backup)
+    // 5. Server-Authoritative User Roster Sync (Ephemeral Cache Overwrite)
     try {
-      let cloudUsers = null;
-
-      // Bridge A: app_users table (if exists)
-      try {
-        const { data: bA, error: errA } = await supabase
-          .from('app_users')
-          .select('*');
-        if (!errA && bA && bA.length > 0) {
-          cloudUsers = bA;
-        }
-      } catch (_) {}
-
-      // Bridge B: settings table fallback (100% active & supported!)
-      const rosterKey = `users_roster_${storeId}`;
-      try {
-        const { data: bB, error: errB } = await supabase
-          .from('settings')
-          .select('value')
-          .eq('key', rosterKey)
-          .maybeSingle();
-        if (!errB && bB && bB.value) {
-          const parsed = JSON.parse(bB.value);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            cloudUsers = parsed;
-          }
-        }
-      } catch (_) {}
-
-      if (cloudUsers && cloudUsers.length > 0) {
-        const cloudUsernames = new Set(cloudUsers.map(u => String(u.username).toLowerCase().trim()));
-        const localUsers = await db.users.toArray();
-        for (const lu of localUsers) {
-          if (!cloudUsernames.has(String(lu.username).toLowerCase().trim())) {
-            await db.users.delete(lu.id);
-          }
-        }
-
-        for (const cu of cloudUsers) {
-          const usernameClean = String(cu.username).toLowerCase().trim();
-          const existing = await db.users.where('username').equalsIgnoreCase(usernameClean).first();
-          const udata = {
-            username: usernameClean,
-            name: cu.name,
-            role: cu.role,
-            pinHash: cu.pin_hash || cu.pinHash,
-            pinSalt: cu.pin_salt || cu.pinSalt,
-            isActive: cu.is_active !== undefined ? Boolean(cu.is_active) : (cu.isActive !== undefined ? Boolean(cu.isActive) : true),
-            createdAt: cu.created_at || cu.createdAt || new Date().toISOString(),
-            updatedAt: cu.updated_at || cu.updatedAt || new Date().toISOString(),
-          };
-
-          if (existing) {
-            await db.users.update(existing.id, udata);
-          } else {
-            await db.users.add(udata);
-          }
-        }
-        const freshUsers = await db.users.toArray();
-        store.setUsers(freshUsers);
-      } else {
-        // If cloud roster is empty, push local roster so other devices can pull it!
-        const allLocalUsers = await (getAllUsers ? getAllUsers() : db.users.toArray());
-        if (allLocalUsers.length > 0) {
-          try {
-            await supabase.from('settings').upsert({
-              key: rosterKey,
-              value: JSON.stringify(allLocalUsers.map(formatUserForCloud)),
-              updated_at: new Date().toISOString(),
-            });
-          } catch (_) {}
-        }
-      }
+      await syncAuthoritativeRosterToCache();
     } catch (e) {
-      console.warn('[Sync] Users dual-bridge sync warning:', e);
+      console.warn('[Sync] Server-authoritative users sync warning:', e);
     }
 
     // 6. Sync General Settings
@@ -701,47 +633,345 @@ export const pushSettingToCloud = async (key, value) => {
   } catch (_) {}
 };
 
-export const pushUserToCloud = async (user) => {
-  if (isDeviceIsolated() || !navigator.onLine) return;
+/**
+ * Fetch Server-Authoritative User Roster from Cloud (DB Master Single Source of Truth)
+ * @returns {Promise<Array|null>} Array of user objects or null
+ */
+export const fetchAuthoritativeRoster = async () => {
+  if (isDeviceIsolated() || !navigator.onLine) return null;
   const storeId = getMasterStoreId();
+  const supabase = getSupabase();
 
-  // Dual Bridge Push:
-  // 1. app_users table (if exists)
+  let cloudUsers = null;
+
+  // Bridge A: app_users table (if exists)
   try {
-    const supabase = getSupabase();
-    await supabase.from('app_users').upsert(formatUserForCloud(user), { onConflict: 'username' });
+    const { data: bA, error: errA } = await supabase
+      .from('app_users')
+      .select('*');
+    if (!errA && bA && bA.length > 0) {
+      cloudUsers = bA;
+    }
   } catch (_) {}
 
-  // 2. settings table roster backup (Fail-Safe Dual-Bridge, 100% active!)
+  // Bridge B: settings table roster backup (Fail-Safe Dual-Bridge, 100% active!)
+  const rosterKey = `users_roster_${storeId}`;
   try {
-    const supabase = getSupabase();
-    const all = await db.users.toArray();
-    await supabase.from('settings').upsert({
-      key: `users_roster_${storeId}`,
-      value: JSON.stringify(all.map(formatUserForCloud)),
-      updated_at: new Date().toISOString(),
-    });
+    const { data: bB, error: errB } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', rosterKey)
+      .maybeSingle();
+    if (!errB && bB && bB.value) {
+      const parsed = JSON.parse(bB.value);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        if (!cloudUsers || cloudUsers.length === 0) {
+          cloudUsers = parsed;
+        }
+      }
+    }
+  } catch (_) {}
+
+  return cloudUsers;
+};
+
+/**
+ * Overwrite local Dexie cache with Server-Authoritative Cloud Roster
+ * IndexedDB acts as ephemeral fast-read cache, not identity decider.
+ */
+export const syncAuthoritativeRosterToCache = async () => {
+  const cloudUsers = await fetchAuthoritativeRoster();
+  if (!cloudUsers || cloudUsers.length === 0) return [];
+
+  const cloudUsernames = new Set(cloudUsers.map(u => String(u.username).toLowerCase().trim()));
+  const localUsers = await db.users.toArray();
+  for (const lu of localUsers) {
+    if (!cloudUsernames.has(String(lu.username).toLowerCase().trim())) {
+      await db.users.delete(lu.id);
+    }
+  }
+
+  for (const cu of cloudUsers) {
+    const usernameClean = String(cu.username).toLowerCase().trim();
+    const existing = await db.users.where('username').equalsIgnoreCase(usernameClean).first();
+    const udata = {
+      username: usernameClean,
+      name: cu.name,
+      role: cu.role,
+      pinHash: cu.pin_hash || cu.pinHash,
+      pinSalt: cu.pin_salt || cu.pinSalt,
+      isActive: cu.is_active !== undefined ? Boolean(cu.is_active) : (cu.isActive !== undefined ? Boolean(cu.isActive) : true),
+      createdAt: cu.created_at || cu.createdAt || new Date().toISOString(),
+      updatedAt: cu.updated_at || cu.updatedAt || new Date().toISOString(),
+    };
+
+    if (existing) {
+      await db.users.update(existing.id, udata);
+    } else {
+      await db.users.add(udata);
+    }
+  }
+
+  const freshUsers = await db.users.toArray();
+  store.setUsers(freshUsers);
+  return freshUsers;
+};
+
+/**
+ * Authenticate Operator with Server-Authoritative verification
+ * Returns HMAC-SHA256 JWT Token + Official Account Profile
+ */
+export const authenticateWithServer = async (usernameOrId, pin) => {
+  const storeId = getMasterStoreId();
+  const secretKey = getJwtSecret();
+  const searchKey = String(usernameOrId).toLowerCase().trim();
+
+  // 1. Online First: Server-Authoritative verification against Cloud DB Master
+  if (navigator.onLine && !isDeviceIsolated()) {
+    try {
+      const cloudUsers = await fetchAuthoritativeRoster();
+      if (cloudUsers && cloudUsers.length > 0) {
+        // Ephemeral cache overwrite from server
+        await syncAuthoritativeRosterToCache();
+
+        const targetUser = cloudUsers.find(u =>
+          String(u.username).toLowerCase().trim() === searchKey ||
+          String(u.id) === searchKey
+        );
+
+        if (!targetUser) {
+          return { success: false, error: 'Akun operator tidak terdaftar di server master.' };
+        }
+
+        if (targetUser.isActive === false || targetUser.is_active === false) {
+          return { success: false, error: 'Akun operator ini telah dinonaktifkan oleh Owner.' };
+        }
+
+        const pinSalt = targetUser.pin_salt || targetUser.pinSalt;
+        const pinHash = targetUser.pin_hash || targetUser.pinHash;
+        const isMatch = await verifyPin(pin, pinSalt, pinHash);
+
+        if (!isMatch) {
+          return { success: false, error: 'PIN salah! Silakan periksa kembali.' };
+        }
+
+        // Issue Signed HMAC-SHA256 JWT Session Token
+        const payload = {
+          sub: targetUser.id || targetUser.username,
+          username: targetUser.username,
+          name: targetUser.name,
+          role: targetUser.role,
+          storeId,
+        };
+
+        const token = await createSessionJWT(payload, secretKey, 86400 * 7);
+        try {
+          localStorage.setItem(JWT_SESSION_STORAGE_KEY, token);
+        } catch (_) {}
+
+        return {
+          success: true,
+          user: {
+            id: targetUser.id || targetUser.username,
+            username: targetUser.username,
+            name: targetUser.name,
+            role: targetUser.role,
+          },
+          token,
+          isServerValidated: true,
+        };
+      }
+    } catch (err) {
+      console.warn('[Auth] Server authentication error, checking local ephemeral cache:', err);
+    }
+  }
+
+  // 2. Offline Pure Fallback: Fast-read cache in Dexie
+  try {
+    const localUsers = await db.users.toArray();
+    const targetUser = localUsers.find(u =>
+      String(u.username).toLowerCase().trim() === searchKey ||
+      String(u.id) === searchKey
+    );
+
+    if (!targetUser) {
+      return { success: false, error: 'Perangkat offline dan akun belum tersimpan di cache lokal.' };
+    }
+
+    if (targetUser.isActive === false) {
+      return { success: false, error: 'Akun operator tidak aktif.' };
+    }
+
+    const isMatch = await verifyPin(pin, targetUser.pinSalt, targetUser.pinHash);
+    if (!isMatch) {
+      return { success: false, error: 'PIN salah! Silakan periksa kembali.' };
+    }
+
+    const payload = {
+      sub: targetUser.id || targetUser.username,
+      username: targetUser.username,
+      name: targetUser.name,
+      role: targetUser.role,
+      storeId,
+      offline: true,
+    };
+    const token = await createSessionJWT(payload, secretKey, 86400 * 2);
+    try {
+      localStorage.setItem(JWT_SESSION_STORAGE_KEY, token);
+    } catch (_) {}
+
+    return {
+      success: true,
+      user: {
+        id: targetUser.id,
+        username: targetUser.username,
+        name: targetUser.name,
+        role: targetUser.role,
+      },
+      token,
+      isServerValidated: false,
+      isOfflineFallback: true,
+    };
   } catch (err) {
-    console.warn('[Sync] Failed to push user roster to settings:', err);
+    return { success: false, error: 'Gagal memvalidasi kredensial: ' + err.message };
   }
 };
 
+/**
+ * Check and validate Server Session (JWT)
+ * If valid, returns operator profile; if invalid/expired/revoked, returns null
+ */
+export const checkServerSession = async () => {
+  let token = null;
+  try {
+    token = localStorage.getItem(JWT_SESSION_STORAGE_KEY);
+  } catch (_) {}
+
+  if (!token) return null;
+
+  const secretKey = getJwtSecret();
+  const claims = await verifySessionJWT(token, secretKey);
+
+  if (!claims || !claims.username) {
+    try {
+      localStorage.removeItem(JWT_SESSION_STORAGE_KEY);
+    } catch (_) {}
+    return null;
+  }
+
+  // Server-Authoritative Identity Validation:
+  // When online, verify account is not deleted or deactivated on server
+  if (navigator.onLine && !isDeviceIsolated()) {
+    try {
+      const cloudUsers = await fetchAuthoritativeRoster();
+      if (cloudUsers && cloudUsers.length > 0) {
+        const found = cloudUsers.find(u =>
+          String(u.username).toLowerCase().trim() === String(claims.username).toLowerCase().trim()
+        );
+        if (!found || found.isActive === false || found.is_active === false) {
+          try {
+            localStorage.removeItem(JWT_SESSION_STORAGE_KEY);
+          } catch (_) {}
+          return null;
+        }
+        claims.name = found.name;
+        claims.role = found.role;
+      }
+    } catch (_) {}
+  }
+
+  return {
+    id: claims.sub || claims.username,
+    username: claims.username,
+    name: claims.name,
+    role: claims.role,
+  };
+};
+
+/**
+ * Push user modification to cloud (Non-destructive merge)
+ */
+export const pushUserToCloud = async (user) => {
+  if (isDeviceIsolated() || !navigator.onLine) return;
+  const storeId = getMasterStoreId();
+  const supabase = getSupabase();
+
+  // 1. app_users table
+  try {
+    await supabase.from('app_users').upsert(formatUserForCloud(user), { onConflict: 'username' });
+  } catch (_) {}
+
+  // 2. settings table roster (Merge without destructive overwrite)
+  try {
+    const rosterKey = `users_roster_${storeId}`;
+    const { data, error } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', rosterKey)
+      .maybeSingle();
+
+    let existingRoster = [];
+    if (!error && data?.value) {
+      try {
+        const parsed = JSON.parse(data.value);
+        if (Array.isArray(parsed)) existingRoster = parsed;
+      } catch (_) {}
+    }
+
+    const cleanUsername = String(user.username).toLowerCase().trim();
+    const formattedUser = formatUserForCloud(user);
+
+    const idx = existingRoster.findIndex(u => String(u.username).toLowerCase().trim() === cleanUsername);
+    if (idx >= 0) {
+      existingRoster[idx] = { ...existingRoster[idx], ...formattedUser };
+    } else {
+      existingRoster.push(formattedUser);
+    }
+
+    await supabase.from('settings').upsert({
+      key: rosterKey,
+      value: JSON.stringify(existingRoster),
+      updated_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn('[Sync] Failed to push user to cloud:', err);
+  }
+};
+
+/**
+ * Delete user from cloud roster (Non-destructive filter)
+ */
 export const deleteUserFromCloud = async (username) => {
   if (isDeviceIsolated() || !navigator.onLine) return;
   const storeId = getMasterStoreId();
+  const supabase = getSupabase();
+  const cleanUsername = String(username).toLowerCase().trim();
 
   try {
-    const supabase = getSupabase();
-    await supabase.from('app_users').delete().eq('username', String(username).toLowerCase().trim());
+    await supabase.from('app_users').delete().eq('username', cleanUsername);
   } catch (_) {}
 
   try {
-    const supabase = getSupabase();
-    const all = await db.users.toArray();
-    await supabase.from('settings').upsert({
-      key: `users_roster_${storeId}`,
-      value: JSON.stringify(all.map(formatUserForCloud)),
-      updated_at: new Date().toISOString(),
-    });
-  } catch (_) {}
+    const rosterKey = `users_roster_${storeId}`;
+    const { data, error } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', rosterKey)
+      .maybeSingle();
+
+    if (!error && data?.value) {
+      let existingRoster = JSON.parse(data.value);
+      if (Array.isArray(existingRoster)) {
+        existingRoster = existingRoster.filter(u => String(u.username).toLowerCase().trim() !== cleanUsername);
+        await supabase.from('settings').upsert({
+          key: rosterKey,
+          value: JSON.stringify(existingRoster),
+          updated_at: new Date().toISOString(),
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[Sync] Failed to delete user from cloud:', err);
+  }
 };
+

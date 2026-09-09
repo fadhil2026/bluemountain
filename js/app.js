@@ -2,7 +2,7 @@
  * app.js — Main application bootstrap
  * Blue Mountain Refilling Station POS
  */
-import { openDB, seedDefaultProducts, seedDefaultUsers, getSetting, db } from './db.js';
+import { openDB, seedDefaultProducts, getSetting, db } from './db.js';
 import store                                         from './store.js';
 import { formatDate, formatTime }                    from './utils/date.js';
 import { initPOS, refreshPOS }                       from './views/pos.js';
@@ -15,7 +15,7 @@ import { initFinance, renderFinance }                from './views/finance.js';
 import { initUsers, renderUsers }                    from './views/users.js';
 import { initLogin, renderLogin }                    from './views/login.js';
 import { openLoginModal }                            from './views/modals.js';
-import { syncInitialData, setupRealtimeSubscription } from './supabase.js';
+import { syncInitialData, setupRealtimeSubscription, checkServerSession, syncAuthoritativeRosterToCache } from './supabase.js';
 import { esc }                                        from './utils/sanitize.js';
 
 /* ── PWA: Register Service Worker (handled by vite-plugin-pwa) ── */
@@ -229,19 +229,32 @@ const init = async () => {
   window.appNavigateTo = navigateTo;
 
   try {
-    // Open DB and seed
+    // Open DB and seed products
     await openDB();
     await seedDefaultProducts();
-    await seedDefaultUsers();
   } catch (err) {
     console.error('[DB] Failed to open database:', err);
     window.showToast('Database gagal dibuka. Coba reload halaman.', 'error', 'Database Error');
     return;
   }
 
-  // Restore operator session
-  store.restoreSession();
+  // Server-Authoritative Session Check (JWT Token Verification)
+  try {
+    const validUser = await checkServerSession();
+    if (validUser) {
+      store.login(validUser);
+    } else {
+      store.logout();
+    }
+  } catch (_) {
+    store.logout();
+  }
   updateOperatorUI(store.state.currentUser);
+
+  // Overwrite ephemeral cache with authoritative cloud roster if online
+  if (navigator.onLine) {
+    syncAuthoritativeRosterToCache().catch(() => {});
+  }
 
   // Bind operator badge click
   document.getElementById('operator-badge')?.addEventListener('click', () => {

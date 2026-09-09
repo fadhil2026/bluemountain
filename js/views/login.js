@@ -3,10 +3,10 @@
  * Full-screen portal for POS Operators with Salted SHA-256 PIN Verification.
  * Supports both on-screen numpad and physical keyboard inputs.
  */
-import { getAllUsers, updateUser } from '../db.js';
-import { generateSalt, hashPin, verifyPin } from '../utils/crypto.js';
+import { getAllUsers } from '../db.js';
 import { esc } from '../utils/sanitize.js';
 import store from '../store.js';
+import { authenticateWithServer, syncAuthoritativeRosterToCache } from '../supabase.js';
 
 let _activeUsers = [];
 let _selectedUserId = null;
@@ -45,6 +45,13 @@ export const renderLogin = async () => {
   const container = document.getElementById('view-login');
   if (!container) return;
 
+  // Server-Authoritative: refresh local cache from cloud when online
+  if (navigator.onLine) {
+    try {
+      await syncAuthoritativeRosterToCache();
+    } catch (_) {}
+  }
+
   const allUsers = await getAllUsers();
   _activeUsers = allUsers.filter(u => u.isActive !== false);
 
@@ -53,10 +60,10 @@ export const renderLogin = async () => {
     container.innerHTML = `
       <div style="min-height: 80vh; display: flex; align-items: center; justify-content: center; padding: 20px;">
         <div style="background: var(--bg-card, #ffffff); border-radius: 20px; padding: 36px; text-align: center; max-width: 420px; box-shadow: 0 10px 30px rgba(0,0,0,0.08);">
-          <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
-          <h2 style="font-size: 20px; font-weight: 800; margin-bottom: 8px;">Tidak Ada Operator</h2>
-          <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">Database operator kosong. Muat ulang halaman untuk inisialisasi akun bawaan.</p>
-          <button class="btn btn-primary" onclick="location.reload()">🔄 Muat Ulang</button>
+          <div style="font-size: 48px; margin-bottom: 16px;">☁️</div>
+          <h2 style="font-size: 20px; font-weight: 800; margin-bottom: 8px;">Menghubungkan Akun Master</h2>
+          <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">Memeriksa akun operator server pusat. Pastikan perangkat terhubung ke internet.</p>
+          <button class="btn btn-primary" onclick="location.reload()">🔄 Sinkronkan Sekarang</button>
         </div>
       </div>
     `;
@@ -164,13 +171,14 @@ const processPinVerification = async (isManual = false) => {
   // Only verify if length is at least 4 digits
   if (_enteredPin.length >= 4) {
     _isVerifying = true;
-    const isValid = await verifyPin(_enteredPin, targetUser.pinSalt, targetUser.pinHash);
+    const authResult = await authenticateWithServer(targetUser.username, _enteredPin);
     _isVerifying = false;
 
-    if (isValid) {
+    if (authResult.success) {
       // SUCCESS!
-      store.login(targetUser);
-      window.showToast?.(`Berhasil masuk sebagai ${targetUser.name} (${targetUser.role})`, 'success');
+      store.login(authResult.user, authResult.token);
+      const tag = authResult.isServerValidated ? ' (Terverifikasi Server)' : ' (Mode Offline)';
+      window.showToast?.(`Berhasil masuk sebagai ${authResult.user.name} (${authResult.user.role})${tag}`, 'success');
       _enteredPin = '';
       
       // Navigate to POS
@@ -181,13 +189,23 @@ const processPinVerification = async (isManual = false) => {
         if (posDock) posDock.click();
       }
       return;
+    } else {
+      if (isManual || _enteredPin.length >= 6) {
+        if (errEl) {
+          errEl.textContent = authResult.error || 'PIN salah! Silakan periksa kembali.';
+        }
+        shakePinBox();
+        _enteredPin = '';
+        updateDotsUI();
+        return;
+      }
     }
   }
 
-  // If failed:
-  if (isManual || _enteredPin.length >= 6) {
+  // If manual submission with under 4 digits:
+  if (isManual && _enteredPin.length < 4) {
     if (errEl) {
-      errEl.textContent = _enteredPin.length < 4 ? 'Masukkan minimal 4 digit PIN' : 'PIN salah! Silakan periksa kembali.';
+      errEl.textContent = 'Masukkan minimal 4 digit PIN';
     }
     shakePinBox();
     _enteredPin = '';

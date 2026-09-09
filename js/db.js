@@ -16,8 +16,6 @@ import {
   pushUserToCloud,
   deleteUserFromCloud,
 } from './supabase.js';
-import { generateSalt, hashPin } from './utils/crypto.js';
-
 export const db = new Dexie('BlueMountainPOS');
 
 db.version(2).stores({
@@ -163,24 +161,10 @@ export const seedDefaultProducts = async () => {
   ]);
 };
 
-// ── Seed Default Users (Owner Admin) ──
+// ── Server-Authoritative: No Dummy Users Generated Locally ──
+// ponytail: Client browser/phone must NEVER generate dummy accounts locally. DB Master in Supabase Cloud is Single Source of Truth.
 export const seedDefaultUsers = async () => {
-  const count = await db.users.count();
-  if (count > 0) return;
-  const salt = generateSalt();
-  const pinHash = await hashPin('1234', salt);
-  const defaultAdmin = {
-    username: 'admin',
-    name: 'Owner / Administrator',
-    role: 'owner',
-    pinHash,
-    pinSalt: salt,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  const id = await db.users.add(defaultAdmin);
-  pushUserToCloud({ ...defaultAdmin, id }).catch(() => {});
+  return;
 };
 
 // ── Clear All Data (Robust Reset) ──

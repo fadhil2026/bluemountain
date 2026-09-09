@@ -3,7 +3,7 @@
  * Comprehensive business logic, arithmetic, and accounting verification
  */
 import assert from 'assert';
-import { hashPin, generateSalt, verifyPin } from '../js/utils/crypto.js';
+import { hashPin, generateSalt, verifyPin, createSessionJWT, verifySessionJWT } from '../js/utils/crypto.js';
 import { formatRupiah } from '../js/utils/currency.js';
 import { todayKey, monthKey } from '../js/utils/date.js';
 
@@ -88,6 +88,25 @@ assert.strictEqual(productStock, 97, 'Stok setelah pembelian harus 97');
 // Revert on delete:
 productStock += cartQty;
 assert.strictEqual(productStock, 100, 'Stok setelah pembatalan harus kembali 100');
-console.log('     ✓ Matematika stok inventori presisi');
+// Test 6: HMAC-SHA256 JWT Session Token Generation & Verification
+console.log('  6. Menguji modul token sesi HMAC-SHA256 JWT...');
+const testPayload = { sub: 'usr_123', username: 'admin', role: 'owner', name: 'Fadhilah Ramadhan' };
+const secretKey = 'test_secret_key_pos_2026';
+const token = await createSessionJWT(testPayload, secretKey, 3600);
+assert.strictEqual(typeof token, 'string', 'Token harus berupa string');
+assert.strictEqual(token.split('.').length, 3, 'JWT harus memiliki 3 segmen terpisah titik');
+
+const decoded = await verifySessionJWT(token, secretKey);
+assert.strictEqual(decoded.username, 'admin', 'Klaim username dalam JWT harus sesuai');
+assert.strictEqual(decoded.role, 'owner', 'Klaim role dalam JWT harus sesuai');
+
+const tamperedToken = token.slice(0, -5) + 'xxxxx';
+const tamperedResult = await verifySessionJWT(tamperedToken, secretKey);
+assert.strictEqual(tamperedResult, null, 'Token yang dimanipulasi harus ditolak');
+
+const wrongKeyResult = await verifySessionJWT(token, 'wrong_secret_key');
+assert.strictEqual(wrongKeyResult, null, 'Token dengan secret berbeda harus ditolak');
+console.log('     ✓ Modul JWT lolos 100%');
 
 console.log('\n🎯 [SUKSES AUDIT] Semua pengujian logika, kripto, matematika, dan akuntansi 100% LOLOS!\n');
+
