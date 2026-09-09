@@ -15,7 +15,11 @@ import {
   pushSettingToCloud,
   pushUserToCloud,
   deleteUserFromCloud,
+  isServerOnline,
+  checkStagedOfflineTransactions,
 } from './supabase.js';
+import { generateUUID } from './utils/crypto.js';
+
 export const db = new Dexie('BlueMountainPOS');
 
 db.version(2).stores({
@@ -42,14 +46,25 @@ db.version(4).stores({
   users:        '++id, username, role, isActive',
 });
 
+// v5: Enterprise Web2 UUIDs + Tombstone Soft Deletion
+db.version(5).stores({
+  products:     'id, category, sku, deleted_at',
+  customers:    'id, name, phone, category, totalDebt, deleted_at',
+  transactions: 'id, invoiceNo, dateKey, paymentStatus, paymentMethod, customerName, syncStatus, deleted_at',
+  settings:     'key',
+  expenses:     'id, dateKey, category, deleted_at',
+  users:        'id, username, role, isActive',
+});
+
 // ── Users (RBAC) ──
 export const getAllUsers        = () => db.users.toArray();
 export const getUserById        = (id) => db.users.get(id);
 export const getUserByUsername  = (username) => db.users.where('username').equalsIgnoreCase(String(username).trim()).first();
 export const addUser            = async (u) => {
-  const id = await db.users.add(u);
-  pushUserToCloud({ ...u, id }).catch(() => {});
-  return id;
+  const user = { ...u, id: u.id ? String(u.id) : generateUUID('usr') };
+  await db.users.put(user);
+  pushUserToCloud(user).catch(() => {});
+  return user.id;
 };
 export const updateUser         = async (u) => {
   const res = await db.users.put(u);
@@ -66,73 +81,156 @@ export const deleteUser         = async (id) => {
 };
 
 // ── Customers ──
-export const getAllCustomers = () => db.customers.toArray();
+export const getAllCustomers = async () => {
+  const list = await db.customers.toArray();
+  return list.filter(c => !c.deleted_at);
+};
 export const getCustomerById = (id) => db.customers.get(id);
 export const addCustomer     = async (c) => {
-  const id = await db.customers.add(c);
-  pushCustomerToCloud({ ...c, id }).catch(() => {});
-  return id;
+  const customer = {
+    ...c,
+    id: c.id ? String(c.id) : generateUUID('cust'),
+    deleted_at: null,
+    updated_at: new Date().toISOString()
+  };
+  await db.customers.put(customer);
+  pushCustomerToCloud(customer).catch(() => {});
+  return customer.id;
 };
 export const updateCustomer  = async (c) => {
-  const res = await db.customers.put(c);
-  pushCustomerToCloud(c).catch(() => {});
+  const customer = { ...c, updated_at: new Date().toISOString() };
+  const res = await db.customers.put(customer);
+  pushCustomerToCloud(customer).catch(() => {});
   return res;
 };
 export const deleteCustomer  = async (id) => {
-  const res = await db.customers.delete(id);
-  deleteCustomerFromCloud(id).catch(() => {});
-  return res;
+  const existing = await db.customers.get(id);
+  if (existing) {
+    const tombstone = {
+      ...existing,
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    await db.customers.put(tombstone);
+    deleteCustomerFromCloud(id).catch(() => {});
+  }
+  return id;
 };
 
 // ── Products ──
-export const getAllProducts    = ()        => db.products.toArray();
-export const addProduct        = async (p) => {
-  const id = await db.products.add(p);
-  pushProductToCloud({ ...p, id }).catch(() => {});
+export const getAllProducts = async () => {
+  const list = await db.products.toArray();
+  return list.filter(p => !p.deleted_at);
+};
+export const addProduct = async (p) => {
+  const product = {
+    ...p,
+    id: p.id ? String(p.id) : generateUUID('prod'),
+    deleted_at: null,
+    updated_at: new Date().toISOString()
+  };
+  await db.products.put(product);
+  pushProductToCloud(product).catch(() => {});
+  return product.id;
+};
+export const updateProduct = async (p) => {
+  const product = { ...p, updated_at: new Date().toISOString() };
+  const res = await db.products.put(product);
+  pushProductToCloud(product).catch(() => {});
+  return res;
+};
+export const deleteProduct = async (id) => {
+  const existing = await db.products.get(id);
+  if (existing) {
+    const tombstone = {
+      ...existing,
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    await db.products.put(tombstone);
+    deleteProductFromCloud(id).catch(() => {});
+  }
   return id;
-};
-export const updateProduct     = async (p) => {
-  const res = await db.products.put(p);
-  pushProductToCloud(p).catch(() => {});
-  return res;
-};
-export const deleteProduct     = async (id) => {
-  const res = await db.products.delete(id);
-  deleteProductFromCloud(id).catch(() => {});
-  return res;
 };
 
 // ── Transactions ──
-export const saveTransaction   = async (tx) => {
-  const id = await db.transactions.add(tx);
-  pushTransactionToCloud({ ...tx, id }).catch(() => {});
-  return id;
+export const saveTransaction = async (tx) => {
+  const online = typeof isServerOnline === 'function' ? isServerOnline() : navigator.onLine;
+  const transaction = {
+    ...tx,
+    id: tx.id ? String(tx.id) : generateUUID('tx'),
+    syncStatus: online ? 'synced' : 'staged_offline',
+    deleted_at: null,
+    updated_at: new Date().toISOString()
+  };
+  await db.transactions.put(transaction);
+  if (online) {
+    pushTransactionToCloud(transaction).catch(() => {});
+  } else {
+    try { checkStagedOfflineTransactions?.(); } catch (_) {}
+  }
+  return transaction.id;
 };
-export const getAllTransactions = ()        => db.transactions.toArray();
+export const getAllTransactions = async () => {
+  const list = await db.transactions.toArray();
+  return list.filter(t => !t.deleted_at);
+};
 export const deleteTransaction = async (id) => {
-  const res = await db.transactions.delete(id);
-  deleteTransactionFromCloud(id).catch(() => {});
-  return res;
+  const existing = await db.transactions.get(id);
+  if (existing) {
+    const tombstone = {
+      ...existing,
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    await db.transactions.put(tombstone);
+    deleteTransactionFromCloud(id).catch(() => {});
+  }
+  return id;
 };
 export const updateTransaction = async (tx) => {
-  const res = await db.transactions.put(tx);
-  pushTransactionToCloud(tx).catch(() => {});
+  const transaction = { ...tx, updated_at: new Date().toISOString() };
+  const res = await db.transactions.put(transaction);
+  pushTransactionToCloud(transaction).catch(() => {});
   return res;
 };
-export const getTransactionsByDateKey = (dateKey) =>
-  db.transactions.where('dateKey').equals(dateKey).toArray();
+export const getTransactionsByDateKey = async (dateKey) => {
+  const list = await db.transactions.where('dateKey').equals(dateKey).toArray();
+  return list.filter(t => !t.deleted_at);
+};
 
 // ── Expenses ──
-export const saveExpense   = async (exp) => {
-  const id = await db.expenses.add(exp);
-  pushExpenseToCloud({ ...exp, id }).catch(() => {});
-  return id;
+export const saveExpense = async (exp) => {
+  const online = typeof isServerOnline === 'function' ? isServerOnline() : navigator.onLine;
+  const expense = {
+    ...exp,
+    id: exp.id ? String(exp.id) : generateUUID('exp'),
+    syncStatus: online ? 'synced' : 'staged_offline',
+    deleted_at: null,
+    updated_at: new Date().toISOString()
+  };
+  await db.expenses.put(expense);
+  if (online) {
+    pushExpenseToCloud(expense).catch(() => {});
+  }
+  return expense.id;
 };
-export const getAllExpenses = ()    => db.expenses.toArray();
+export const getAllExpenses = async () => {
+  const list = await db.expenses.toArray();
+  return list.filter(e => !e.deleted_at);
+};
 export const deleteExpense = async (id) => {
-  const res = await db.expenses.delete(id);
-  deleteExpenseFromCloud(id).catch(() => {});
-  return res;
+  const existing = await db.expenses.get(id);
+  if (existing) {
+    const tombstone = {
+      ...existing,
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    await db.expenses.put(tombstone);
+    deleteExpenseFromCloud(id).catch(() => {});
+  }
+  return id;
 };
 
 // ── Settings ──
@@ -149,15 +247,15 @@ export const setSetting = async (key, value) => {
 export const seedDefaultProducts = async () => {
   const count = await db.products.count();
   if (count > 0) return;
-  await db.products.bulkAdd([
-    { name: 'Air Isi Ulang Galon', category: 'Galon',   price: 5000,  unit: 'galon', emoji: '🪣', stock: 999 },
-    { name: 'Antar Galon (dalam)',  category: 'Galon',   price: 3000,  unit: 'kali',  emoji: '🛵', stock: 999 },
-    { name: 'Antar Galon (luar)',   category: 'Galon',   price: 5000,  unit: 'kali',  emoji: '🚚', stock: 999 },
-    { name: 'Galon Baru (Aqua)',    category: 'Galon',   price: 50000, unit: 'buah',  emoji: '💧', stock: 50  },
-    { name: 'Galon Baru (Standar)', category: 'Galon',   price: 45000, unit: 'buah',  emoji: '💦', stock: 50  },
-    { name: 'Air Botol 600ml',      category: 'Botol',   price: 3000,  unit: 'botol', emoji: '🍶', stock: 200 },
-    { name: 'Air Botol 1500ml',     category: 'Botol',   price: 5000,  unit: 'botol', emoji: '🥤', stock: 100 },
-    { name: 'Dispenser Galon',      category: 'Lainnya', price: 250000, unit: 'unit', emoji: '⚗️', stock: 10  },
+  await db.products.bulkPut([
+    { id: generateUUID('prod'), name: 'Air Isi Ulang Galon', category: 'Galon',   price: 5000,  unit: 'galon', emoji: '🪣', stock: 999, deleted_at: null },
+    { id: generateUUID('prod'), name: 'Antar Galon (dalam)',  category: 'Galon',   price: 3000,  unit: 'kali',  emoji: '🛵', stock: 999, deleted_at: null },
+    { id: generateUUID('prod'), name: 'Antar Galon (luar)',   category: 'Galon',   price: 5000,  unit: 'kali',  emoji: '🚚', stock: 999, deleted_at: null },
+    { id: generateUUID('prod'), name: 'Galon Baru (Aqua)',    category: 'Galon',   price: 50000, unit: 'buah',  emoji: '💧', stock: 50,  deleted_at: null },
+    { id: generateUUID('prod'), name: 'Galon Baru (Standar)', category: 'Galon',   price: 45000, unit: 'buah',  emoji: '💦', stock: 50,  deleted_at: null },
+    { id: generateUUID('prod'), name: 'Air Botol 600ml',      category: 'Botol',   price: 3000,  unit: 'botol', emoji: '🍶', stock: 200, deleted_at: null },
+    { id: generateUUID('prod'), name: 'Air Botol 1500ml',     category: 'Botol',   price: 5000,  unit: 'botol', emoji: '🥤', stock: 100, deleted_at: null },
+    { id: generateUUID('prod'), name: 'Dispenser Galon',      category: 'Lainnya', price: 250000, unit: 'unit', emoji: '⚗️', stock: 10,  deleted_at: null },
   ]);
 };
 

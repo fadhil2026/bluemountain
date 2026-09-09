@@ -15,7 +15,15 @@ import { initFinance, renderFinance }                from './views/finance.js';
 import { initUsers, renderUsers }                    from './views/users.js';
 import { initLogin, renderLogin }                    from './views/login.js';
 import { openLoginModal }                            from './views/modals.js';
-import { syncInitialData, setupRealtimeSubscription, checkServerSession, syncAuthoritativeRosterToCache } from './supabase.js';
+import {
+  syncInitialData,
+  setupRealtimeSubscription,
+  checkServerSession,
+  syncAuthoritativeRosterToCache,
+  startServerHeartbeat,
+  checkStagedOfflineTransactions,
+  pushStagedOfflineData
+} from './supabase.js';
 import { esc }                                        from './utils/sanitize.js';
 
 /* ── PWA: Register Service Worker (handled by vite-plugin-pwa) ── */
@@ -275,6 +283,11 @@ const init = async () => {
     navigateTo('login');
   });
 
+  // Bind staged offline sync banner button
+  document.getElementById('btn-sync-staged')?.addEventListener('click', async () => {
+    await pushStagedOfflineData();
+  });
+
   window.addEventListener('request-operator-switch', () => {
     openLoginModal();
   });
@@ -310,9 +323,11 @@ const init = async () => {
   updateClock();
   setInterval(updateClock, 1000);
 
-  // ── Supabase Cloud Realtime Multi-Device Sync ──
+  // ── Supabase Cloud Realtime Multi-Device Sync & Active Heartbeat ──
+  startServerHeartbeat();
   syncInitialData().catch(() => {});
   setupRealtimeSubscription();
+  checkStagedOfflineTransactions();
 
   // ── macOS Dock Engine (Ultra-Smooth FLIP Reorder + Gaussian Wave Magnification) ──
   const dockEl         = document.querySelector('.dock');

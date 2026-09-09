@@ -96,6 +96,142 @@ export const updateSyncBadge = (status, label) => {
   }
 };
 
+let _heartbeatTimer = null;
+let _isServerReachable = true;
+let _currentRtt = 0;
+
+export const isServerOnline = () => _isServerReachable;
+export const getCurrentRtt = () => _currentRtt;
+
+/**
+ * Ping Supabase to test true round-trip reachability & latency
+ * @returns {Promise<{ ok: boolean, rtt: number }>}
+ */
+export const pingServer = async () => {
+  if (isDeviceIsolated()) {
+    return { ok: false, rtt: 0, isolated: true };
+  }
+  const start = performance.now();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/settings?select=key&limit=1`, {
+      method: 'GET',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    clearTimeout(timeout);
+
+    const end = performance.now();
+    const rtt = Math.round(end - start);
+
+    if (res.ok) {
+      _isServerReachable = true;
+      _currentRtt = rtt;
+      return { ok: true, rtt };
+    } else {
+      _isServerReachable = false;
+      return { ok: false, rtt };
+    }
+  } catch (_) {
+    _isServerReachable = false;
+    _currentRtt = 0;
+    return { ok: false, rtt: 0 };
+  }
+};
+
+/**
+ * Start Real-Time Active Server Heartbeat (Truthful Latency Monitoring)
+ */
+export const startServerHeartbeat = (intervalMs = 12000) => {
+  if (_heartbeatTimer) clearInterval(_heartbeatTimer);
+
+  const check = async () => {
+    const result = await pingServer();
+    if (result.ok) {
+      if (result.rtt > 1500) {
+        updateSyncBadge('syncing', `🟡 Sinyal Lambat (${result.rtt}ms)`);
+      } else {
+        updateSyncBadge('online', `🟢 Cloud Realtime (${result.rtt}ms)`);
+      }
+      checkStagedOfflineTransactions();
+    } else {
+      updateSyncBadge('offline', '🔴 Mode Offline (Staged)');
+    }
+  };
+
+  check();
+  _heartbeatTimer = setInterval(check, intervalMs);
+
+  window.addEventListener('online', () => check());
+  window.addEventListener('offline', () => updateSyncBadge('offline', '🔴 Mode Offline (Staged)'));
+};
+
+/**
+ * Check count of transactions staged offline and display alert banner
+ */
+export const checkStagedOfflineTransactions = async () => {
+  try {
+    const list = await db.transactions.where('syncStatus').equals('staged_offline').toArray();
+    const count = list.length;
+    const banner = document.getElementById('staged-offline-banner');
+    const countEl = document.getElementById('staged-tx-count');
+    if (banner && countEl) {
+      if (count > 0 && _isServerReachable) {
+        countEl.textContent = count;
+        banner.style.display = 'flex';
+      } else {
+        banner.style.display = 'none';
+      }
+    }
+    return count;
+  } catch (_) {
+    return 0;
+  }
+};
+
+/**
+ * Push staged offline transactions to Supabase Cloud on kasir command
+ */
+export const pushStagedOfflineData = async () => {
+  if (!_isServerReachable || isDeviceIsolated()) {
+    window.showToast?.('Tidak dapat menyinkronkan: Server belum terjangkau.', 'warning');
+    return { success: false };
+  }
+
+  try {
+    updateSyncBadge('syncing', '🔄 Mengunggah data offline...');
+    const stagedTxs = await db.transactions.where('syncStatus').equals('staged_offline').toArray();
+    if (stagedTxs.length === 0) {
+      checkStagedOfflineTransactions();
+      return { success: true, count: 0 };
+    }
+
+    const supabase = getSupabase();
+    const { error } = await supabase.from('transactions').upsert(stagedTxs.map(formatTransactionForCloud));
+    if (error) throw error;
+
+    for (const tx of stagedTxs) {
+      tx.syncStatus = 'synced';
+      await db.transactions.put(tx);
+    }
+
+    checkStagedOfflineTransactions();
+    updateSyncBadge('online', `🟢 Cloud Realtime (${_currentRtt}ms)`);
+    window.showToast?.(`Sukses menyinkronkan ${stagedTxs.length} transaksi offline ke Cloud!`, 'success');
+    return { success: true, count: stagedTxs.length };
+  } catch (err) {
+    console.error('[Sync] Failed to push staged offline data:', err);
+    window.showToast?.('Gagal menyinkronkan data offline: ' + err.message, 'error');
+    return { success: false, error: err.message };
+  }
+};
+
 /**
  * Normalize product object for Supabase
  */
@@ -110,6 +246,7 @@ export const formatProductForCloud = (p) => ({
   emoji: p.emoji || '📦',
   image: p.image || null,
   stock: Number(p.stock) || 0,
+  deleted_at: p.deleted_at || null,
   updated_at: new Date().toISOString(),
 });
 
@@ -135,6 +272,8 @@ export const formatTransactionForCloud = (tx) => ({
   remaining_debt: Number(tx.remainingDebt || tx.remaining_debt) || 0,
   debt_payments: tx.debtPayments || tx.debt_payments || [],
   cashier: tx.cashier || 'Admin',
+  sync_status: tx.syncStatus || 'synced',
+  deleted_at: tx.deleted_at || null,
   updated_at: new Date().toISOString(),
 });
 
@@ -149,6 +288,7 @@ export const formatExpenseForCloud = (exp) => ({
   note: exp.note || '',
   amount: Number(exp.amount) || 0,
   cashier: exp.cashier || 'Admin',
+  deleted_at: exp.deleted_at || null,
   updated_at: new Date().toISOString(),
 });
 
@@ -167,6 +307,7 @@ export const formatCustomerForCloud = (c) => ({
   credit_limit: Number(c.creditLimit || c.credit_limit) || 0,
   galon_loaned: Number(c.galonLoaned || c.galon_loaned) || 0,
   notes: c.notes || '',
+  deleted_at: c.deleted_at || null,
   updated_at: new Date().toISOString(),
 });
 
@@ -204,7 +345,7 @@ export const syncInitialData = async () => {
   updateSyncBadge('syncing');
 
   try {
-    // 1. Sync Products (2-Way)
+    // 1. Sync Products (Authoritative Cloud Cache with Tombstone Deletions)
     try {
       const [localProds, { data: cloudProds, error: prodErr }] = await Promise.all([
         getAllProducts(),
@@ -212,26 +353,30 @@ export const syncInitialData = async () => {
       ]);
 
       if (!prodErr && cloudProds) {
-        const cloudProdIds = new Set(cloudProds.map(p => String(p.id)));
-        const unpushedProds = localProds.filter(l => !cloudProdIds.has(String(l.id)));
-        if (unpushedProds.length > 0) {
-          await supabase.from('products').upsert(unpushedProds.map(formatProductForCloud));
-        }
-
-        for (const cp of cloudProds) {
-          const formatted = {
-            id: isNaN(Number(cp.id)) ? cp.id : Number(cp.id),
-            sku: cp.sku || `BM-${cp.id}`,
-            name: cp.name,
-            category: cp.category,
-            price: Number(cp.price),
-            cost: Number(cp.cost) || 0,
-            unit: cp.unit,
-            emoji: cp.emoji,
-            image: cp.image || null,
-            stock: Number(cp.stock),
-          };
-          await db.products.put(formatted);
+        // If cloud is empty and local has seed data, seed cloud once
+        if (cloudProds.length === 0 && localProds.length > 0) {
+          await supabase.from('products').upsert(localProds.map(formatProductForCloud));
+        } else {
+          for (const cp of cloudProds) {
+            const id = isNaN(Number(cp.id)) ? cp.id : Number(cp.id);
+            if (cp.deleted_at) {
+              await db.products.delete(id);
+            } else {
+              await db.products.put({
+                id,
+                sku: cp.sku || `BM-${cp.id}`,
+                name: cp.name,
+                category: cp.category,
+                price: Number(cp.price),
+                cost: Number(cp.cost) || 0,
+                unit: cp.unit,
+                emoji: cp.emoji,
+                image: cp.image || null,
+                stock: Number(cp.stock),
+                deleted_at: null,
+              });
+            }
+          }
         }
         const freshProds = await getAllProducts();
         store.setProducts(freshProds);
@@ -240,7 +385,7 @@ export const syncInitialData = async () => {
       console.warn('[Sync] Products sync warning:', e);
     }
 
-    // 2. Sync Transactions (2-Way)
+    // 2. Sync Transactions (Authoritative Cloud Cache + Staged Offline Push)
     try {
       const [localTxs, { data: cloudTxs, error: txErr }] = await Promise.all([
         getAllTransactions(),
@@ -248,34 +393,44 @@ export const syncInitialData = async () => {
       ]);
 
       if (!txErr && cloudTxs) {
-        const cloudTxKeys = new Set(cloudTxs.map(t => t.invoice_no || String(t.id)));
-        const unpushedTxs = localTxs.filter(l => !cloudTxKeys.has(l.invoiceNo || String(l.id)));
-        if (unpushedTxs.length > 0) {
-          await supabase.from('transactions').upsert(unpushedTxs.map(formatTransactionForCloud));
+        // Only push staged offline transactions, avoiding zombie resurrection
+        const stagedTxs = localTxs.filter(l => l.syncStatus === 'staged_offline');
+        if (stagedTxs.length > 0) {
+          await supabase.from('transactions').upsert(stagedTxs.map(formatTransactionForCloud));
+          for (const st of stagedTxs) {
+            st.syncStatus = 'synced';
+            await db.transactions.put(st);
+          }
         }
 
         for (const ctx of cloudTxs) {
-          const formatted = {
-            id: isNaN(Number(ctx.id)) ? ctx.id : Number(ctx.id),
-            invoiceNo: ctx.invoice_no,
-            date: ctx.date,
-            dateKey: ctx.date_key,
-            customerName: ctx.customer_name,
-            items: ctx.items || [],
-            subtotal: Number(ctx.subtotal),
-            discount: Number(ctx.discount),
-            tax: Number(ctx.tax),
-            total: Number(ctx.total),
-            paid: Number(ctx.paid),
-            change: Number(ctx.change),
-            paymentMethod: ctx.payment_method,
-            paymentStatus: ctx.payment_status,
-            paidAmount: Number(ctx.paid_amount),
-            remainingDebt: Number(ctx.remaining_debt),
-            debtPayments: ctx.debt_payments || [],
-            cashier: ctx.cashier,
-          };
-          await db.transactions.put(formatted);
+          const id = isNaN(Number(ctx.id)) ? ctx.id : Number(ctx.id);
+          if (ctx.deleted_at) {
+            await db.transactions.delete(id);
+          } else {
+            await db.transactions.put({
+              id,
+              invoiceNo: ctx.invoice_no,
+              date: ctx.date,
+              dateKey: ctx.date_key,
+              customerName: ctx.customer_name,
+              items: ctx.items || [],
+              subtotal: Number(ctx.subtotal),
+              discount: Number(ctx.discount),
+              tax: Number(ctx.tax),
+              total: Number(ctx.total),
+              paid: Number(ctx.paid),
+              change: Number(ctx.change),
+              paymentMethod: ctx.payment_method,
+              paymentStatus: ctx.payment_status,
+              paidAmount: Number(ctx.paid_amount),
+              remainingDebt: Number(ctx.remaining_debt),
+              debtPayments: ctx.debt_payments || [],
+              cashier: ctx.cashier,
+              syncStatus: 'synced',
+              deleted_at: null,
+            });
+          }
         }
         const freshTxs = await getAllTransactions();
         store.setTransactions(freshTxs);
@@ -284,7 +439,7 @@ export const syncInitialData = async () => {
       console.warn('[Sync] Transactions sync warning:', e);
     }
 
-    // 3. Sync Expenses (2-Way)
+    // 3. Sync Expenses (Authoritative Cloud Cache + Staged Offline Push)
     try {
       const [localExps, { data: cloudExps, error: expErr }] = await Promise.all([
         getAllExpenses(),
@@ -292,23 +447,31 @@ export const syncInitialData = async () => {
       ]);
 
       if (!expErr && cloudExps) {
-        const cloudExpIds = new Set(cloudExps.map(e => String(e.id)));
-        const unpushedExps = localExps.filter(l => !cloudExpIds.has(String(l.id)));
-        if (unpushedExps.length > 0) {
-          await supabase.from('expenses').upsert(unpushedExps.map(formatExpenseForCloud));
+        const stagedExps = localExps.filter(l => l.syncStatus === 'staged_offline');
+        if (stagedExps.length > 0) {
+          await supabase.from('expenses').upsert(stagedExps.map(formatExpenseForCloud));
+          for (const se of stagedExps) {
+            se.syncStatus = 'synced';
+            await db.expenses.put(se);
+          }
         }
 
         for (const ce of cloudExps) {
-          const formatted = {
-            id: isNaN(Number(ce.id)) ? ce.id : Number(ce.id),
-            date: ce.date,
-            dateKey: ce.date_key,
-            category: ce.category,
-            note: ce.note,
-            amount: Number(ce.amount),
-            cashier: ce.cashier,
-          };
-          await db.expenses.put(formatted);
+          const id = isNaN(Number(ce.id)) ? ce.id : Number(ce.id);
+          if (ce.deleted_at) {
+            await db.expenses.delete(id);
+          } else {
+            await db.expenses.put({
+              id,
+              date: ce.date,
+              dateKey: ce.date_key,
+              category: ce.category,
+              note: ce.note,
+              amount: Number(ce.amount),
+              cashier: ce.cashier,
+              deleted_at: null,
+            });
+          }
         }
         const freshExps = await getAllExpenses();
         store.setExpenses(freshExps);
@@ -317,7 +480,7 @@ export const syncInitialData = async () => {
       console.warn('[Sync] Expenses sync warning:', e);
     }
 
-    // 4. Sync Customers (2-Way)
+    // 4. Sync Customers (Authoritative Cloud Cache with Tombstone Deletions)
     try {
       const [localCusts, { data: cloudCusts, error: custErr }] = await Promise.all([
         getAllCustomers(),
@@ -325,27 +488,30 @@ export const syncInitialData = async () => {
       ]);
 
       if (!custErr && cloudCusts) {
-        const cloudCustIds = new Set(cloudCusts.map(c => String(c.id)));
-        const unpushedCusts = localCusts.filter(l => !cloudCustIds.has(String(l.id)));
-        if (unpushedCusts.length > 0) {
-          await supabase.from('customers').upsert(unpushedCusts.map(formatCustomerForCloud));
-        }
-
-        for (const cc of cloudCusts) {
-          const formatted = {
-            id: isNaN(Number(cc.id)) ? cc.id : Number(cc.id),
-            name: cc.name || '',
-            phone: cc.phone || '',
-            address: cc.address || '',
-            category: cc.category || 'Rumah Tangga',
-            totalOrders: Number(cc.total_orders) || 0,
-            totalSpent: Number(cc.total_spent) || 0,
-            totalDebt: Number(cc.total_debt) || 0,
-            creditLimit: Number(cc.credit_limit) || 0,
-            galonLoaned: Number(cc.galon_loaned) || 0,
-            notes: cc.notes || '',
-          };
-          await db.customers.put(formatted);
+        if (cloudCusts.length === 0 && localCusts.length > 0) {
+          await supabase.from('customers').upsert(localCusts.map(formatCustomerForCloud));
+        } else {
+          for (const cc of cloudCusts) {
+            const id = isNaN(Number(cc.id)) ? cc.id : Number(cc.id);
+            if (cc.deleted_at) {
+              await db.customers.delete(id);
+            } else {
+              await db.customers.put({
+                id,
+                name: cc.name || '',
+                phone: cc.phone || '',
+                address: cc.address || '',
+                category: cc.category || 'Rumah Tangga',
+                totalOrders: Number(cc.total_orders) || 0,
+                totalSpent: Number(cc.total_spent) || 0,
+                totalDebt: Number(cc.total_debt) || 0,
+                creditLimit: Number(cc.credit_limit) || 0,
+                galonLoaned: Number(cc.galon_loaned) || 0,
+                notes: cc.notes || '',
+                deleted_at: null,
+              });
+            }
+          }
         }
         const freshCusts = await getAllCustomers();
         store.setCustomers?.(freshCusts);
@@ -412,9 +578,10 @@ export const setupRealtimeSubscription = () => {
   realtimeChannel = supabase
     .channel(`store_realtime_${storeId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, async (payload) => {
-      if (payload.eventType === 'DELETE') {
-        const id = isNaN(Number(payload.old.id)) ? payload.old.id : Number(payload.old.id);
-        await db.products.delete(id);
+      if (payload.eventType === 'DELETE' || payload.new?.deleted_at) {
+        const id = payload.new?.id || payload.old?.id;
+        const cleanId = isNaN(Number(id)) ? id : Number(id);
+        await db.products.delete(cleanId);
       } else {
         const row = payload.new;
         await db.products.put({
@@ -428,15 +595,17 @@ export const setupRealtimeSubscription = () => {
           emoji: row.emoji,
           image: row.image || null,
           stock: Number(row.stock),
+          deleted_at: null,
         });
       }
       const updated = await getAllProducts();
       store.setProducts(updated);
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, async (payload) => {
-      if (payload.eventType === 'DELETE') {
-        const id = isNaN(Number(payload.old.id)) ? payload.old.id : Number(payload.old.id);
-        await db.transactions.delete(id);
+      if (payload.eventType === 'DELETE' || payload.new?.deleted_at) {
+        const id = payload.new?.id || payload.old?.id;
+        const cleanId = isNaN(Number(id)) ? id : Number(id);
+        await db.transactions.delete(cleanId);
       } else {
         const row = payload.new;
         await db.transactions.put({
@@ -458,15 +627,18 @@ export const setupRealtimeSubscription = () => {
           remainingDebt: Number(row.remaining_debt),
           debtPayments: row.debt_payments || [],
           cashier: row.cashier,
+          syncStatus: 'synced',
+          deleted_at: null,
         });
       }
       const updated = await getAllTransactions();
       store.setTransactions(updated);
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, async (payload) => {
-      if (payload.eventType === 'DELETE') {
-        const id = isNaN(Number(payload.old.id)) ? payload.old.id : Number(payload.old.id);
-        await db.expenses.delete(id);
+      if (payload.eventType === 'DELETE' || payload.new?.deleted_at) {
+        const id = payload.new?.id || payload.old?.id;
+        const cleanId = isNaN(Number(id)) ? id : Number(id);
+        await db.expenses.delete(cleanId);
       } else {
         const row = payload.new;
         await db.expenses.put({
@@ -477,15 +649,17 @@ export const setupRealtimeSubscription = () => {
           note: row.note,
           amount: Number(row.amount),
           cashier: row.cashier,
+          deleted_at: null,
         });
       }
       const updated = await getAllExpenses();
       store.setExpenses(updated);
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, async (payload) => {
-      if (payload.eventType === 'DELETE') {
-        const id = isNaN(Number(payload.old.id)) ? payload.old.id : Number(payload.old.id);
-        await db.customers.delete(id);
+      if (payload.eventType === 'DELETE' || payload.new?.deleted_at) {
+        const id = payload.new?.id || payload.old?.id;
+        const cleanId = isNaN(Number(id)) ? id : Number(id);
+        await db.customers.delete(cleanId);
       } else {
         const row = payload.new;
         await db.customers.put({
@@ -500,6 +674,7 @@ export const setupRealtimeSubscription = () => {
           creditLimit: Number(row.credit_limit) || 0,
           galonLoaned: Number(row.galon_loaned) || 0,
           notes: row.notes || '',
+          deleted_at: null,
         });
       }
       const updated = await getAllCustomers();
@@ -569,7 +744,13 @@ export const deleteProductFromCloud = async (id) => {
   if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
-    await supabase.from('products').delete().eq('id', String(id));
+    const { error } = await supabase.from('products').update({
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', String(id));
+    if (error) {
+      await supabase.from('products').delete().eq('id', String(id));
+    }
   } catch (_) {}
 };
 
@@ -585,7 +766,13 @@ export const deleteCustomerFromCloud = async (id) => {
   if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
-    await supabase.from('customers').delete().eq('id', String(id));
+    const { error } = await supabase.from('customers').update({
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', String(id));
+    if (error) {
+      await supabase.from('customers').delete().eq('id', String(id));
+    }
   } catch (_) {}
 };
 
@@ -601,7 +788,13 @@ export const deleteTransactionFromCloud = async (id) => {
   if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
-    await supabase.from('transactions').delete().eq('id', String(id));
+    const { error } = await supabase.from('transactions').update({
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', String(id));
+    if (error) {
+      await supabase.from('transactions').delete().eq('id', String(id));
+    }
   } catch (_) {}
 };
 
@@ -617,7 +810,13 @@ export const deleteExpenseFromCloud = async (id) => {
   if (isDeviceIsolated() || !navigator.onLine) return;
   try {
     const supabase = getSupabase();
-    await supabase.from('expenses').delete().eq('id', String(id));
+    const { error } = await supabase.from('expenses').update({
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', String(id));
+    if (error) {
+      await supabase.from('expenses').delete().eq('id', String(id));
+    }
   } catch (_) {}
 };
 

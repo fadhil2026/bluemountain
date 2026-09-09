@@ -1,11 +1,11 @@
 # 📈 04 — ANALISIS KOMPARATIF, BENCHMARK OPEN-SOURCE & ROADMAP 2026
-**Blue Mountain Refilling Station POS & CRM — High-End Industrial Strategy (Revisi v3.5.0)**
+**Blue Mountain Refilling Station POS & CRM — High-End Industrial Strategy (Revisi v4.0.0)**
 
 ---
 
 ## 1. Analisis Komparatif: Fitur Live vs Gap Sistem Mature
 
-### A. Fitur Live Web App Kita (v3.5.0) 🌟
+### A. Fitur Live Web App Kita (v4.0.0) 🌟
 1. **Zero-Latency Pure Offline-First**:
    - IndexedDB (Dexie v3) lokal primary, 0ms latency.
    - 2-Way Sync Supabase PostgreSQL/WebSocket saat online tanpa data hilang (*Write-Ahead Persistence*).
@@ -31,7 +31,7 @@
 
 ### B. Gap vs Sistem POS Mature (Odoo POS, Square, Loyverse, ERPNext) ⚠️
 
-| Fitur / Dimensi | POS Saat Ini (v3.5.0) | Standar Industri POS Mature | Tingkat Urgensi |
+| Fitur / Dimensi | POS Saat Ini (v4.0.0) | Standar Industri POS Mature | Tingkat Urgensi |
 |---|---|---|---|
 | **Sesi & Shift Kasir** | Timeline transaksi tercampur 24 jam tanpa sesi terpisah. | Buka shift (modal awal kasir), log cash in/out laci, hitung kas fisik (blind drop), hitung selisih lebih/kurang, cetak Struk Z-Report penutupan shift. | **Kritis** (Mencegah fraud kasir) |
 | **Keamanan & Role (RBAC)** | Operator tunggal tanpa PIN / autentikasi per aksi. | PIN switch kasir instan, hak akses berjenjang (Kasir vs Supervisor vs Owner). Restriksi void, edit harga, hapus nota, lihat laba bersih. | **Kritis** (Integritas operasional) |
@@ -72,7 +72,7 @@
 └───────────────────┴───────────────────┴───────────────────┴─────────────────────┘
 ```
 
-### 🟢 FASE 1, 2, 3 & 4 (SUB-BAGIAN RBAC): TELAH SELESAI & LIVE (v3.5.0)
+### 🟢 FASE 1, 2, 3 & 4 (SUB-BAGIAN RBAC): TELAH SELESAI & LIVE (v4.0.0)
 - Kasir POS responsif + Master Produk SKU WebP.
 - Cetak struk thermal raster grafik 48mm/58mm/80mm + Base64 synchronous logo.
 - Sinkronisasi Cloud 2 arah via Supabase PostgreSQL & WebSocket.

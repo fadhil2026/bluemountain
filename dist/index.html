@@ -111,10 +111,10 @@
       40%            { transform: scale(1);   opacity: 1; }
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-CdQQI-Lu.js"></script>
+  <script type="module" crossorigin src="./assets/index-B7FiHDwH.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/vendor-db-1iEchKay.js">
   <link rel="modulepreload" crossorigin href="./assets/vendor-pdf-DV7uGGo9.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-_ciTfXfb.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-ClQ1yJab.css">
 <link rel="manifest" href="./manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="./registerSW.js"></script></head>
 <body>
 
@@ -164,6 +164,17 @@
         <div class="status-badge" id="status-badge">Sistem Online</div>
       </div>
     </header>
+ 
+    <!-- ── Staged Offline Sync Banner ── -->
+    <div id="staged-offline-banner" class="staged-offline-banner" style="display: none;">
+      <div class="staged-offline-content">
+        <span class="staged-icon">📡</span>
+        <span class="staged-text">Ada <strong id="staged-tx-count">0</strong> transaksi offline tersimpan di perangkat ini.</span>
+      </div>
+      <button id="btn-sync-staged" class="btn-sync-staged" type="button">
+        <span class="btn-sync-icon">⚡</span> Unggah ke Cloud Sekarang
+      </button>
+    </div>
 
     <!-- ── Main Content ── -->
     <main class="main-content" role="main">

@@ -164,6 +164,17 @@
         <div class="status-badge" id="status-badge">Sistem Online</div>
       </div>
     </header>
+ 
+    <!-- ── Staged Offline Sync Banner ── -->
+    <div id="staged-offline-banner" class="staged-offline-banner" style="display: none;">
+      <div class="staged-offline-content">
+        <span class="staged-icon">📡</span>
+        <span class="staged-text">Ada <strong id="staged-tx-count">0</strong> transaksi offline tersimpan di perangkat ini.</span>
+      </div>
+      <button id="btn-sync-staged" class="btn-sync-staged" type="button">
+        <span class="btn-sync-icon">⚡</span> Unggah ke Cloud Sekarang
+      </button>
+    </div>
 
     <!-- ── Main Content ── -->
     <main class="main-content" role="main">

@@ -27,6 +27,36 @@ export const generateSalt = (bytes = 16) => {
 };
 
 /**
+ * Generate cryptographically secure UUID
+ * @param {string} prefix - Optional prefix (e.g. 'tx', 'prod', 'cust', 'exp')
+ * @returns {string} Unique global identifier
+ */
+export const generateUUID = (prefix = '') => {
+  let uuid;
+  try {
+    const c = getCrypto();
+    if (typeof c.randomUUID === 'function') {
+      uuid = c.randomUUID();
+    } else {
+      const arr = new Uint8Array(16);
+      c.getRandomValues(arr);
+      arr[6] = (arr[6] & 0x0f) | 0x40;
+      arr[8] = (arr[8] & 0x3f) | 0x80;
+      uuid = Array.from(arr, (b, i) =>
+        ([4, 6, 8, 10].includes(i) ? '-' : '') + b.toString(16).padStart(2, '0')
+      ).join('');
+    }
+  } catch (_) {
+    uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+  return prefix ? `${prefix}_${uuid}` : uuid;
+};
+
+/**
  * Hash PIN or password using SHA-256 with cryptographic salt
  * Formula: SHA-256(salt + ":" + secret)
  * @param {string} pin - Raw input PIN / password
