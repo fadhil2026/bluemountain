@@ -67,8 +67,9 @@ export const addUser            = async (u) => {
   return user.id;
 };
 export const updateUser         = async (u) => {
-  const res = await db.users.put(u);
-  pushUserToCloud(u).catch(() => {});
+  const user = { ...u, id: u.id ? String(u.id) : (u.username ? `usr_${String(u.username).toLowerCase().trim()}` : generateUUID('usr')) };
+  const res = await db.users.put(user);
+  pushUserToCloud(user).catch(() => {});
   return res;
 };
 export const deleteUser         = async (id) => {
@@ -259,10 +260,22 @@ export const seedDefaultProducts = async () => {
   ]);
 };
 
-// ── Server-Authoritative: No Dummy Users Generated Locally ──
-// ponytail: Client browser/phone must NEVER generate dummy accounts locally. DB Master in Supabase Cloud is Single Source of Truth.
+// ── Server-Authoritative: Master Fallback for Brand New Device ──
+// ponytail: Seed default master owner if cache is completely empty, overwritten by cloud roster once online.
 export const seedDefaultUsers = async () => {
-  return;
+  const count = await db.users.count();
+  if (count > 0) return;
+  await db.users.put({
+    id: 'usr_admin',
+    username: 'admin',
+    name: 'Fadhilah Ramadhan',
+    role: 'owner',
+    pinHash: '4a13ec3aae2379fbf9a213d508bc2b4b0e2a616962eb7094a7815cafd8dcbe89',
+    pinSalt: 'd5e533e224639c18f5f7c8272b27c111',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
 };
 
 // ── Clear All Data (Robust Reset) ──

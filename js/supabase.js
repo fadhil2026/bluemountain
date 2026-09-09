@@ -9,9 +9,8 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { db, getAllProducts, getAllTransactions, getAllExpenses, getAllCustomers, getAllUsers } from './db.js';
-import { todayKey } from './utils/date.js';
 import store from './store.js';
-import { verifyPin, createSessionJWT, verifySessionJWT } from './utils/crypto.js';
+import { verifyPin, createSessionJWT, verifySessionJWT, generateUUID } from './utils/crypto.js';
 
 // Default Supabase Configuration (fadhil2026's Project)
 export const SUPABASE_URL = 'https://wiapnhpdgjbtkblowfig.supabase.co';
@@ -314,16 +313,21 @@ export const formatCustomerForCloud = (c) => ({
 /**
  * Normalize user object for Supabase
  */
-export const formatUserForCloud = (u) => ({
-  store_id: getMasterStoreId(),
-  username: String(u.username || '').toLowerCase().trim(),
-  name: String(u.name || ''),
-  role: String(u.role || 'cashier'),
-  pin_hash: String(u.pinHash || u.pin_hash || ''),
-  pin_salt: String(u.pinSalt || u.pin_salt || ''),
-  is_active: u.isActive !== undefined ? Boolean(u.isActive) : (u.is_active !== undefined ? Boolean(u.is_active) : true),
-  updated_at: new Date().toISOString(),
-});
+export const formatUserForCloud = (u) => {
+  const cleanUsername = String(u.username || '').toLowerCase().trim();
+  const userId = u.id ? String(u.id) : (cleanUsername ? `usr_${cleanUsername}` : generateUUID('usr'));
+  return {
+    id: userId,
+    store_id: getMasterStoreId(),
+    username: cleanUsername,
+    name: String(u.name || ''),
+    role: String(u.role || 'cashier'),
+    pin_hash: String(u.pinHash || u.pin_hash || ''),
+    pin_salt: String(u.pinSalt || u.pin_salt || ''),
+    is_active: u.isActive !== undefined ? Boolean(u.isActive) : (u.is_active !== undefined ? Boolean(u.is_active) : true),
+    updated_at: new Date().toISOString(),
+  };
+};
 
 /**
  * 2-Way Initial Sync with Master Store ID Partition & Dual-Bridge Engine
@@ -696,7 +700,9 @@ export const setupRealtimeSubscription = () => {
             for (const cu of roster) {
               const usernameClean = String(cu.username).toLowerCase().trim();
               const existing = await db.users.where('username').equalsIgnoreCase(usernameClean).first();
+              const userId = cu.id ? String(cu.id) : (existing?.id ? String(existing.id) : `usr_${usernameClean}`);
               const udata = {
+                id: userId,
                 username: usernameClean,
                 name: cu.name,
                 role: cu.role,
@@ -706,11 +712,11 @@ export const setupRealtimeSubscription = () => {
                 createdAt: cu.created_at || cu.createdAt || new Date().toISOString(),
                 updatedAt: cu.updated_at || cu.updatedAt || new Date().toISOString(),
               };
-              if (existing) await db.users.update(existing.id, udata);
-              else await db.users.add(udata);
+              await db.users.put(udata);
             }
             const fresh = await db.users.toArray();
             store.setUsers(fresh);
+            store.emit('users:change', fresh);
           }
         } catch (_) {}
       }
@@ -893,7 +899,9 @@ export const syncAuthoritativeRosterToCache = async () => {
   for (const cu of cloudUsers) {
     const usernameClean = String(cu.username).toLowerCase().trim();
     const existing = await db.users.where('username').equalsIgnoreCase(usernameClean).first();
+    const userId = cu.id ? String(cu.id) : (existing?.id ? String(existing.id) : `usr_${usernameClean}`);
     const udata = {
+      id: userId,
       username: usernameClean,
       name: cu.name,
       role: cu.role,
@@ -904,15 +912,12 @@ export const syncAuthoritativeRosterToCache = async () => {
       updatedAt: cu.updated_at || cu.updatedAt || new Date().toISOString(),
     };
 
-    if (existing) {
-      await db.users.update(existing.id, udata);
-    } else {
-      await db.users.add(udata);
-    }
+    await db.users.put(udata);
   }
 
   const freshUsers = await db.users.toArray();
   store.setUsers(freshUsers);
+  store.emit('users:change', freshUsers);
   return freshUsers;
 };
 

@@ -1,7 +1,7 @@
 {
-  "currentVersion": "4.0.0",
-  "lastCommitHash": "7968000",
-  "updatedAt": "2026-09-09T05:59:13.123Z",
+  "currentVersion": "4.1.0",
+  "lastCommitHash": "b757818",
+  "updatedAt": "2026-09-09T13:00:23.268Z",
   "milestones": {
     "3.0.0": "Core Architecture, Dexie Offline DB, Thermal Printing Driver",
     "3.1.0": "Cloud Sync, Supabase Realtime, Dynamic QRIS, Multi-User RBAC & Salted SHA-256 PIN",

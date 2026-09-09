@@ -3,16 +3,17 @@
  * Full-screen portal for POS Operators with Salted SHA-256 PIN Verification.
  * Supports both on-screen numpad and physical keyboard inputs.
  */
-import { getAllUsers } from '../db.js';
+import { getAllUsers, seedDefaultUsers } from '../db.js';
 import { esc } from '../utils/sanitize.js';
 import store from '../store.js';
-import { authenticateWithServer, syncAuthoritativeRosterToCache } from '../supabase.js';
+import { authenticateWithServer, syncAuthoritativeRosterToCache, syncInitialData } from '../supabase.js';
 
 let _activeUsers = [];
 let _selectedUserId = null;
 let _enteredPin = '';
 let _isVerifying = false;
 let _keyboardBound = false;
+let _showManualInput = false;
 
 export const ROLE_BADGES = {
   owner: { label: '👑 Owner', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.12)' },
@@ -52,21 +53,96 @@ export const renderLogin = async () => {
     } catch (_) {}
   }
 
-  const allUsers = await getAllUsers();
+  let allUsers = await getAllUsers();
   _activeUsers = allUsers.filter(u => u.isActive !== false);
 
   if (_activeUsers.length === 0) {
-    // If no users, show error/fallback
+    // Fail-safe auto-heal: seed master owner if completely empty
+    await seedDefaultUsers();
+    allUsers = await getAllUsers();
+    _activeUsers = allUsers.filter(u => u.isActive !== false);
+  }
+
+  if (_activeUsers.length === 0 || _showManualInput) {
+    // Elegant fallback manual login form (Username + PIN)
     container.innerHTML = `
-      <div style="min-height: 80vh; display: flex; align-items: center; justify-content: center; padding: 20px;">
-        <div style="background: var(--bg-card, #ffffff); border-radius: 20px; padding: 36px; text-align: center; max-width: 420px; box-shadow: 0 10px 30px rgba(0,0,0,0.08);">
-          <div style="font-size: 48px; margin-bottom: 16px;">☁️</div>
-          <h2 style="font-size: 20px; font-weight: 800; margin-bottom: 8px;">Menghubungkan Akun Master</h2>
-          <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">Memeriksa akun operator server pusat. Pastikan perangkat terhubung ke internet.</p>
-          <button class="btn btn-primary" onclick="location.reload()">🔄 Sinkronkan Sekarang</button>
+      <div class="login-portal-wrapper">
+        <div class="login-portal-card" style="text-align: center; max-width: 420px; width: 100%;">
+          <div class="login-brand-header">
+            <img src="assets/logo.png" alt="Blue Mountain Logo" class="login-brand-logo">
+            <h1 class="login-brand-title">BLUE MOUNTAIN</h1>
+            <p class="login-brand-subtitle">Portal Masuk Operator Kasir</p>
+          </div>
+          <div style="background: rgba(37, 99, 235, 0.08); border-radius: 12px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: var(--text-secondary, #475569); border: 1px solid rgba(37, 99, 235, 0.2);">
+            <span>🔑</span> Masuk menggunakan <strong>Username & PIN</strong> server
+          </div>
+          <form id="form-manual-login" style="display: flex; flex-direction: column; gap: 12px; text-align: left;">
+            <div>
+              <label style="font-size: 12px; font-weight: 700; color: var(--text-muted, #64748b); text-transform: uppercase;">Username Operator</label>
+              <input type="text" id="manual-login-username" class="form-control" placeholder="Contoh: admin atau test" required style="width: 100%; padding: 12px 14px; border-radius: 10px; border: 1.5px solid var(--border, #cbd5e1); font-size: 15px; margin-top: 4px; box-sizing: border-box;">
+            </div>
+            <div>
+              <label style="font-size: 12px; font-weight: 700; color: var(--text-muted, #64748b); text-transform: uppercase;">PIN (4–6 Digit)</label>
+              <input type="password" id="manual-login-pin" class="form-control" placeholder="Masukkan 4-6 angka" maxlength="6" inputmode="numeric" required style="width: 100%; padding: 12px 14px; border-radius: 10px; border: 1.5px solid var(--border, #cbd5e1); font-size: 15px; margin-top: 4px; box-sizing: border-box;">
+            </div>
+            <div id="manual-login-error" style="color: #ef4444; font-size: 13px; font-weight: 600; display: none;"></div>
+            <button type="submit" id="btn-submit-manual-login" class="btn btn-primary" style="padding: 12px; border-radius: 10px; font-weight: 700; width: 100%; margin-top: 6px; cursor: pointer;">
+              Masuk Sekarang ➔
+            </button>
+            ${_activeUsers.length > 0 ? `
+              <button type="button" id="btn-back-to-list" class="btn btn-secondary" style="padding: 10px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer;">
+                ⬅ Kembali ke Pilihan Operator
+              </button>
+            ` : `
+              <button type="button" class="btn btn-secondary" onclick="location.reload()" style="padding: 10px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer;">
+                🔄 Sinkronkan Cloud Server
+              </button>
+            `}
+          </form>
         </div>
       </div>
     `;
+
+    const form = document.getElementById('form-manual-login');
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const uVal = document.getElementById('manual-login-username').value.trim();
+      const pVal = document.getElementById('manual-login-pin').value.trim();
+      const errEl = document.getElementById('manual-login-error');
+      const submitBtn = document.getElementById('btn-submit-manual-login');
+      if (errEl) errEl.style.display = 'none';
+
+      if (!uVal || !pVal) return;
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Memverifikasi...'; }
+
+      const authResult = await authenticateWithServer(uVal, pVal);
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Masuk Sekarang ➔'; }
+
+      if (authResult.success) {
+        store.login(authResult.user, authResult.token);
+        const tag = authResult.isServerValidated ? ' (Terverifikasi Server)' : ' (Mode Offline)';
+        window.showToast?.(`Berhasil masuk sebagai ${authResult.user.name} (${authResult.user.role})${tag}`, 'success');
+        if (navigator.onLine) {
+          syncInitialData().catch(() => {});
+        }
+        if (typeof window.appNavigateTo === 'function') {
+          window.appNavigateTo('pos');
+        } else {
+          document.getElementById('dock-pos')?.click();
+        }
+      } else {
+        if (errEl) {
+          errEl.textContent = authResult.error || 'Username atau PIN salah.';
+          errEl.style.display = 'block';
+        }
+      }
+    });
+
+    document.getElementById('btn-back-to-list')?.addEventListener('click', () => {
+      _showManualInput = false;
+      renderLogin();
+    });
+
     return;
   }
 
@@ -138,6 +214,13 @@ export const renderLogin = async () => {
           <button type="button" class="btn-numpad-key btn-submit" data-val="submit">✓</button>
         </div>
 
+        <!-- Manual Username Input Option -->
+        <div style="text-align: center; margin-top: 14px;">
+          <button type="button" id="btn-toggle-manual" style="background: none; border: none; color: var(--primary, #2563eb); font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: underline;">
+            Masuk dengan Username Lain
+          </button>
+        </div>
+
       </div>
     </div>
   `;
@@ -181,6 +264,11 @@ const processPinVerification = async (isManual = false) => {
       window.showToast?.(`Berhasil masuk sebagai ${authResult.user.name} (${authResult.user.role})${tag}`, 'success');
       _enteredPin = '';
       
+      // Pull fresh data from Supabase master cloud to Dexie cache
+      if (navigator.onLine) {
+        syncInitialData().catch(() => {});
+      }
+
       // Navigate to POS
       if (typeof window.appNavigateTo === 'function') {
         window.appNavigateTo('pos');
@@ -243,6 +331,12 @@ const attachLoginEvents = () => {
       const val = btn.getAttribute('data-val');
       handleInput(val);
     });
+  });
+
+  // Toggle manual username login
+  document.getElementById('btn-toggle-manual')?.addEventListener('click', () => {
+    _showManualInput = true;
+    renderLogin();
   });
 };
 

@@ -2,7 +2,7 @@
  * app.js — Main application bootstrap
  * Blue Mountain Refilling Station POS
  */
-import { openDB, seedDefaultProducts, getSetting, db } from './db.js';
+import { openDB, seedDefaultProducts, seedDefaultUsers, getSetting, db } from './db.js';
 import store                                         from './store.js';
 import { formatDate, formatTime }                    from './utils/date.js';
 import { initPOS, refreshPOS }                       from './views/pos.js';
@@ -240,6 +240,7 @@ const init = async () => {
     // Open DB and seed products
     await openDB();
     await seedDefaultProducts();
+    await seedDefaultUsers();
   } catch (err) {
     console.error('[DB] Failed to open database:', err);
     window.showToast('Database gagal dibuka. Coba reload halaman.', 'error', 'Database Error');

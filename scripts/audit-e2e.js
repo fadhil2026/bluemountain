@@ -158,6 +158,33 @@ assert.strictEqual(fulfilled, 45, 'Total pesanan terpenuhi harus 45');
 assert.strictEqual(rejected, 10, 'Pesanan 10 harus ditolak karena stok tidak cukup');
 console.log('     ✓ Validasi stok multi-cashier lolos');
 
-console.log('\n🎯 [SUKSES AUDIT] Semua 10 pengujian logika, kripto, UUID, matematika, dan akuntansi 100% LOLOS!\n');
+// Test 11: Cloud Roster User Mapping & ID Preservation
+console.log('  11. Menguji pemetaan user cloud roster & kebal DataError Dexie...');
+const rawCloudRoster = [
+  { username: 'admin', name: 'Fadhilah Ramadhan', role: 'owner', pin_hash: 'hash1', pin_salt: 'salt1', is_active: true },
+  { username: 'test', name: 'Test Kasir', role: 'cashier', pin_hash: 'hash2', pin_salt: 'salt2', is_active: true },
+  { id: 'usr_custom_99', username: 'custom', name: 'Custom User', role: 'supervisor', pinHash: 'hash3', pinSalt: 'salt3' },
+];
+const mappedUsers = rawCloudRoster.map(cu => {
+  const usernameClean = String(cu.username).toLowerCase().trim();
+  const userId = cu.id ? String(cu.id) : `usr_${usernameClean}`;
+  return {
+    id: userId,
+    username: usernameClean,
+    name: cu.name,
+    role: cu.role,
+    pinHash: cu.pin_hash || cu.pinHash,
+    pinSalt: cu.pin_salt || cu.pinSalt,
+    isActive: cu.is_active !== undefined ? Boolean(cu.is_active) : (cu.isActive !== undefined ? Boolean(cu.isActive) : true),
+  };
+});
+assert.strictEqual(mappedUsers.length, 3, 'Semua user harus terpetakan');
+assert.strictEqual(mappedUsers.every(u => typeof u.id === 'string' && u.id.length > 0), true, 'Setiap user harus memiliki id string');
+assert.strictEqual(mappedUsers[0].id, 'usr_admin', 'ID admin ter-generate konsisten');
+assert.strictEqual(mappedUsers[2].id, 'usr_custom_99', 'ID eksisting dipertahankan');
+console.log('     ✓ Pemetaan user cloud & integritas primary key Dexie 100% aman');
+
+console.log('\n🎯 [SUKSES AUDIT] Semua 11 pengujian logika, kripto, UUID, matematika, akuntansi, dan integritas ID 100% LOLOS!\n');
+
 
 

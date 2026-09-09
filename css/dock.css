@@ -7,11 +7,11 @@
 /* ── Dock Container ── */
 .dock-container {
   position: fixed;
-  bottom: 12px;
+  bottom: max(12px, env(safe-area-inset-bottom, 12px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
-  max-width: calc(100vw - 16px);
+  max-width: calc(100vw - 12px);
   width: auto;
   padding: 0;
   margin: 0;
@@ -420,13 +420,22 @@
     --dock-height: 58px;
   }
   .dock-container {
-    bottom: 8px;
-    max-width: calc(100vw - 12px);
+    bottom: max(8px, env(safe-area-inset-bottom, 8px));
+    max-width: calc(100vw - 8px);
+    width: 100%;
   }
   .dock {
+    max-width: 100%;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     gap: clamp(3px, 1.2vw, 5px);
     padding: 5px 8px 4px;
     border-radius: 18px;
+  }
+  .dock::-webkit-scrollbar {
+    display: none;
   }
   .dock-label {
     display: none; /* Tooltip suppressed on mobile touch */
@@ -461,13 +470,19 @@
     --dock-height: 46px;
   }
   .dock-container {
-    bottom: 4px;
-    max-width: calc(100vw - 16px);
+    bottom: max(4px, env(safe-area-inset-bottom, 4px));
+    max-width: calc(100vw - 12px);
   }
   .dock {
+    max-width: 100%;
+    overflow-x: auto !important;
+    scrollbar-width: none;
     padding: 4px 10px 3px;
     gap: clamp(4px, 1vw, 7px);
     border-radius: 14px;
+  }
+  .dock::-webkit-scrollbar {
+    display: none;
   }
   .dock-label {
     bottom: calc(100% + 6px);

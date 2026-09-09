@@ -6,7 +6,7 @@ import QRCode                 from 'qrcode';
 import { generateDynamicQRIS } from '../utils/qris.js';
 import { formatRupiah }       from '../utils/currency.js';
 import { esc }                from '../utils/sanitize.js';
-import { saveTransaction, getAllCustomers, addCustomer, updateCustomer, getAllUsers, updateUser, updateProduct, getAllProducts, db } from '../db.js';
+import { saveTransaction, getAllCustomers, addCustomer, updateCustomer, getAllUsers, updateUser, updateProduct, getAllProducts, seedDefaultUsers, db } from '../db.js';
 import { verifyPin, generateSalt, hashPin } from '../utils/crypto.js';
 import { authenticateWithServer, syncAuthoritativeRosterToCache } from '../supabase.js';
 import {
@@ -616,7 +616,12 @@ export const openLoginModal = async ({ onLogin = null, forceLock = false } = {})
     } catch (_) {}
   }
   let users = await getAllUsers();
-  const activeUsers = users.filter(u => u.isActive !== false);
+  let activeUsers = users.filter(u => u.isActive !== false);
+  if (activeUsers.length === 0) {
+    await seedDefaultUsers();
+    users = await getAllUsers();
+    activeUsers = users.filter(u => u.isActive !== false);
+  }
   if (activeUsers.length === 0) {
     window.showToast?.('Tidak ada akun operator aktif.', 'error');
     return;
