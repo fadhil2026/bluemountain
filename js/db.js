@@ -309,7 +309,7 @@ export const exportFullBackup = async () => {
 
   return {
     app: 'Blue Mountain POS',
-    version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.1.0',
+    version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0',
     exportedAt: new Date().toISOString(),
     shopName,
     data: {

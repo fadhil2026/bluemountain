@@ -312,9 +312,10 @@ const bindTxEvents = (allTxs) => {
   document.getElementById('tx-table')?.addEventListener('click', async (e) => {
     const btn    = e.target.closest('[data-action]');
     if (!btn) return;
-    const id     = parseInt(btn.dataset.id);
+    const idStr  = String(btn.dataset.id);
+    const id     = isNaN(Number(idStr)) ? idStr : Number(idStr);
     const action = btn.dataset.action;
-    const txObj  = allTxs.find(t => t.id === id);
+    const txObj  = allTxs.find(t => String(t.id) === idStr);
 
     if (action === 'detail') {
       if (txObj) showTxDetail(txObj);

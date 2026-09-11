@@ -865,7 +865,7 @@ export const openLoginModal = async ({ onLogin = null, forceLock = false } = {})
     // Keyboard support inside modal
     const keyHandler = (e) => {
       const modalEl = document.getElementById(modalId);
-      if (!modalEl || !modalEl.classList.contains('active')) {
+      if (!modalEl) {
         window.removeEventListener('keydown', keyHandler);
         return;
       }

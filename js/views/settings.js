@@ -34,7 +34,7 @@ export const renderSettings = async () => {
   const s    = store.state.settings;
 
   // Real dynamic version & build metadata injected by Vite build engine
-  const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.0.0';
+  const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0';
   const gitHash    = typeof __GIT_HASH__ !== 'undefined' && __GIT_HASH__ ? __GIT_HASH__ : '';
   const buildTime  = typeof __BUILD_TIMESTAMP__ !== 'undefined' ? __BUILD_TIMESTAMP__ : new Date().toISOString();
 

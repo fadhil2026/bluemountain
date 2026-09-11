@@ -249,6 +249,7 @@ const processPinVerification = async (isManual = false) => {
   if (_isVerifying) return;
   const targetUser = _activeUsers.find(u => String(u.id) === String(_selectedUserId));
   if (!targetUser) return;
+  const errEl = document.getElementById('login-error-msg');
 
   const LOCKOUT_KEY = 'bm_pin_lockout';
   const getLockout = () => {

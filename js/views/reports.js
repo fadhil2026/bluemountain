@@ -13,6 +13,7 @@ let _unsubscribe   = null;
 let _barChart      = null;
 let _donutChart    = null;
 let _tableFilter   = 'semua';
+let _reportPage    = 1;
 
 export const initReports = async () => {
   if (_unsubscribe) _unsubscribe();
@@ -95,10 +96,9 @@ const renderReportsUI = (txs) => {
   const sorted = filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / 10));
-  if (typeof _reportPage === 'undefined') window._reportPage = 1;
-  if (window._reportPage > totalPages) window._reportPage = totalPages;
-  if (window._reportPage < 1) window._reportPage = 1;
-  const pageItems = sorted.slice((window._reportPage - 1) * 10, window._reportPage * 10);
+  if (_reportPage > totalPages) _reportPage = totalPages;
+  if (_reportPage < 1) _reportPage = 1;
+  const pageItems = sorted.slice((_reportPage - 1) * 10, _reportPage * 10);
 
   view.innerHTML = `
     <div class="section-header">
@@ -288,10 +288,10 @@ const renderReportsUI = (txs) => {
       </div>
 
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:white;border-top:1px solid var(--border-subtle);flex-wrap:wrap;gap:8px">
-        <div style="font-size:12px;color:var(--text-muted)">Hal ${window._reportPage} dari ${totalPages}</div>
+        <div style="font-size:12px;color:var(--text-muted)">Hal ${_reportPage} dari ${totalPages}</div>
         <div style="display:flex;gap:6px">
-          <button class="btn btn--secondary btn--sm" id="rpt-prev" ${window._reportPage <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>◀ Sebelumnya</button>
-          <button class="btn btn--secondary btn--sm" id="rpt-next" ${window._reportPage >= totalPages ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>Berikutnya ▶</button>
+          <button class="btn btn--secondary btn--sm" id="rpt-prev" ${_reportPage <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>◀ Sebelumnya</button>
+          <button class="btn btn--secondary btn--sm" id="rpt-next" ${_reportPage >= totalPages ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>Berikutnya ▶</button>
         </div>
       </div>
     </div>
@@ -321,17 +321,17 @@ const renderReportsUI = (txs) => {
   });
 
   document.getElementById('rpt-prev')?.addEventListener('click', () => {
-    if (window._reportPage > 1) { window._reportPage--; renderReportsUI(txs); }
+    if (_reportPage > 1) { _reportPage--; renderReportsUI(txs); }
   });
   document.getElementById('rpt-next')?.addEventListener('click', () => {
-    window._reportPage++; renderReportsUI(txs);
+    if (_reportPage < totalPages) { _reportPage++; renderReportsUI(txs); }
   });
 
   // Table filter clicks
   document.querySelectorAll('[data-rpt-filter]').forEach(btn => {
     btn.addEventListener('click', () => {
       _tableFilter = btn.dataset.rptFilter;
-      window._reportPage = 1;
+      _reportPage = 1;
       renderReportsUI(txs);
     });
   });

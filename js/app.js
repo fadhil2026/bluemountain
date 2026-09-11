@@ -670,8 +670,8 @@ const init = async () => {
 
     const getDockViewOrder = () => {
       const items = dockEl ? [...dockEl.querySelectorAll('.dock-item')] : [];
-      const order = items.map(it => it.dataset.view).filter(Boolean);
-      return order.length ? order : ['pos', 'products', 'customers', 'transactions', 'reports', 'settings', 'finance'];
+      const order = items.map(it => it.dataset.view).filter(v => Boolean(v) && store.canAccess(v));
+      return order.length ? order : ['pos', 'customers', 'transactions'];
     };
 
     const isInsideScrollableTableOrModal = (el) => {

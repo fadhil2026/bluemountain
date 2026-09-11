@@ -663,7 +663,8 @@ const bindFinanceEvents = (txs, expenses = [], journal = []) => {
     const btn = e.target.closest('[data-action="delete-expense"]');
     if (!btn) return;
     if (!confirm('Hapus pengeluaran ini?')) return;
-    const id = parseInt(btn.dataset.id);
+    const idStr = String(btn.dataset.id);
+    const id = isNaN(Number(idStr)) ? idStr : Number(idStr);
     try {
       await deleteExpense(id);
       store.removeExpense(id);
@@ -675,9 +676,10 @@ const bindFinanceEvents = (txs, expenses = [], journal = []) => {
   document.getElementById('piutang-table')?.addEventListener('click', async (e) => {
     const btn    = e.target.closest('[data-action]');
     if (!btn) return;
-    const id     = parseInt(btn.dataset.id);
+    const idStr  = String(btn.dataset.id);
+    const id     = isNaN(Number(idStr)) ? idStr : Number(idStr);
     const action = btn.dataset.action;
-    const txObj  = (store.state.transactions || txs).find(t => t.id === id);
+    const txObj  = (store.state.transactions || txs).find(t => String(t.id) === idStr);
     if (!txObj) return;
 
     if (action === 'confirm-transfer') {

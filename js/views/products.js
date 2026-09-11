@@ -94,15 +94,16 @@ const bindProductEvents = () => {
     const delBtn  = e.target.closest('[data-action="delete"]');
 
     if (editBtn) {
-      const id       = parseInt(editBtn.dataset.id);
+      const idStr    = String(editBtn.dataset.id);
       const products = await getAllProducts();
-      const product  = products.find(p => p.id === id);
+      const product  = products.find(p => String(p.id) === idStr);
       if (product) showProductForm(product, products);
     }
 
     if (delBtn) {
-      const id = parseInt(delBtn.dataset.id);
-      showDeleteConfirm(id);
+      const idStr = String(delBtn.dataset.id);
+      const cleanId = isNaN(Number(idStr)) ? idStr : Number(idStr);
+      showDeleteConfirm(cleanId);
     }
   });
 };

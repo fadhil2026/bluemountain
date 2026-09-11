@@ -200,7 +200,7 @@ export const renderUsers = async () => {
   container.querySelectorAll('.btn-edit-user').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.getAttribute('data-id');
-      const user = await getUserById(isNaN(Number(id)) ? id : Number(id));
+      const user = await getUserById(String(id));
       if (user) openUserFormModal(user);
     });
   });
@@ -210,7 +210,7 @@ export const renderUsers = async () => {
       const id = btn.getAttribute('data-id');
       const name = btn.getAttribute('data-name');
       if (confirm(`Yakin ingin menghapus operator "${name}"? Tindakan ini tidak dapat dibatalkan.`)) {
-        await deleteUser(isNaN(Number(id)) ? id : Number(id));
+        await deleteUser(String(id));
         const updated = await getAllUsers();
         store.setUsers(updated);
         renderUsers();

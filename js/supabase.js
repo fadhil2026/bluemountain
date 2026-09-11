@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js';
 import { db, getAllProducts, getAllTransactions, getAllExpenses, getAllCustomers, getAllUsers } from './db.js';
 import store from './store.js';
 import { verifyPin, createSessionJWT, verifySessionJWT, generateUUID } from './utils/crypto.js';
+import { todayKey } from './utils/date.js';
 
 // Default Supabase Configuration (fadhil2026's Project)
 export const SUPABASE_URL = 'https://wiapnhpdgjbtkblowfig.supabase.co';

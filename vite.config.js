@@ -11,7 +11,7 @@ try {
   gitCommitHash = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
 } catch (_) {}
 
-const dynamicAppVersion = pkg.version || '3.2.0';
+const dynamicAppVersion = pkg.version || '1.0.0';
 
 const buildTimestamp = new Date().toISOString();
 
