@@ -1,5 +1,5 @@
 -- ==============================================================================
--- BLUE MOUNTAIN POS — MASTER TENANT PARTITION & MILITARY HARDENING SCHEMA (v3.2.x)
+-- BLUE MOUNTAIN POS — MASTER TENANT PARTITION & MILITARY HARDENING SCHEMA (v1.0.1)
 -- Mengunci semua entitas ke 1 Database Master ID: STORE-BM-856CFAC8
 -- Jalankan di Supabase SQL Editor:
 -- https://supabase.com/dashboard/project/wiapnhpdgjbtkblowfig/sql

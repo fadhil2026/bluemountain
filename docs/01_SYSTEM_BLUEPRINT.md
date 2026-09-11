@@ -10,7 +10,7 @@
 │               ENTERPRISE POINT OF SALE & RETAIL ENGINE (PWA)                     │
 │                                                                                  │
 │  ┌──────────────┐     ┌──────────────┐     ┌───────────────────────────────────┐ │
-│  │   8 Views    │ <-> │ Reactive     │ <-> │ Dexie.js (IndexedDB v4)           │ │
+│  │   8 Views    │ <-> │ Reactive     │ <-> │ Dexie.js (IndexedDB v5)           │ │
 │  │ Seragam & Res│     │ Store Event  │     │ High-Speed Read Cache (0ms)       │ │
 │  └──────────────┘     └──────────────┘     └───────────────────────────────────┘ │
 │         │                                                   │                    │

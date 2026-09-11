@@ -7,7 +7,7 @@
 
 ### A. Fitur Live Web App Kita (v1.0.1) 🌟
 1. **Zero-Latency Pure Offline-First**:
-   - IndexedDB (Dexie v3) lokal primary, 0ms latency.
+   - IndexedDB (Dexie v5) lokal primary, 0ms latency.
    - 2-Way Sync Supabase PostgreSQL/WebSocket saat online tanpa data hilang (*Write-Ahead Persistence*).
    - Migrasi kunci cloud ke `sb_publishable_...` dan segregasi root secret CLI.
 2. **Universal Thermal POS Engine (48mm / 58mm / 80mm)**:

@@ -81,15 +81,18 @@ Audit perbandingan antara kode sumber riil di repositori vs kebutuhan sistem:
 11. **UI/UX & Aksesibilitas (`css/dock.css`, `css/main.css`)**:
    - macOS Sonoma glassmorphism dock dengan auto-return ke bawah saat klik/tap.
    - Dukungan gesture swipe layar sentuh untuk berpindah halaman pada HP/Tablet.
+12. **Edge Functions Proxy & Anti-Tamper (`functions/api/`)**:
+   - Cloudflare Pages Functions Free Tier: `/api/auth/login` (rate limit 5x lockout 60s) dan `/api/stock/decrement` (validasi stok server-authoritative).
+   - `/api/health` diagnostik uptime sistem edge.
 
 ---
 
-### B. Fitur yang Belum / Sedang Berjalan (`BELUM / IN-PROGRESS`) ⏳
+### B. Status Fitur Terjadwal & Integrasi Tambahan ⏳
 1. **Server-Side Price Validation via Database Trigger**:
-   - *Status*: Skrip SQL RLS telah dibuat di `docs/05_SECURITY_HARDENING.sql`, namun trigger kalkulasi otomatis di database Supabase belum di-deploy.
-   - *Dampak*: Client masih menghitung subtotal transaksi; verifikasi wajib diperkuat di sisi PostgreSQL.
+   - *Status*: Skrip SQL RLS dan DDL partisi store_id telah siap di `docs/00_CLEAN_RESET_MIGRATION_V1.sql` dan `docs/09_MASTER_TENANT_ISOLATION.sql`.
+   - *Catatan*: Validasi penurunan stok saat ini telah diamankan oleh Cloudflare Pages Edge Functions `/api/stock/decrement` dan stored procedure PostgreSQL.
 2. **CORS Origin Lockdown di Dashboard Supabase**:
-   - *Status*: Memerlukan konfigurasi whitelist `https://fadhil2026.github.io` dan `https://bluemountain-pos-c2k.pages.dev` langsung di Supabase Settings.
+   - *Status*: Mengunci whitelist origin `https://fadhil2026.github.io` dan `https://bluemountain-pos-c2k.pages.dev` pada panel API Settings Supabase.
 
 ---
 

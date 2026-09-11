@@ -33,6 +33,7 @@ CREATE TABLE public.app_users (
 -- 4. PRODUCTS (INVENTORY)
 CREATE TABLE public.products (
     id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8',
     sku TEXT UNIQUE,
     name TEXT NOT NULL,
     category TEXT NOT NULL DEFAULT 'Umum',
@@ -49,6 +50,7 @@ CREATE TABLE public.products (
 -- 5. CUSTOMERS (CRM 360)
 CREATE TABLE public.customers (
     id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8',
     name TEXT NOT NULL,
     phone TEXT,
     address TEXT,
@@ -66,6 +68,7 @@ CREATE TABLE public.customers (
 -- 6. TRANSACTIONS
 CREATE TABLE public.transactions (
     id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8',
     invoice_no TEXT NOT NULL UNIQUE,
     date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     date_key TEXT NOT NULL,
@@ -91,6 +94,7 @@ CREATE TABLE public.transactions (
 -- 7. EXPENSES
 CREATE TABLE public.expenses (
     id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8',
     date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     date_key TEXT NOT NULL,
     category TEXT NOT NULL DEFAULT 'Operasional',
@@ -104,15 +108,20 @@ CREATE TABLE public.expenses (
 -- 8. SETTINGS
 CREATE TABLE public.settings (
     key TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8',
     value TEXT NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- 9. INDEXES
 CREATE INDEX idx_products_category ON public.products(category) WHERE deleted_at IS NULL;
+CREATE INDEX idx_products_store ON public.products(store_id);
 CREATE INDEX idx_transactions_datekey ON public.transactions(date_key) WHERE deleted_at IS NULL;
+CREATE INDEX idx_transactions_store ON public.transactions(store_id);
 CREATE INDEX idx_customers_debt ON public.customers(total_debt) WHERE total_debt > 0;
+CREATE INDEX idx_customers_store ON public.customers(store_id);
 CREATE INDEX idx_app_users_username ON public.app_users(username);
+CREATE INDEX idx_app_users_store ON public.app_users(store_id);
 
 -- 10. ATOMIC STORED PROCEDURE: CHECKOUT & STOCK DECREMENT (ANTI RACE-CONDITION)
 CREATE OR REPLACE FUNCTION public.atomic_checkout_transaction(
@@ -194,3 +203,4 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.transactions;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.expenses;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.customers;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.app_users;

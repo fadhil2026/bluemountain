@@ -1,4 +1,4 @@
-# 💧 Blue Mountain Refilling Station — Personal & Proprietary POS System (v1.0.0)
+# 💧 Blue Mountain Refilling Station — Personal & Proprietary POS System (v1.0.1)
 
 > ⚠️ **DOKUMEN OPERASIONAL PRIBADI (INTERNAL & CONFIDENTIAL)**  
 > Repositori ini adalah sistem kasir Point of Sale (POS) & CRM **khusus pemakaian personal / internal** bisnis **Blue Mountain Refilling Station** (Owner: Fadhil / FR Proyek).  
@@ -8,9 +8,9 @@
 
 ## 📌 Ringkasan Sistem & Status Rilis
 
-- **Versi Rilis**: `v1.0.0` (Production Clean State)
+- **Versi Rilis**: `v1.0.1` (Production Clean State)
 - **Arsitektur**: **Online-First** (Cloud Supabase Master of Truth + Cloudflare Pages Edge Functions + Dexie.js Local Cache 0ms)
-- **Akses Produksi**: `https://bluemountain-pos.pages.dev`
+- **Akses Produksi**: `https://bluemountain-pos-c2k.pages.dev`
 - **Database Cloud**: Supabase PostgreSQL (`wiapnhpdgjbtkblowfig.supabase.co`)
 - **Tingkat Akses**: Multi-Operator Internal (`owner`, `supervisor`, `cashier`) dengan PIN Brute-Force Guard (5 percobaan $\rightarrow$ Lockout 60 detik)
 
@@ -19,7 +19,7 @@
 ## 📖 Buku Panduan Operasional Kasir Personal (SOP Harian)
 
 ### 1. 🌅 Buka Toko & Awal Shift
-1. Buka aplikasi di tablet/HP kasir atau browser via alamat produksi `https://bluemountain-pos.pages.dev`.
+1. Buka aplikasi di tablet/HP kasir atau browser via alamat produksi `https://bluemountain-pos-c2k.pages.dev`.
 2. Klik tombol **Ganti Kasir / Login** di dock navigasi.
 3. Masukkan **PIN 6-digit** operator kasir yang bertugas.
 4. Pastikan indikator Cloud Sync di pojok kanan atas berstatus **🟢 Online (Connected)**.
@@ -77,7 +77,7 @@
 │                                                                        │
 │  [UI Layer: Glassmorphism Blue Mountain, Touch Gesture, Smooth Dock]   │
 │                                   │                                    │
-│  [Local Speed Cache: Dexie.js IndexedDB v4 (0ms Read & Local Outbox)]  │
+│  [Local Speed Cache: Dexie.js IndexedDB v5 (0ms Read & Local Outbox)]  │
 │                                   │                                    │
 │  [Hardware Engine: ESC/POS WebBLE, WebUSB, OS Spooler 58mm/80mm]       │
 └───────────────────────────────────┬────────────────────────────────────┘
@@ -140,7 +140,7 @@ npm run dev
 
 ### Menjalankan Audit Kualitas & Uji Sintaks
 ```bash
-# Menjalankan 11 suite pengujian otomatis pra-rilis
+# Menjalankan 13 suite pengujian otomatis pra-rilis
 npm run verify
 ```
 
