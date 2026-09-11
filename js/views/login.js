@@ -46,11 +46,9 @@ export const renderLogin = async () => {
   const container = document.getElementById('view-login');
   if (!container) return;
 
-  // Server-Authoritative: refresh local cache from cloud when online
+  // Server-Authoritative: refresh local cache in background without blocking screen rendering
   if (navigator.onLine) {
-    try {
-      await syncAuthoritativeRosterToCache();
-    } catch (_) {}
+    syncAuthoritativeRosterToCache().catch(() => {});
   }
 
   let allUsers = await getAllUsers();

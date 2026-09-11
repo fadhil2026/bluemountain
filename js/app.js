@@ -237,9 +237,8 @@ const init = async () => {
   window.appNavigateTo = navigateTo;
 
   try {
-    // Open DB and seed products
+    // Open DB
     await openDB();
-    await seedDefaultProducts();
     await seedDefaultUsers();
   } catch (err) {
     console.error('[DB] Failed to open database:', err);

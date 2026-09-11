@@ -244,20 +244,9 @@ export const setSetting = async (key, value) => {
   pushSettingToCloud(key, value).catch(() => {});
 };
 
-// ── Seed Default Products (only if empty) ──
+// ── Server-Authoritative: Products are strictly fetched from Supabase Cloud ──
 export const seedDefaultProducts = async () => {
-  const count = await db.products.count();
-  if (count > 0) return;
-  await db.products.bulkPut([
-    { id: generateUUID('prod'), name: 'Air Isi Ulang Galon', category: 'Galon',   price: 5000,  unit: 'galon', emoji: '🪣', stock: 999, deleted_at: null },
-    { id: generateUUID('prod'), name: 'Antar Galon (dalam)',  category: 'Galon',   price: 3000,  unit: 'kali',  emoji: '🛵', stock: 999, deleted_at: null },
-    { id: generateUUID('prod'), name: 'Antar Galon (luar)',   category: 'Galon',   price: 5000,  unit: 'kali',  emoji: '🚚', stock: 999, deleted_at: null },
-    { id: generateUUID('prod'), name: 'Galon Baru (Aqua)',    category: 'Galon',   price: 50000, unit: 'buah',  emoji: '💧', stock: 50,  deleted_at: null },
-    { id: generateUUID('prod'), name: 'Galon Baru (Standar)', category: 'Galon',   price: 45000, unit: 'buah',  emoji: '💦', stock: 50,  deleted_at: null },
-    { id: generateUUID('prod'), name: 'Air Botol 600ml',      category: 'Botol',   price: 3000,  unit: 'botol', emoji: '🍶', stock: 200, deleted_at: null },
-    { id: generateUUID('prod'), name: 'Air Botol 1500ml',     category: 'Botol',   price: 5000,  unit: 'botol', emoji: '🥤', stock: 100, deleted_at: null },
-    { id: generateUUID('prod'), name: 'Dispenser Galon',      category: 'Lainnya', price: 250000, unit: 'unit', emoji: '⚗️', stock: 10,  deleted_at: null },
-  ]);
+  // Zero mock/dummy products. Single source of truth is Supabase Cloud.
 };
 
 // ── Server-Authoritative: Master Fallback for Brand New Device ──
