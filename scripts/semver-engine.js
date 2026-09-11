@@ -52,7 +52,7 @@ export const getSemVerState = () => {
   // Fallback membaca package.json
   const pkg = JSON.parse(fs.readFileSync(PKG_FILE, 'utf8'));
   return {
-    currentVersion: pkg.version || '3.2.0',
+    currentVersion: pkg.version || '1.0.0',
     lastCommitHash: '',
     updatedAt: new Date().toISOString(),
     milestones: {},
@@ -166,7 +166,7 @@ function statusIncludesNew(filePath) {
  */
 export const bumpVersion = (type = 'auto', description = '') => {
   const state = getSemVerState();
-  const current = state.currentVersion || '3.2.0';
+  const current = state.currentVersion || '1.0.0';
   const [major, minor, patch] = current.split('.').map(n => parseInt(n, 10) || 0);
 
   let targetType = type;
@@ -204,7 +204,7 @@ export const bumpVersion = (type = 'auto', description = '') => {
  */
 export const calculateSemVer = (options = { sync: true }) => {
   const state = getSemVerState();
-  const ver = state.currentVersion || '3.2.0';
+  const ver = state.currentVersion || '1.0.0';
   if (options.sync) {
     syncVersionEverywhere(ver);
   }
@@ -241,10 +241,20 @@ export const syncVersionEverywhere = (version) => {
     for (const docFile of docFiles) {
       const fullDoc = path.join(DOCS_DIR, docFile);
       let docContent = fs.readFileSync(fullDoc, 'utf8');
-      const updated = docContent.replace(/v3\.\d+\.\d+/g, `v${version}`);
+      const updated = docContent.replace(/v\d+\.\d+\.\d+/g, `v${version}`);
       if (updated !== docContent) {
         fs.writeFileSync(fullDoc, updated, 'utf8');
       }
+    }
+  }
+
+  // 4. functions/api/health.js
+  const healthFile = path.resolve(process.cwd(), 'functions/api/health.js');
+  if (fs.existsSync(healthFile)) {
+    let healthContent = fs.readFileSync(healthFile, 'utf8');
+    const updated = healthContent.replace(/version:\s*'[^']+'/g, `version: '${version}'`);
+    if (updated !== healthContent) {
+      fs.writeFileSync(healthFile, updated, 'utf8');
     }
   }
 };
