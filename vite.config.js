@@ -25,12 +25,16 @@ export default defineConfig({
     outDir: 'dist',
     assetsDir: 'assets',
     sourcemap: false,
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
         manualChunks: {
-          'vendor-chart': ['chart.js'],
-          'vendor-pdf':   ['jspdf', 'html2canvas'],
-          'vendor-db':    ['dexie'],
+          'vendor-chart':    ['chart.js'],
+          'vendor-jspdf':    ['jspdf'],
+          'vendor-canvas':   ['html2canvas'],
+          'vendor-db':       ['dexie'],
+          'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-qr':       ['qrcode'],
         },
       },
     },

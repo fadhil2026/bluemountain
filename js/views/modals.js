@@ -8,7 +8,7 @@ import { formatRupiah }       from '../utils/currency.js';
 import { esc }                from '../utils/sanitize.js';
 import { saveTransaction, getAllCustomers, addCustomer, updateCustomer, getAllUsers, updateUser, updateProduct, getAllProducts, seedDefaultUsers, db } from '../db.js';
 import { verifyPin, generateSalt, hashPin } from '../utils/crypto.js';
-import { authenticateWithServer, syncAuthoritativeRosterToCache } from '../supabase.js';
+import { authenticateWithServer, syncAuthoritativeRosterToCache, atomicCheckoutAndDecrement } from '../supabase.js';
 import {
   getReceiptPreviewHTML,
   getPrintSchemeUrl,
@@ -447,13 +447,16 @@ export const showPaymentModal = (method = 'cash') => {
         txData.id = savedId;
         store.addTransaction(txData);
 
-        // Reduce inventory stock for purchased products
+        // Atomic checkout & cloud stock decrement (anti race-condition)
+        atomicCheckoutAndDecrement(txData.items, txData).catch(() => {});
+
+        // Fast-read local Dexie cache stock update
         for (const item of (txData.items || [])) {
           if (item.product && item.product.id) {
             const p = await db.products.get(item.product.id);
             if (p && typeof p.stock === 'number') {
               const newStock = Math.max(0, p.stock - (Number(item.qty) || 1));
-              await updateProduct({ ...p, stock: newStock });
+              await db.products.update(item.product.id, { stock: newStock });
             }
           }
         }
@@ -764,13 +767,35 @@ export const openLoginModal = async ({ onLogin = null, forceLock = false } = {})
     });
   };
 
+  const LOCKOUT_KEY = 'bm_pin_lockout';
+  const getLockout = () => {
+    try {
+      const d = JSON.parse(localStorage.getItem(LOCKOUT_KEY) || '{}');
+      return { count: Number(d.count) || 0, until: Number(d.until) || 0 };
+    } catch (_) { return { count: 0, until: 0 }; }
+  };
+  const setLockout = (count, until) => {
+    try { localStorage.setItem(LOCKOUT_KEY, JSON.stringify({ count, until })); } catch (_) {}
+  };
+
   const handleVerify = async (isManual = false) => {
     const targetUser = activeUsers.find(u => String(u.id) === String(selectedUserId));
     if (!targetUser) return;
 
+    const lock = getLockout();
+    const err = document.getElementById('pin-error-msg');
+    if (lock.until > Date.now()) {
+      const sLeft = Math.ceil((lock.until - Date.now()) / 1000);
+      if (err) err.textContent = `Sistem terkunci! Tunggu ${sLeft} detik.`;
+      enteredPin = '';
+      updateDots();
+      return;
+    }
+
     if (enteredPin.length >= 4) {
       const authResult = await authenticateWithServer(targetUser.username, enteredPin);
       if (authResult.success) {
+        setLockout(0, 0);
         store.login(authResult.user, authResult.token);
         closeModal(modalId);
         const tag = authResult.isServerValidated ? ' (Terverifikasi Server)' : ' (Mode Offline)';
@@ -779,8 +804,14 @@ export const openLoginModal = async ({ onLogin = null, forceLock = false } = {})
         return;
       } else {
         if (isManual || enteredPin.length >= 6) {
-          const err = document.getElementById('pin-error-msg');
-          if (err) err.textContent = authResult.error || 'PIN salah! Silakan coba lagi.';
+          const curFail = getLockout().count + 1;
+          if (curFail >= 5) {
+            setLockout(curFail, Date.now() + 60000);
+            if (err) err.textContent = 'PIN salah 5x! Sistem terkunci 60 detik.';
+          } else {
+            setLockout(curFail, 0);
+            if (err) err.textContent = `${authResult.error || 'PIN salah!'} (Sisa percobaan: ${5 - curFail})`;
+          }
           enteredPin = '';
           updateDots();
           return;
@@ -789,7 +820,6 @@ export const openLoginModal = async ({ onLogin = null, forceLock = false } = {})
     }
 
     if (isManual && enteredPin.length < 4) {
-      const err = document.getElementById('pin-error-msg');
       if (err) err.textContent = 'Masukkan minimal 4 digit PIN';
       enteredPin = '';
       updateDots();

@@ -1,9 +1,9 @@
-# 📐 01 — MASTER BLUEPRINT: ARSITEKTUR POS & CRM ENTERPRISE 2026
-**Blue Mountain Refilling Station POS & CRM — High-End Industrial Architecture (v4.0.0)**
+# 📐 01 — MASTER BLUEPRINT: ARSITEKTUR POS & CRM ENTERPRISE (v1.0.0)
+**Blue Mountain Refilling Station POS & CRM — Personal & Proprietary Architecture (v1.0.0)**
 
 ---
 
-## 1. Arsitektur Tingkat Tinggi (High-End Hybrid Offline-First)
+## 1. Arsitektur Tingkat Tinggi (Online-First Master of Truth + Fast Local Cache)
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
@@ -11,30 +11,30 @@
 │                                                                                  │
 │  ┌──────────────┐     ┌──────────────┐     ┌───────────────────────────────────┐ │
 │  │   8 Views    │ <-> │ Reactive     │ <-> │ Dexie.js (IndexedDB v4)           │ │
-│  │ Seragam & Res│     │ Store Event  │     │ Local Cache (0ms Offline-First)   │ │
+│  │ Seragam & Res│     │ Store Event  │     │ High-Speed Read Cache (0ms)       │ │
 │  └──────────────┘     └──────────────┘     └───────────────────────────────────┘ │
 │         │                                                   │                    │
 │         ├────────────────────────┬──────────────────────────┤                    │
 │         ▼                        ▼                          ▼                    │
 │  ┌──────────────┐      ┌──────────────────┐      ┌─────────────────────────────┐ │
-│  │ Universal    │      │ EMVCo Dynamic    │      │ Cloud Sync & Auth Engine    │ │
-│  │ Thermal POS  │      │ QRIS Generator   │      │ (2-Way Supabase WebSocket & │ │
-│  │ (WebUSB/BLE) │      │ (CRC16 TLV)      │      │ Web Crypto Salted SHA-256)  │ │
+│  │ Universal    │      │ EMVCo Dynamic    │      │ Cloud Sync & Edge Auth      │ │
+│  │ Thermal POS  │      │ QRIS Generator   │      │ (Cloudflare Functions Proxy │ │
+│  │ (WebUSB/BLE) │      │ (CRC16 TLV)      │      │ & Web Crypto Salted SHA-256)│ │
 │  └──────────────┘      └──────────────────┘      └─────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┬────────────────┘
                                                                   │ HTTPS / WSS
                                                                   ▼
                                                       ┌────────────────────────────┐
                                                       │ Network Edge: Cloudflare   │
-                                                      │ Pages (bluemountain-pos-   │
-                                                      │ c2k.pages.dev) Anti-DDoS   │
+                                                      │ Pages & Edge Functions     │
+                                                      │ (/api/auth, /api/stock)    │
                                                       └─────────────┬──────────────┘
                                                                     │
                                                                     ▼
                                                       ┌────────────────────────────┐
                                                       │ Supabase PostgreSQL Cloud  │
-                                                      │ (Row Level Security & RLS) │
-                                                      │ Admin CLI: scripts/admin   │
+                                                      │ (Master Single Source of   │
+                                                      │ Truth + Atomic Stored Proc)│
                                                       └────────────────────────────┘
 ```
 

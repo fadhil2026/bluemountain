@@ -250,8 +250,26 @@ const processPinVerification = async (isManual = false) => {
   const targetUser = _activeUsers.find(u => String(u.id) === String(_selectedUserId));
   if (!targetUser) return;
 
-  const errEl = document.getElementById('login-error-msg');
-  if (errEl) errEl.textContent = '';
+  const LOCKOUT_KEY = 'bm_pin_lockout';
+  const getLockout = () => {
+    try {
+      const d = JSON.parse(localStorage.getItem(LOCKOUT_KEY) || '{}');
+      return { count: Number(d.count) || 0, until: Number(d.until) || 0 };
+    } catch (_) { return { count: 0, until: 0 }; }
+  };
+  const setLockout = (count, until) => {
+    try { localStorage.setItem(LOCKOUT_KEY, JSON.stringify({ count, until })); } catch (_) {}
+  };
+
+  const lock = getLockout();
+  if (lock.until > Date.now()) {
+    const sLeft = Math.ceil((lock.until - Date.now()) / 1000);
+    if (errEl) errEl.textContent = `Sistem terkunci! Tunggu ${sLeft} detik lagi.`;
+    shakePinBox();
+    _enteredPin = '';
+    updateDotsUI();
+    return;
+  }
 
   // Manual submit: require exactly 6 digits
   if (isManual && _enteredPin.length < 6) {
@@ -276,6 +294,7 @@ const processPinVerification = async (isManual = false) => {
 
   if (authResult.success) {
     // SUCCESS!
+    setLockout(0, 0);
     store.login(authResult.user, authResult.token);
     const tag = authResult.isServerValidated ? ' (Terverifikasi Server)' : ' (Mode Offline)';
     window.showToast?.(`Berhasil masuk sebagai ${authResult.user.name} (${authResult.user.role})${tag}`, 'success');
@@ -297,8 +316,15 @@ const processPinVerification = async (isManual = false) => {
   }
 
   // Wrong PIN
-  if (errEl) {
-    errEl.textContent = authResult.error || 'PIN salah! Silakan periksa kembali.';
+  const curFail = getLockout().count + 1;
+  if (curFail >= 5) {
+    setLockout(curFail, Date.now() + 60000);
+    if (errEl) errEl.textContent = 'PIN salah 5 kali berturut-turut! Sistem terkunci 60 detik.';
+  } else {
+    setLockout(curFail, 0);
+    if (errEl) {
+      errEl.textContent = `${authResult.error || 'PIN salah!'} (Sisa percobaan: ${5 - curFail})`;
+    }
   }
   shakePinBox();
   _enteredPin = '';

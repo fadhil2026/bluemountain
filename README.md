@@ -1,145 +1,165 @@
-# 💧 Blue Mountain Refilling Station — Proprietary Internal POS System
+# 💧 Blue Mountain Refilling Station — Personal & Proprietary POS System (v1.0.0)
 
-> 🔒 **SISTEM PRIVAT INTERNAL**: Repositori ini berisi perangkat lunak kasir POS berpemilik (*Proprietary & Confidential*) untuk operasional internal **Blue Mountain Refilling Station**. Seluruh transaksi, pelanggan, dan data staf diisolasi menggunakan **Database Master Tenant ID** dan dilindungi oleh otentikasi zero-trust.
-
-![CI/CD Pipeline](https://img.shields.io/badge/CI%2FCD-Verified-success?style=for-the-badge)
-![Security Hardening](https://img.shields.io/badge/Security-Military--Grade-blueviolet?style=for-the-badge)
-![Architecture](https://img.shields.io/badge/Architecture-Master%20Tenant%20v3.2-blue?style=for-the-badge)
-![Access](https://img.shields.io/badge/Access-Private%20Internal%20Only-critical?style=for-the-badge)
-
-## ✨ Fitur & Keamanan Inti
-
-- 🏪 **POS Kasir** — Grid produk, keranjang pintar, pemilih & quick-add pelanggan, perhitungan diskon, kembalian otomatis.
-- 👥 **Customer CRM 360°** — Manajemen data pelanggan, segmentasi, limit kredit, sub-buku besar piutang, pelacakan aset galon pinjaman fisik, sapaan & tagihan WhatsApp 1-klik.
-- 🔐 **Multi-Operator RBAC & Fast PIN Login** — Peran terisolasi (`owner`, `supervisor`, `cashier`), modal login numpad interaktif dengan 6-titik masking PIN anti-intip, dan enkripsi Web Crypto API (Salted SHA-256) zero-plaintext.
-- 💳 **Dynamic QRIS (EMVCo)** — Injeksi nominal dinamis Tag 54 dan rekalkulasi checksum CRC16-CCITT otomatis tanpa pihak ketiga.
-- ☁️ **Hybrid Real-Time Sync** — Transaksi, pelanggan, dan stok tersinkronisasi seketika antar-perangkat via WebSocket (Supabase).
-- ⚡ **Zero-Downtime Offline Mode** — Kasir tetap beroperasi 100% normal tanpa internet. Sinkronisasi otomatis (auto-recover) saat koneksi pulih (Dexie.js IndexedDB v4).
-- 🖨️ **Universal Thermal Printer** — Cetak struk langsung ke printer 48mm/58mm/80mm via Web Bluetooth, WebUSB, Intent Android (`rawbt:`, `bluetoothprint`), dan Direct OS Spooler dengan logo Base64 synchronous 1-bit.
-- 📊 **Laporan & Portabilitas Data** — Grafik penjualan analitik, arus kas, valuasi aset galon, export PDF invoice resmi & export spreadsheet Excel (.csv).
-- 📱 **Progressive Web App (PWA)** — Dapat diinstal layaknya aplikasi native di Android/iOS/Windows dengan Service Worker offline cache.
-- 🌙 **macOS Sonoma UI** — Desain premium dengan *glassmorphism*, dark mode, responsive mobile/tablet, dan animasi *FLIP* dock drag-and-drop.
-
-## 🏗️ Arsitektur Sistem
-
-Aplikasi ini menggunakan pola arsitektur **Offline-First**.
-1. **Frontend**: HTML5, Vanilla JavaScript (ES Modules), CSS Variables & Native Layouts.
-2. **Local Data Layer**: `Dexie.js` (IndexedDB Wrapper v4) - Memastikan kecepatan 0ms dan ketersediaan offline penuh.
-3. **Cloud Data Layer**: `Supabase` (PostgreSQL) - Menampung _source of truth_ jarak jauh.
-4. **Sync Engine**: Modul sinkronisasi 2 arah yang menangani *auto-seed*, *upsert*, dan mendengarkan event *Realtime* via WebSocket.
-5. **Edge Network**: `Cloudflare Pages` - Global Anycast CDN, zero-cost edge distribution, dan perlindungan Anti-DDoS.
-
-## 🖨️ Setup Printer Bluetooth
-
-1. Install **Bluetooth Print App** di Android Anda.
-2. Buka app $\rightarrow$ Settings $\rightarrow$ Browser/Website Print $\rightarrow$ **Enable**.
-3. Pair printer Bluetooth Anda di Pengaturan Android.
-4. Pilih printer di Bluetooth Print App.
-5. Buka POS ini di Chrome Android.
-6. Saat transaksi selesai $\rightarrow$ Klik **Cetak Struk** $\rightarrow$ Struk akan otomatis tercetak.
-
-## 🚀 CI/CD Pipeline & Deployment
-
-Repositori ini ditenagai oleh GitHub Actions dan Cloudflare Wrangler:
-1. Setiap kode yang di-*push* ke branch `main` akan divalidasi.
-2. Skrip pra-deploy akan melakukan audit sintaks (`npm run verify`).
-3. Menghitung versi semantik yang dinamis secara otomatis berdasarkan jumlah Git Revision.
-4. Melakukan kompilasi optimasi *production* (`esbuild` drop console, PWA generation).
-5. Deployment otomatis 1-klik ke GitHub Pages & Cloudflare Pages (`npm run deploy:cf`).
-
-## 📁 Struktur Repositori
-
-```text
-KASIR/
-├── index.html              # SPA utama (CSP Hardened & Multi-Modal Numpad)
-├── receipt-data.html       # Endpoint JSON untuk Bluetooth Print App
-├── manifest.json           # Konfigurasi PWA App
-├── wrangler.toml           # Konfigurasi Deployment Cloudflare Pages
-├── .github/workflows/
-│   └── deploy.yml          # CI/CD GitHub Actions Pipeline
-├── assets/
-│   ├── logo.png            # Aset utama logo toko
-│   └── icons/              # Aset ikon PWA (192px & 512px)
-├── css/
-│   ├── main.css            # Token desain, variabel, utilitas
-│   ├── dock.css            # macOS dock bar dengan Wave Magnification
-│   ├── pos.css             # Layout utama POS & grid produk
-│   └── modals.css          # Desain dialog, tabel, toast alert, responsif mobile & numpad PIN
-├── js/
-│   ├── app.js              # Bootstrap inisialisasi aplikasi & Navigation Guard
-│   ├── store.js            # State management (Reactive UI Pattern & RBAC Permissions)
-│   ├── db.js               # IndexedDB local cache v4 (Dexie.js)
-│   ├── supabase.js         # Cloud sync engine & WebSocket listener
-│   ├── printer.js          # Universal Thermal POS Engine (48mm/58mm/80mm, WebBLE, WebUSB, RawBT)
-│   ├── receipt.js          # Pembuat payload JSON & ESC/POS untuk struk
-│   ├── views/              # Logika UI per modul/halaman
-│   │   ├── pos.js          # Modul kasir utama
-│   │   ├── products.js     # Modul master data produk & upload foto/SKU
-│   │   ├── customers.js    # Modul CRM 360°, piutang, pelacakan galon pinjaman, WA direct
-│   │   ├── transactions.js # Modul riwayat penjualan & filter tanggal range + pagination
-│   │   ├── reports.js      # Modul analitik omzet/laba & Chart.js
-│   │   ├── finance.js      # Modul buku besar COA, arus kas, & valuasi aset fisik
-│   │   ├── users.js        # Modul manajemen akun & staf (Role Owner only)
-│   │   ├── settings.js     # Modul konfigurasi sistem, backup/restore, cloud sync, & test print
-│   │   └── modals.js       # Kontrol dialog modal global, PIN numpad, & multi-protocol print
-│   └── utils/
-│       ├── crypto.js       # Kriptografi Web Crypto API Salted SHA-256 zero-plaintext
-│       ├── currency.js     # Pemformatan nilai Rupiah
-│       ├── date.js         # Pemformatan tanggal lokal Indonesia
-│       ├── export.js       # Generator export spreadsheet CSV / Excel & format tabel
-│       ├── image.js        # Kompresi gambar client-side WebP/JPEG & SKU generator
-│       ├── invoice.js      # Generator nomor resi transaksi
-│       ├── logo-thermal.js # Synchronous 1-bit embedded thermal logo Base64
-│       ├── qris.js         # Generator EMVCo Dynamic QRIS (TLV Tag 54 + CRC16-CCITT)
-│       └── sanitize.js     # Proteksi Anti-XSS (HTML escape)
-├── docs/
-│   ├── 01_SYSTEM_BLUEPRINT.md       # Cetak biru arsitektur sistem & state management
-│   ├── 02_ACCOUNTING_LOGIC.md       # Logika matematika, akuntansi double-entry, & saldo kas
-│   ├── 03_MILITARY_VERIFICATION.md  # Protokol QA gate & 14 aturan mutlak pra-deploy
-│   ├── 04_BUSINESS_TIMELINE.md      # Roadmap strategi bisnis, benchmark open-source, & gap
-│   ├── 05_SECURITY_HARDENING.sql    # Skrip PostgreSQL Row Level Security (RLS) & sanitasi
-│   ├── 06_ENTERPRISE_ARCHITECTURE_AND_ECOSYSTEM.md # Arsitektur enterprise, Cloudflare, & repo benchmark
-│   ├── 07_PRODUCT_REQUIREMENTS_DOCUMENT.md         # PRD standar industri, traceability matrix, & audit status
-│   └── 08_USERS_MANAGEMENT_SCHEMA.sql              # Skema tabel app_users & RLS policies
-├── scripts/
-│   ├── verify.js                    # Skrip audit CI/CD Quality Gate & sinkronisasi versi otomatis
-│   └── supabase-admin.js            # CLI automasi manajemen database Supabase lokal (Secret Key)
-├── .env.example                     # Template variabel lingkungan aman
-```
-
-## 📚 Dokumentasi Standar Sistem
-
-Seluruh protokol teknis dan acuan baku tersimpan di folder `docs/`:
-- 📐 [01 — System Architecture & Technical Blueprint](docs/01_SYSTEM_BLUEPRINT.md)
-- 💰 [02 — Logika Matematika, Keuangan & Akuntansi](docs/02_ACCOUNTING_LOGIC.md)
-- 🛡️ [03 — Protokol Verifikasi Militer & QA Gate](docs/03_MILITARY_VERIFICATION.md)
-- 📈 [04 — Roadmap Bisnis & Timeline Evolusi Fitur](docs/04_BUSINESS_TIMELINE.md)
-- 🔒 [05 — PostgreSQL Security & RLS Hardening](docs/05_SECURITY_HARDENING.sql)
-- ☁️ [06 — Enterprise Architecture & Cloudflare Integration](docs/06_ENTERPRISE_ARCHITECTURE_AND_ECOSYSTEM.md)
-- 📋 [07 — Product Requirements Document (PRD) & Industry Standards](docs/07_PRODUCT_REQUIREMENTS_DOCUMENT.md)
-- 👥 [08 — Users Management & RBAC Schema](docs/08_USERS_MANAGEMENT_SCHEMA.sql)
-
-## 🖨️ Arsitektur Universal Thermal Printing
-
-Sistem mendukung semua standar printer thermal kasir (open-source & zero-driver dependency):
-
-1. **Format Kertas Roll**:
-   - **48 mm** (30 karakter/baris): EDC POS & printer mobile mini.
-   - **58 mm** (32 karakter/baris): Standar POS Bluetooth portable.
-   - **80 mm** (48 karakter/baris): Desktop POS / printer thermal kasir besar & resto.
-2. **Koneksi Multi-Protokol**:
-   - **Universal Direct Print**: Driver OS (Windows/macOS/Linux/Android/iOS) via CSS `@page` zero-margin.
-   - **Web Bluetooth (BLE)**: Komunikasi binary ESC/POS langsung dari browser Chrome/Edge tanpa aplikasi pihak ketiga.
-   - **WebUSB**: Komunikasi binary ESC/POS kabel USB / konverter OTG berkecepatan tinggi.
-   - **Android Intent**: Integrasi background protocol `rawbt:` dan `my.bluetoothprint.scheme://`.
-
-## 🔒 Keamanan & Hardening
-
-- **Zero-Plaintext Storage**: Password/PIN tidak pernah disimpan plaintext; selalu diamankan dengan Web Crypto Salted SHA-256 + 16-byte random salt.
-- **Role-Based Access Control**: Pembatasan ketat modul sensitif berdasarkan hierarki peran (`owner`, `supervisor`, `cashier`).
-- **Anti-XSS**: Meta tag *Content-Security-Policy* ketat diaktifkan dan pembersihan input ganda via `sanitize.js`.
-- **Production Stripping**: Konfigurasi Vite secara paksa menghapus semua _console logs_ dan _debugger_ saat _build_ demi efisiensi dan keamanan.
-- **Fail-Safe Offline**: Jika API Cloud terputus, sistem _silent-fail_ ke IndexedDB lokal tanpa membekukan antarmuka pengguna (UI).
+> ⚠️ **DOKUMEN OPERASIONAL PRIBADI (INTERNAL & CONFIDENTIAL)**  
+> Repositori ini adalah sistem kasir Point of Sale (POS) & CRM **khusus pemakaian personal / internal** bisnis **Blue Mountain Refilling Station** (Owner: Fadhil / FR Proyek).  
+> **DILARANG KERAS** mendistribusikan, mempublikasikan ulang, atau menggunakan repositori ini untuk kepentingan pihak ketiga tanpa izin pemilik. Seluruh data transaksi, pelanggan, piutang, dan aset galon terisolasi secara privat.
 
 ---
-*Blue Mountain Refilling Station POS — Engineered with Vanilla JS, Dexie.js & Supabase*
+
+## 📌 Ringkasan Sistem & Status Rilis
+
+- **Versi Rilis**: `v1.0.0` (Production Clean State)
+- **Arsitektur**: **Online-First** (Cloud Supabase Master of Truth + Cloudflare Pages Edge Functions + Dexie.js Local Cache 0ms)
+- **Akses Produksi**: `https://bluemountain-pos.pages.dev`
+- **Database Cloud**: Supabase PostgreSQL (`wiapnhpdgjbtkblowfig.supabase.co`)
+- **Tingkat Akses**: Multi-Operator Internal (`owner`, `supervisor`, `cashier`) dengan PIN Brute-Force Guard (5 percobaan $\rightarrow$ Lockout 60 detik)
+
+---
+
+## 📖 Buku Panduan Operasional Kasir Personal (SOP Harian)
+
+### 1. 🌅 Buka Toko & Awal Shift
+1. Buka aplikasi di tablet/HP kasir atau browser via alamat produksi `https://bluemountain-pos.pages.dev`.
+2. Klik tombol **Ganti Kasir / Login** di dock navigasi.
+3. Masukkan **PIN 6-digit** operator kasir yang bertugas.
+4. Pastikan indikator Cloud Sync di pojok kanan atas berstatus **🟢 Online (Connected)**.
+5. Periksa ketersediaan kertas roll pada printer thermal (58mm/80mm).
+
+### 2. 🛒 Pelaksanaan Transaksi POS
+- **Pilih Produk**: Ketuk katalog produk di layar atau gunakan kotak pencarian cepat (SKU/Nama).
+- **Pilih Pelanggan**:
+  - Transaksi non-langganan: Biarkan default (*Pelanggan Umum*).
+  - Transaksi langganan/pinjam galon: Pilih nama pelanggan dari dropdown atau ketuk **+ Pelanggan Baru**.
+- **Metode Pembayaran**:
+  1. **Tunai**: Masukkan nominal uang yang diterima $\rightarrow$ sistem otomatis menghitung kembalian pas.
+  2. **QRIS Dinamis (EMVCo)**: Layar menampilkan QRIS dinamis dengan nominal tagihan tepat tanpa biaya gateway $\rightarrow$ Pelanggan scan via BCA/GoPay/OVO/ShopeePay $\rightarrow$ Verifikasi notifikasi masuk $\rightarrow$ Konfirmasi bayar.
+  3. **Transfer Bank**: Nomor rekening BCA otomatis tertera pada struk.
+  4. **Piutang / Kasbon**: Khusus pelanggan terdaftar dengan limit kredit aktif.
+- **Peminjaman Galon**: Jika pelanggan membawa pulang galon fisik toko tanpa tukar galon kosong, centang opsi penambahan pinjaman galon pada profil pelanggan.
+
+### 3. 🖨️ Cetak Struk Thermal
+1. Klik tombol **Cetak Struk** setelah transaksi selesai.
+2. Sistem otomatis mengalirkan payload binary ESC/POS ke:
+   - **Bluetooth**: Hubungkan via Web Bluetooth Chrome atau Bluetooth Print Android App.
+   - **USB**: Terhubung langsung ke kabel OTG/USB thermal printer via WebUSB.
+   - **Direct Print / OS Spooler**: Menggunakan jendela print sistem dengan margin 0mm.
+3. Struk memuat logo resmi toko, rincian produk, nomor invoice, dan sisa saldo galon pelanggan.
+
+### 4. 🌙 Tutup Shift & Rekonsiliasi Kas
+1. Buka modul **Riwayat Transaksi** dan filter tanggal ke **Hari Ini**.
+2. Cocokkan total uang fisik di laci kasir dengan total pembayaran **Tunai** di aplikasi.
+3. Buka modul **Laporan & Keuangan** untuk meninjau omzet kotor, pengeluaran harian, dan laba bersih.
+4. Klik **Backup JSON** di menu Pengaturan dan simpan salinan cadangan ke Google Drive / Cloud personal.
+5. Logout kasir untuk mengunci terminal sebelum meninggalkan toko.
+
+---
+
+## ⚙️ Panduan Setup Hardware Thermal Printer Personal
+
+### Printer Bluetooth Portable 58mm (Android/Mobile)
+1. Aktifkan Bluetooth pada perangkat Android/Tablet kasir.
+2. Lakukan *Pairing* dengan perangkat printer (PIN default umum: `0000` atau `1234`).
+3. Pasang aplikasi pendukung **Bluetooth Print** atau **RawBT** dari Google Play Store (jika tidak memakai direct WebBLE).
+4. Di aplikasi POS: Masuk menu **Pengaturan** $\rightarrow$ pilih ukuran kertas **58 mm** $\rightarrow$ klik **Test Print**.
+
+### Printer Desktop USB 80mm (Kasir PC / Laptop)
+1. Sambungkan kabel USB printer ke port komputer kasir.
+2. Di aplikasi POS: Pilih ukuran kertas **80 mm**.
+3. Saat dialog cetak browser muncul, pilih nama printer USB Anda dan setel margin ke **None / Minimum**.
+
+---
+
+## 🛡️ Arsitektur Keamanan & Zero-Tamper
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│               TERMINAL KASIR (PWA / BROWSER / HP)                       │
+│                                                                        │
+│  [UI Layer: Glassmorphism Blue Mountain, Touch Gesture, Smooth Dock]   │
+│                                   │                                    │
+│  [Local Speed Cache: Dexie.js IndexedDB v4 (0ms Read & Local Outbox)]  │
+│                                   │                                    │
+│  [Hardware Engine: ESC/POS WebBLE, WebUSB, OS Spooler 58mm/80mm]       │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ HTTPS / WSS
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                   CLOUDFLARE PAGES EDGE FUNCTIONS                      │
+│                                                                        │
+│  • /api/auth/login        : Proteksi Brute-force & Verifikasi PIN      │
+│  • /api/stock/decrement   : Validasi Stok & Eksekusi Atomik Server     │
+│  • /api/health            : Monitoring Kesiapan Edge Network           │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ PostgREST / RPC
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                  SUPABASE CLOUD POSTGRESQL (TRUTH)                     │
+│                                                                        │
+│  • Single Source of Truth (Database Master)                            │
+│  • RLS Policy Enforced (Owner, Supervisor, Cashier)                    │
+│  • Atomic Stored Procedure: atomic_checkout_transaction               │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+1. **Anti DevTools Tampering**: Penurunan stok dan verifikasi PIN diawasi oleh server Edge & database Supabase. Manipulasi variabel di memori browser tidak dapat merusak saldo stok atau memalsukan otentikasi.
+2. **Brute-Force Guard**: Salah memasukkan PIN sebanyak 5 kali berturut-turut akan memicu *lockout* terminal selama 60 detik secara otomatis.
+3. **Database Concurrency Safe**: Menggunakan PostgreSQL transaction level dengan stored procedure `atomic_checkout_transaction` untuk mencegah *race condition* stok saat dua perangkat kasir memproses transaksi bersamaan.
+4. **Zero Plaintext Secrets**: Seluruh kredensial sensitif diamankan menggunakan Web Crypto API (Salted SHA-256) dan Environment Variables.
+
+---
+
+## 🗂️ Indeks Dokumentasi Internal Proyek (`docs/`)
+
+Seluruh dokumen teknis lengkap, blueprint, standar akuntansi, dan skrip migrasi tersimpan di direktori `docs/`:
+
+| Dokumen | Deskripsi & Fungsi |
+|---|---|
+| 📄 [`docs/00_CLEAN_RESET_MIGRATION_V1.sql`](docs/00_CLEAN_RESET_MIGRATION_V1.sql) | Skrip migrasi DDL v1.0.0, pembersihan data, skema tabel, dan fungsi atomik checkout |
+| 📄 [`docs/01_SYSTEM_BLUEPRINT.md`](docs/01_SYSTEM_BLUEPRINT.md) | Cetak biru arsitektur Online-First, Cloudflare Pages Edge Functions, & Dexie Cache |
+| 📄 [`docs/02_ACCOUNTING_LOGIC.md`](docs/02_ACCOUNTING_LOGIC.md) | Logika akuntansi double-entry, Bagan Akun (COA), arus kas, dan valuasi aset galon |
+| 📄 [`docs/03_MILITARY_VERIFICATION.md`](docs/03_MILITARY_VERIFICATION.md) | Protokol verifikasi 14 aturan mutlak pra-deploy & Quality Assurance Gate |
+| 📄 [`docs/04_BUSINESS_TIMELINE.md`](docs/04_BUSINESS_TIMELINE.md) | Roadmap bisnis internal Blue Mountain, evaluasi margin, & strategi ekspansi |
+| 📄 [`docs/05_SECURITY_HARDENING.sql`](docs/05_SECURITY_HARDENING.sql) | Kebijakan Row Level Security (RLS) PostgreSQL & sanitasi database |
+| 📄 [`docs/06_ENTERPRISE_ARCHITECTURE_AND_ECOSYSTEM.md`](docs/06_ENTERPRISE_ARCHITECTURE_AND_ECOSYSTEM.md) | Rincian arsitektur Cloudflare, integrasi Git CI/CD, dan benchmark industri |
+| 📄 [`docs/07_PRODUCT_REQUIREMENTS_DOCUMENT.md`](docs/07_PRODUCT_REQUIREMENTS_DOCUMENT.md) | PRD v1.0.0, spesifikasi fungsionalitas, Non-Functional Requirements, & matriks pengujian |
+| 📄 [`docs/08_USERS_MANAGEMENT_SCHEMA.sql`](docs/08_USERS_MANAGEMENT_SCHEMA.sql) | Skema tabel operator kasir `app_users` & otentikasi role-based |
+| 📄 [`docs/09_MASTER_TENANT_ISOLATION.sql`](docs/09_MASTER_TENANT_ISOLATION.sql) | Kebijakan isolasi multi-tenant database untuk proteksi data independen |
+
+---
+
+## 💻 Panduan Pengembang & Maintenance Mandiri
+
+### Menjalankan Server Lokal (Development)
+```bash
+# Masuk ke direktori
+cd "d:\FR PROYEK\KASIR"
+
+# Jalankan Vite local dev server
+npm run dev
+```
+
+### Menjalankan Audit Kualitas & Uji Sintaks
+```bash
+# Menjalankan 11 suite pengujian otomatis pra-rilis
+npm run verify
+```
+
+### Melakukan Build Produksi
+```bash
+# Melakukan kompilasi bundle teroptimasi (Vite)
+npm run build
+```
+
+### Melakukan Deploy ke Cloudflare Pages
+```bash
+# Deploy langsung dari terminal lokal via Wrangler
+npm run deploy:cf
+```
+
+---
+
+## 📞 Kontak & Dukungan Internal
+Untuk keperluan maintenance atau kendala sistem, hubungi internal administrator:
+- **Project**: Blue Mountain POS Engine (FR Proyek)
+- **Email / GitHub**: [@fadhil2026](https://github.com/fadhil2026)
+- **Status Lisensi**: Proprietary & Private Business Software. All Rights Reserved.

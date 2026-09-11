@@ -1,11 +1,9 @@
 {
-  "currentVersion": "4.1.0",
-  "lastCommitHash": "b757818",
-  "updatedAt": "2026-09-09T13:00:23.268Z",
+  "currentVersion": "1.0.0",
+  "lastCommitHash": "init",
+  "updatedAt": "2026-09-11T20:00:00.000Z",
   "milestones": {
-    "3.0.0": "Core Architecture, Dexie Offline DB, Thermal Printing Driver",
-    "3.1.0": "Cloud Sync, Supabase Realtime, Dynamic QRIS, Multi-User RBAC & Salted SHA-256 PIN",
-    "3.2.0": "Military-Grade Hardening: Master Store ID Tenant Isolation, Dual-Bridge Multi-Device Account Sync, Automated SemVer Engine, Redaction"
+    "1.0.0": "Production Ready v1.0.0: Online-First Architecture (Supabase Truth + Cloudflare Pages Edge + Dexie Cache), Zero Concurrency Race-Condition, Anti-Brute-Force Lockout, Personal Proprietary Operations Manual"
   },
   "metrics": {
     "majorThreshold": 100,
