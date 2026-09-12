@@ -1,5 +1,5 @@
 # 📋 07 — PRODUCT REQUIREMENTS DOCUMENT (PRD) & STANDAR INDUSTRI ENTERPRISE
-**Blue Mountain Refilling Station POS & CRM — Personal & Proprietary PRD (v1.5.0)**
+**Blue Mountain Refilling Station POS & CRM — Personal & Proprietary PRD (v1.6.0)**
 
 Dokumen Kebutuhan Produk (PRD), Analisis Komparasi Industri Global, dan Matriks Verifikasi Realitas antara kode sumber aktual vs standar industri POS modern.
 
@@ -10,7 +10,7 @@ Dokumen Kebutuhan Produk (PRD), Analisis Komparasi Industri Global, dan Matriks 
 | Dimensi | Spesifikasi |
 |---|---|
 | **Nama Produk** | Blue Mountain POS & CRM Engine |
-| **Versi Rilis Aktif** | `v1.5.0` (Production Clean State) |
+| **Versi Rilis Aktif** | `v1.6.0` (Production Clean State) |
 | **Domain Bisnis** | Stasiun Pengisian Air Minum (Refilling Station), Toko Grosir/Retail, & Mini Market |
 | **Prinsip Arsitektur** | *Online-First, Supabase Cloud Master of Truth, Edge Functions Protection, Zero-Latency Dexie Cache, Zero Dummy* |
 | **Target Standar Industri** | OWASP ASVS Level 2, PCI-DSS SAQ A (POS Scope), SAK EMKM Akuntansi Indonesia |
@@ -19,9 +19,9 @@ Dokumen Kebutuhan Produk (PRD), Analisis Komparasi Industri Global, dan Matriks 
 
 ## 2. Benchmark Komparasi Sistem POS Global
 
-Komparasi komprehensif antara Blue Mountain POS (`v1.5.0`) terhadap sistem POS komersial global (*Square POS, Toast, Loyverse, Odoo POS, ERPNext*):
+Komparasi komprehensif antara Blue Mountain POS (`v1.6.0`) terhadap sistem POS komersial global (*Square POS, Toast, Loyverse, Odoo POS, ERPNext*):
 
-| Dimensi Kemampuan | Blue Mountain POS (`v1.5.0`) | Square / Toast | Loyverse POS | Odoo POS / ERPNext |
+| Dimensi Kemampuan | Blue Mountain POS (`v1.6.0`) | Square / Toast | Loyverse POS | Odoo POS / ERPNext |
 |---|---|---|---|---|
 | **Model Biaya Infrastruktur** | **\$0 (100% Free Tier)** via GitHub Pages + Supabase | Berlangganan \$60–\$150/bulan + potongan 2.6% per gesek | Freemium (\$5–\$25/fitur per terminal) | Self-hosted VPS (\$10–\$40/bln) atau Cloud Enterprise |
 | **Latensi Operasional** | **0 ms (Native IndexedDB)** | 100–300 ms (Ketergantungan server) | 50–150 ms (Lokal cache SQLite) | 100–400 ms (Python/PostgreSQL) |

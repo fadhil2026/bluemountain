@@ -1,42 +1,43 @@
 {
-  "name": "blue-mountain-pos",
-  "version": "1.5.0",
-  "type": "module",
-  "private": true,
-  "description": "Sistem Kasir POS — Blue Mountain Refilling Station",
-  "scripts": {
-    "dev": "vite",
-    "prebuild": "node scripts/semver-engine.js --bump auto",
-    "build": "vite build",
-    "preview": "vite preview",
-    "lint": "npx @biomejs/biome check",
-    "lint:fix": "npx @biomejs/biome check --write",
-    "verify": "node scripts/verify.js",
-    "test": "npm run verify",
-    "semver": "node scripts/semver-engine.js",
-    "semver:analyze": "node scripts/semver-engine.js --analyze",
-    "semver:bump": "node scripts/semver-engine.js --bump auto",
-    "supabase:admin": "node scripts/supabase-admin.js",
-    "reset-pin": "node scripts/reset-pin.js",
-    "predeploy:cf": "npm run build",
-    "deploy:cf": "npx wrangler pages deploy dist --project-name=bluemountain-pos --commit-dirty=true"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.112.4",
-    "chart.js": "^4.4.4",
-    "dexie": "^3.2.7",
-    "html2canvas": "^1.4.1",
-    "jspdf": "^2.5.2",
-    "jspdf-autotable": "^3.8.3",
-    "qrcode": "^1.5.4"
-  },
-  "devDependencies": {
-    "vite": "^5.4.14",
-    "vite-plugin-pwa": "^0.20.5",
-    "workbox-window": "^7.3.0"
-  },
-  "allowScripts": {
-    "esbuild@0.21.5": true,
-    "core-js@3.50.0": true
-  }
+	"name": "blue-mountain-pos",
+	"version": "1.6.0",
+	"type": "module",
+	"private": true,
+	"description": "Sistem Kasir POS — Blue Mountain Refilling Station",
+	"scripts": {
+		"dev": "vite",
+		"prebuild": "node scripts/semver-engine.js --sync",
+		"build": "vite build",
+		"preview": "vite preview",
+		"lint": "npx @biomejs/biome check",
+		"lint:fix": "npx @biomejs/biome check --write",
+		"verify": "node scripts/verify.js",
+		"test": "npm run verify",
+		"semver": "node scripts/semver-engine.js",
+		"semver:analyze": "node scripts/semver-engine.js --analyze",
+		"semver:bump": "node scripts/semver-engine.js --bump auto",
+		"semver:set": "node scripts/semver-engine.js --set",
+		"supabase:admin": "node scripts/supabase-admin.js",
+		"reset-pin": "node scripts/reset-pin.js",
+		"predeploy:cf": "npm run build",
+		"deploy:cf": "npx wrangler pages deploy dist --project-name=bluemountain-pos --commit-dirty=true"
+	},
+	"dependencies": {
+		"@supabase/supabase-js": "^2.112.4",
+		"chart.js": "^4.4.4",
+		"dexie": "^3.2.7",
+		"html2canvas": "^1.4.1",
+		"jspdf": "^2.5.2",
+		"jspdf-autotable": "^3.8.3",
+		"qrcode": "^1.5.4"
+	},
+	"devDependencies": {
+		"vite": "^5.4.14",
+		"vite-plugin-pwa": "^0.20.5",
+		"workbox-window": "^7.3.0"
+	},
+	"allowScripts": {
+		"esbuild@0.21.5": true,
+		"core-js@3.50.0": true
+	}
 }

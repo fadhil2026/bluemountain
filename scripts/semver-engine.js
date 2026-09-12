@@ -73,7 +73,6 @@ export const saveSemVerState = (state) => {
  */
 export const analyzeChanges = () => {
 	let diffOutput = "";
-	let commitMessages = "";
 	let changedFiles = [];
 
 	try {
@@ -90,11 +89,6 @@ export const analyzeChanges = () => {
 		diffOutput = execSync("git diff HEAD", {
 			stdio: ["ignore", "pipe", "ignore"],
 		}).toString();
-
-		// Ambil pesan commit 3 terakhir untuk evaluasi
-		commitMessages = execSync("git log -n 3 --oneline", {
-			stdio: ["ignore", "pipe", "ignore"],
-		}).toString();
 	} catch (_) {}
 
 	let sMajor = 0;
@@ -102,7 +96,31 @@ export const analyzeChanges = () => {
 	let sPatch = 0;
 	const reasons = [];
 
-	const textToScan = `${commitMessages}\n${changedFiles.join("\n")}\n${diffOutput.slice(0, 10000)}`;
+	// Filter berkas sumber bermakna (abaikan dist/ dan metadata SemVer)
+	const meaningfulFiles = changedFiles.filter(
+		(f) =>
+			!f.startsWith("dist/") &&
+			!f.endsWith(".state.json") &&
+			f !== "package.json" &&
+			f !== "functions/api/health.js" &&
+			f !== "index.html" &&
+			f !== "README.md",
+	);
+
+	if (meaningfulFiles.length === 0) {
+		return {
+			sMajor: 0,
+			sMinor: 0,
+			sPatch: 0,
+			recommendation: "none",
+			reasons: [
+				"Hanya perubahan berkas build/dist atau sinkronisasi metadata versi",
+			],
+			changedFilesCount: changedFiles.length,
+		};
+	}
+
+	const textToScan = `${changedFiles.join("\n")}\n${diffOutput.slice(0, 10000)}`;
 
 	// 1. Evaluasi MAJOR (Breaking Change)
 	if (
@@ -120,35 +138,31 @@ export const analyzeChanges = () => {
 
 	// 2. Evaluasi MINOR (Fitur / Modul Baru)
 	if (
-		/\bfeat(\([^)]+\))?:/i.test(commitMessages) ||
 		changedFiles.some(
 			(f) => f.startsWith("js/views/") && statusIncludesNew(f),
 		) ||
 		changedFiles.some(
 			(f) =>
-				f.includes("09_MASTER_TENANT_ISOLATION") || f.includes("semver-engine"),
+				(f.includes("09_MASTER_TENANT_ISOLATION") ||
+					f.includes("semver-engine")) &&
+				statusIncludesNew(f),
 		) ||
 		/master store tenant isolation/i.test(textToScan) ||
 		/dual-bridge/i.test(textToScan)
 	) {
 		sMinor += 50;
-		reasons.push(
-			"Terdeteksi penambahan modul baru / arsitektur fitur baru (Tenant Isolation / Dual-Bridge / SemVer Engine)",
-		);
+		reasons.push("Terdeteksi penambahan modul baru / arsitektur fitur baru");
 	}
 
-	// 3. Evaluasi PATCH (Bug Fix / Style / Docs / Chore)
+	// 3. Evaluasi PATCH (Bug Fix / Style / Docs / Refactor)
 	if (
-		/\bfix(\([^)]+\))?:/i.test(commitMessages) ||
-		/\bstyle(\([^)]+\))?:/i.test(commitMessages) ||
-		/\bperf(\([^)]+\))?:/i.test(commitMessages) ||
-		/\bdocs(\([^)]+\))?:/i.test(commitMessages) ||
-		/\bchore(\([^)]+\))?:/i.test(commitMessages) ||
-		changedFiles.some((f) => f.endsWith(".css") || f.endsWith(".md"))
+		changedFiles.some(
+			(f) => f.endsWith(".css") || f.endsWith(".md") || f.endsWith(".js"),
+		)
 	) {
 		sPatch += 15;
 		reasons.push(
-			"Terdeteksi perbaikan bug, styling CSS, atau pembaruan dokumentasi",
+			"Terdeteksi perbaikan, styling CSS, atau pembaruan kode sumber",
 		);
 	}
 
@@ -200,7 +214,11 @@ export const bumpVersion = (type = "auto", description = "") => {
 	}
 
 	let nextVersion = current;
-	if (targetType === "major") {
+	if (targetType === "none") {
+		nextVersion = current;
+	} else if (/^\d+\.\d+\.\d+$/.test(targetType)) {
+		nextVersion = targetType;
+	} else if (targetType === "major") {
 		nextVersion = `${major + 1}.0.0`;
 	} else if (targetType === "minor") {
 		nextVersion = `${major}.${minor + 1}.0`;
@@ -301,6 +319,19 @@ export const syncVersionEverywhere = (version) => {
 			fs.writeFileSync(indexFile, updated, "utf8");
 		}
 	}
+
+	// 6. dist/index.html topbar version badge (if built)
+	const distIndexFile = path.resolve(process.cwd(), "dist/index.html");
+	if (fs.existsSync(distIndexFile)) {
+		const distContent = fs.readFileSync(distIndexFile, "utf8");
+		const updatedDist = distContent.replace(
+			/<span class="topbar__version-badge" id="topbar-app-version"[^>]*>v[^<]+<\/span>/g,
+			`<span class="topbar__version-badge" id="topbar-app-version" title="Versi Aplikasi">v${version}</span>`,
+		);
+		if (updatedDist !== distContent) {
+			fs.writeFileSync(distIndexFile, updatedDist, "utf8");
+		}
+	}
 };
 
 /**
@@ -367,6 +398,13 @@ if (process.argv[1]?.endsWith("semver-engine.js")) {
 			await syncVersionToSupabase(nextVer);
 			console.log(
 				`🚀 [SemVer Engine] Versi dinaikkan (${type}) -> v${nextVer} & tersinkron ke Supabase Cloud`,
+			);
+		} else if (arg === "--set") {
+			const targetVer = process.argv[3] || "1.6.0";
+			const nextVer = bumpVersion(targetVer);
+			await syncVersionToSupabase(nextVer);
+			console.log(
+				`🎯 [SemVer Engine] Versi disetel ke v${nextVer} & tersinkron ke Supabase Cloud`,
 			);
 		} else if (arg === "--sync") {
 			const state = getSemVerState();
