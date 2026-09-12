@@ -7,267 +7,302 @@
 const _listeners = {};
 
 const store = {
-  state: {
-    cart:             [],
-    products:         [],
-    customers:        [],
-    transactions:     [],
-    expenses:         [],
-    users:            [],
-    currentUser:      null,
-    currentView:      'pos',
-    discount:         0,
-    customerName:     '',
-    selectedCustomer: null,
-    settings: {
-      shopName:     'Blue Mountain Refilling Station',
-      shopAddress:  'Jl. Contoh No. 1, Kota',
-      shopPhone:    '0812-3456-7890',
-      cashierName:  'Admin',
-      printerUrl:   '',
-      printEnabled: false,
-      taxRate:      0,
-      bankName:     'BCA',
-      bankNumber:   '',
-      bankHolder:   'Blue Mountain Refilling Station',
-      qrisNumber:   '',
-      modalAwal:    0,
-    },
-  },
+	state: {
+		cart: [],
+		products: [],
+		customers: [],
+		transactions: [],
+		expenses: [],
+		users: [],
+		currentUser: null,
+		currentView: "pos",
+		discount: 0,
+		customerName: "",
+		selectedCustomer: null,
+		settings: {
+			shopName: "Blue Mountain Refilling Station",
+			shopAddress: "Jl. Contoh No. 1, Kota",
+			shopPhone: "0812-3456-7890",
+			cashierName: "Admin",
+			printerUrl: "",
+			printEnabled: false,
+			taxRate: 0,
+			bankName: "BCA",
+			bankNumber: "",
+			bankHolder: "Blue Mountain Refilling Station",
+			qrisNumber: "",
+			modalAwal: 0,
+		},
+	},
 
-  // ── Subscriptions ──
-  on(event, fn) {
-    (_listeners[event] ??= []).push(fn);
-    // Return unsubscribe function
-    return () => {
-      _listeners[event] = (_listeners[event] ?? []).filter(f => f !== fn);
-    };
-  },
+	// ── Subscriptions ──
+	on(event, fn) {
+		if (!_listeners[event]) {
+			_listeners[event] = [];
+		}
+		_listeners[event].push(fn);
+		// Return unsubscribe function
+		return () => {
+			_listeners[event] = (_listeners[event] ?? []).filter((f) => f !== fn);
+		};
+	},
 
-  emit(event, data) {
-    (_listeners[event] ?? []).forEach(fn => fn(data));
-  },
+	emit(event, data) {
+		for (const fn of _listeners[event] ?? []) {
+			fn(data);
+		}
+	},
 
-  // ── Cart ──
-  addToCart(product, quantity = 1) {
-    const qtyToAdd = Math.max(1, parseInt(quantity) || 1);
-    const idx = this.state.cart.findIndex(i => String(i.product.id) === String(product.id));
-    if (idx >= 0) {
-      this.state.cart[idx].qty += qtyToAdd;
-    } else {
-      this.state.cart.push({ product, qty: qtyToAdd });
-    }
-    this.emit('cart:change', this.state.cart);
-  },
+	// ── Cart ──
+	addToCart(product, quantity = 1) {
+		const qtyToAdd = Math.max(1, parseInt(quantity, 10) || 1);
+		const idx = this.state.cart.findIndex(
+			(i) => String(i.product.id) === String(product.id),
+		);
+		if (idx >= 0) {
+			this.state.cart[idx].qty += qtyToAdd;
+		} else {
+			this.state.cart.push({ product, qty: qtyToAdd });
+		}
+		this.emit("cart:change", this.state.cart);
+	},
 
-  removeFromCart(productId) {
-    this.state.cart = this.state.cart.filter(i => String(i.product.id) !== String(productId));
-    this.emit('cart:change', this.state.cart);
-  },
+	removeFromCart(productId) {
+		this.state.cart = this.state.cart.filter(
+			(i) => String(i.product.id) !== String(productId),
+		);
+		this.emit("cart:change", this.state.cart);
+	},
 
-  setQty(productId, qty) {
-    if (qty <= 0) return this.removeFromCart(productId);
-    const item = this.state.cart.find(i => String(i.product.id) === String(productId));
-    if (item) { item.qty = qty; this.emit('cart:change', this.state.cart); }
-  },
+	setQty(productId, qty) {
+		if (qty <= 0) return this.removeFromCart(productId);
+		const item = this.state.cart.find(
+			(i) => String(i.product.id) === String(productId),
+		);
+		if (item) {
+			item.qty = qty;
+			this.emit("cart:change", this.state.cart);
+		}
+	},
 
-  clearCart() {
-    this.state.cart             = [];
-    this.state.discount         = 0;
-    this.state.customerName     = '';
-    this.state.selectedCustomer = null;
-    this.emit('cart:change', this.state.cart);
-    this.emit('selectedCustomer:change', null);
-  },
+	clearCart() {
+		this.state.cart = [];
+		this.state.discount = 0;
+		this.state.customerName = "";
+		this.state.selectedCustomer = null;
+		this.emit("cart:change", this.state.cart);
+		this.emit("selectedCustomer:change", null);
+	},
 
-  setDiscount(amount) {
-    this.state.discount = Math.max(0, parseFloat(amount) || 0);
-    this.emit('cart:change', this.state.cart);
-  },
+	setDiscount(amount) {
+		this.state.discount = Math.max(0, parseFloat(amount) || 0);
+		this.emit("cart:change", this.state.cart);
+	},
 
-  setCustomerName(name) {
-    this.state.customerName = String(name ?? '').slice(0, 80);
-  },
+	setCustomerName(name) {
+		this.state.customerName = String(name ?? "").slice(0, 80);
+	},
 
-  // ── Computed ──
-  get subtotal() {
-    return this.state.cart.reduce((sum, i) => sum + i.product.price * i.qty, 0);
-  },
+	// ── Computed ──
+	get subtotal() {
+		return this.state.cart.reduce((sum, i) => sum + i.product.price * i.qty, 0);
+	},
 
-  get tax() {
-    return Math.round(this.subtotal * (this.state.settings.taxRate || 0) / 100);
-  },
+	get tax() {
+		return Math.round(
+			(this.subtotal * (this.state.settings.taxRate || 0)) / 100,
+		);
+	},
 
-  get total() {
-    return Math.max(0, this.subtotal + this.tax - this.state.discount);
-  },
+	get total() {
+		return Math.max(0, this.subtotal + this.tax - this.state.discount);
+	},
 
-  get cartCount() {
-    return this.state.cart.reduce((s, i) => s + i.qty, 0);
-  },
+	get cartCount() {
+		return this.state.cart.reduce((s, i) => s + i.qty, 0);
+	},
 
-  // ── Products ──
-  setProducts(products) {
-    this.state.products = products;
-    this.emit('products:change', products);
-  },
+	// ── Products ──
+	setProducts(products) {
+		this.state.products = products;
+		this.emit("products:change", products);
+	},
 
-  // ── Customers ──
-  setCustomers(customers) {
-    this.state.customers = customers || [];
-    this.emit('customers:change', this.state.customers);
-  },
+	// ── Customers ──
+	setCustomers(customers) {
+		this.state.customers = customers || [];
+		this.emit("customers:change", this.state.customers);
+	},
 
-  setSelectedCustomer(cust) {
-    this.state.selectedCustomer = cust;
-    this.state.customerName = cust ? cust.name : '';
-    this.emit('selectedCustomer:change', cust);
-  },
+	setSelectedCustomer(cust) {
+		this.state.selectedCustomer = cust;
+		this.state.customerName = cust ? cust.name : "";
+		this.emit("selectedCustomer:change", cust);
+	},
 
-  // ── Transactions ──
-  setTransactions(txs) {
-    this.state.transactions = txs;
-    this.emit('transactions:change', txs);
-  },
+	// ── Transactions ──
+	setTransactions(txs) {
+		this.state.transactions = txs;
+		this.emit("transactions:change", txs);
+	},
 
-  removeTransaction(id) {
-    this.state.transactions = this.state.transactions.filter(t => String(t.id) !== String(id));
-    this.emit('transactions:change', this.state.transactions);
-  },
+	removeTransaction(id) {
+		this.state.transactions = this.state.transactions.filter(
+			(t) => String(t.id) !== String(id),
+		);
+		this.emit("transactions:change", this.state.transactions);
+	},
 
-  addTransaction(tx) {
-    this.state.transactions = [tx, ...this.state.transactions];
-    this.emit('transactions:change', this.state.transactions);
-  },
+	addTransaction(tx) {
+		this.state.transactions = [tx, ...this.state.transactions];
+		this.emit("transactions:change", this.state.transactions);
+	},
 
-  updateTransaction(id, patch) {
-    const idx = this.state.transactions.findIndex(t => String(t.id) === String(id));
-    if (idx >= 0) {
-      this.state.transactions[idx] = { ...this.state.transactions[idx], ...patch };
-      this.emit('transactions:change', this.state.transactions);
-    }
-  },
+	updateTransaction(id, patch) {
+		const idx = this.state.transactions.findIndex(
+			(t) => String(t.id) === String(id),
+		);
+		if (idx >= 0) {
+			this.state.transactions[idx] = {
+				...this.state.transactions[idx],
+				...patch,
+			};
+			this.emit("transactions:change", this.state.transactions);
+		}
+	},
 
-  updateCustomer(id, patch) {
-    const idx = this.state.customers.findIndex(c => String(c.id) === String(id));
-    if (idx >= 0) {
-      this.state.customers[idx] = { ...this.state.customers[idx], ...patch };
-      this.emit('customers:change', this.state.customers);
-    }
-  },
+	updateCustomer(id, patch) {
+		const idx = this.state.customers.findIndex(
+			(c) => String(c.id) === String(id),
+		);
+		if (idx >= 0) {
+			this.state.customers[idx] = { ...this.state.customers[idx], ...patch };
+			this.emit("customers:change", this.state.customers);
+		}
+	},
 
-  addCustomer(cust) {
-    this.state.customers = [...this.state.customers, cust];
-    this.emit('customers:change', this.state.customers);
-  },
+	addCustomer(cust) {
+		this.state.customers = [...this.state.customers, cust];
+		this.emit("customers:change", this.state.customers);
+	},
 
-  removeCustomer(id) {
-    this.state.customers = this.state.customers.filter(c => String(c.id) !== String(id));
-    this.emit('customers:change', this.state.customers);
-  },
+	removeCustomer(id) {
+		this.state.customers = this.state.customers.filter(
+			(c) => String(c.id) !== String(id),
+		);
+		this.emit("customers:change", this.state.customers);
+	},
 
-  // ── Expenses ──
-  setExpenses(expenses) {
-    this.state.expenses = expenses;
-    this.emit('expenses:change', expenses);
-  },
+	// ── Expenses ──
+	setExpenses(expenses) {
+		this.state.expenses = expenses;
+		this.emit("expenses:change", expenses);
+	},
 
-  addExpense(expense) {
-    this.state.expenses = [...this.state.expenses, expense];
-    this.emit('expenses:change', this.state.expenses);
-  },
+	addExpense(expense) {
+		this.state.expenses = [...this.state.expenses, expense];
+		this.emit("expenses:change", this.state.expenses);
+	},
 
-  removeExpense(id) {
-    this.state.expenses = this.state.expenses.filter(e => e.id !== id);
-    this.emit('expenses:change', this.state.expenses);
-  },
+	removeExpense(id) {
+		this.state.expenses = this.state.expenses.filter((e) => e.id !== id);
+		this.emit("expenses:change", this.state.expenses);
+	},
 
-  // ── Navigation ──
-  navigate(view) {
-    this.state.currentView = view;
-    this.emit('navigate', view);
-  },
+	// ── Navigation ──
+	navigate(view) {
+		this.state.currentView = view;
+		this.emit("navigate", view);
+	},
 
-  // ── Settings ──
-  updateSettings(partial) {
-    Object.assign(this.state.settings, partial);
-    this.emit('settings:change', this.state.settings);
-  },
+	// ── Settings ──
+	updateSettings(partial) {
+		Object.assign(this.state.settings, partial);
+		this.emit("settings:change", this.state.settings);
+	},
 
-  // ── Users & RBAC ──
-  setUsers(users) {
-    this.state.users = users;
-    this.emit('users:change', users);
-  },
+	// ── Users & RBAC ──
+	setUsers(users) {
+		this.state.users = users;
+		this.emit("users:change", users);
+	},
 
-  addUser(user) {
-    this.state.users = [...this.state.users, user];
-    this.emit('users:change', this.state.users);
-  },
+	addUser(user) {
+		this.state.users = [...this.state.users, user];
+		this.emit("users:change", this.state.users);
+	},
 
-  updateUser(id, patch) {
-    const idx = this.state.users.findIndex(u => String(u.id) === String(id));
-    if (idx >= 0) {
-      this.state.users[idx] = { ...this.state.users[idx], ...patch };
-      this.emit('users:change', this.state.users);
-    }
-  },
+	updateUser(id, patch) {
+		const idx = this.state.users.findIndex((u) => String(u.id) === String(id));
+		if (idx >= 0) {
+			this.state.users[idx] = { ...this.state.users[idx], ...patch };
+			this.emit("users:change", this.state.users);
+		}
+	},
 
-  removeUser(id) {
-    this.state.users = this.state.users.filter(u => String(u.id) !== String(id));
-    this.emit('users:change', this.state.users);
-  },
+	removeUser(id) {
+		this.state.users = this.state.users.filter(
+			(u) => String(u.id) !== String(id),
+		);
+		this.emit("users:change", this.state.users);
+	},
 
-  login(user, jwtToken = null) {
-    const sessionData = {
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role || 'cashier',
-    };
-    this.state.currentUser = sessionData;
-    try {
-      sessionStorage.setItem('bm_active_user', JSON.stringify(sessionData));
-      if (jwtToken) {
-        localStorage.setItem('bm_jwt_token', jwtToken);
-      }
-    } catch (_) {}
-    this.emit('auth:change', sessionData);
-  },
+	login(user, jwtToken = null) {
+		const sessionData = {
+			id: user.id,
+			username: user.username,
+			name: user.name,
+			role: user.role || "cashier",
+		};
+		this.state.currentUser = sessionData;
+		try {
+			sessionStorage.setItem("bm_active_user", JSON.stringify(sessionData));
+			if (jwtToken) {
+				localStorage.setItem("bm_jwt_token", jwtToken);
+			}
+		} catch (_) {}
+		this.emit("auth:change", sessionData);
+	},
 
-  logout() {
-    this.state.currentUser = null;
-    try {
-      sessionStorage.removeItem('bm_active_user');
-      localStorage.removeItem('bm_jwt_token');
-    } catch (_) {}
-    this.emit('auth:change', null);
-  },
+	logout() {
+		this.state.currentUser = null;
+		try {
+			sessionStorage.removeItem("bm_active_user");
+			localStorage.removeItem("bm_jwt_token");
+		} catch (_) {}
+		this.emit("auth:change", null);
+	},
 
-  restoreSession() {
-    try {
-      const saved = sessionStorage.getItem('bm_active_user');
-      if (saved) {
-        this.state.currentUser = JSON.parse(saved);
-        this.emit('auth:change', this.state.currentUser);
-        return this.state.currentUser;
-      }
-    } catch (_) {}
-    return null;
-  },
+	restoreSession() {
+		try {
+			const saved = sessionStorage.getItem("bm_active_user");
+			if (saved) {
+				this.state.currentUser = JSON.parse(saved);
+				this.emit("auth:change", this.state.currentUser);
+				return this.state.currentUser;
+			}
+		} catch (_) {}
+		return null;
+	},
 
-  canAccess(viewKey) {
-    if (viewKey === 'login') return true;
-    const user = this.state.currentUser;
-    if (!user) return false;
-    const role = user.role || 'cashier';
-    if (role === 'owner') return true;
-    if (role === 'supervisor') {
-      return ['pos', 'products', 'customers', 'transactions', 'reports'].includes(viewKey);
-    }
-    // Cashier
-    return ['pos', 'customers', 'transactions'].includes(viewKey);
-  },
+	canAccess(viewKey) {
+		if (viewKey === "login") return true;
+		const user = this.state.currentUser;
+		if (!user) return false;
+		const role = user.role || "cashier";
+		if (role === "owner") return true;
+		if (role === "supervisor") {
+			return [
+				"pos",
+				"products",
+				"customers",
+				"transactions",
+				"reports",
+			].includes(viewKey);
+		}
+		// Cashier
+		return ["pos", "customers", "transactions"].includes(viewKey);
+	},
 };
 
 export default store;

@@ -2,59 +2,90 @@
  * views/settings.js — App settings
  * FIX: version from __APP_VERSION__ (injected by Vite define)
  */
-import { getSetting, setSetting, clearAllData, exportFullBackup, importFullBackup, getAllProducts, getAllCustomers, getAllTransactions, getAllExpenses } from '../db.js';
-import store                      from '../store.js';
-import { openModal, closeModal }  from './modals.js';
-import { esc }                    from '../utils/sanitize.js';
-import { printTestReceipt }       from '../printer.js';
-import { syncInitialData, getMasterStoreId, setMasterStoreId, isDeviceIsolated, setupRealtimeSubscription } from '../supabase.js';
+import {
+	clearAllData,
+	exportFullBackup,
+	getAllCustomers,
+	getAllExpenses,
+	getAllProducts,
+	getAllTransactions,
+	getSetting,
+	importFullBackup,
+	setSetting,
+} from "../db.js";
+import { printTestReceipt } from "../printer.js";
+import store from "../store.js";
+import {
+	getMasterStoreId,
+	isDeviceIsolated,
+	setMasterStoreId,
+	setupRealtimeSubscription,
+	syncInitialData,
+} from "../supabase.js";
+import { esc } from "../utils/sanitize.js";
+import { closeModal, openModal } from "./modals.js";
 
 export const initSettings = async () => {
-  await loadSettings();
-  await renderSettings();
+	await loadSettings();
+	await renderSettings();
 };
 
 const loadSettings = async () => {
-  const keys = [
-    'shopName', 'shopAddress', 'shopPhone', 'cashierName',
-    'printerUrl', 'printEnabled', 'printerPaper', 'taxRate',
-    'bankName', 'bankNumber', 'bankHolder',
-    'qrisNumber',
-  ];
-  const s = {};
-  for (const k of keys) {
-    const v = await getSetting(k);
-    if (v !== null) s[k] = v;
-  }
-  store.updateSettings(s);
+	const keys = [
+		"shopName",
+		"shopAddress",
+		"shopPhone",
+		"cashierName",
+		"printerUrl",
+		"printEnabled",
+		"printerPaper",
+		"taxRate",
+		"bankName",
+		"bankNumber",
+		"bankHolder",
+		"qrisNumber",
+	];
+	const s = {};
+	for (const k of keys) {
+		const v = await getSetting(k);
+		if (v !== null) s[k] = v;
+	}
+	store.updateSettings(s);
 };
 
 export const renderSettings = async () => {
-  const view = document.getElementById('view-settings');
-  const s    = store.state.settings;
+	const view = document.getElementById("view-settings");
+	const s = store.state.settings;
 
-  // Real dynamic version & build metadata injected by Vite build engine
-  const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0';
-  const gitHash    = typeof __GIT_HASH__ !== 'undefined' && __GIT_HASH__ ? __GIT_HASH__ : '';
-  const buildTime  = typeof __BUILD_TIMESTAMP__ !== 'undefined' ? __BUILD_TIMESTAMP__ : new Date().toISOString();
+	// Real dynamic version & build metadata injected by Vite build engine
+	const appVersion =
+		typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.0.0";
+	const gitHash =
+		typeof __GIT_HASH__ !== "undefined" && __GIT_HASH__ ? __GIT_HASH__ : "";
+	const buildTime =
+		typeof __BUILD_TIMESTAMP__ !== "undefined"
+			? __BUILD_TIMESTAMP__
+			: new Date().toISOString();
 
-  const buildDateObj = new Date(buildTime);
-  const formattedBuildDate = new Intl.DateTimeFormat('id-ID', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(buildDateObj);
-  const formattedBuildClock = new Intl.DateTimeFormat('id-ID', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(buildDateObj);
+	const buildDateObj = new Date(buildTime);
+	const formattedBuildDate = new Intl.DateTimeFormat("id-ID", {
+		day: "numeric",
+		month: "short",
+		year: "numeric",
+	}).format(buildDateObj);
+	const formattedBuildClock = new Intl.DateTimeFormat("id-ID", {
+		hour: "2-digit",
+		minute: "2-digit",
+		second: "2-digit",
+		hour12: false,
+	}).format(buildDateObj);
 
-  // Check if app is running in standalone mode (PWA installed)
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+	// Check if app is running in standalone mode (PWA installed)
+	const isStandalone =
+		window.matchMedia("(display-mode: standalone)").matches ||
+		window.navigator.standalone === true;
 
-  view.innerHTML = `
+	view.innerHTML = `
     <div class="section-header">
       <h2 class="section-title">Pengaturan</h2>
       <button class="btn btn--primary" id="btn-save-settings">💾 Simpan Semua</button>
@@ -70,10 +101,10 @@ export const renderSettings = async () => {
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="font-weight: 700; font-size: 14px; color: var(--text-primary);">
-            ${esc(store.state.currentUser?.name || 'Belum Masuk')}
+            ${esc(store.state.currentUser?.name || "Belum Masuk")}
           </span>
           <span style="font-size: 11px; padding: 2px 8px; border-radius: 12px; background: rgba(37, 99, 235, 0.1); color: #2563eb; font-weight: 700; text-transform: uppercase;">
-            ${esc(store.state.currentUser?.role || '-')}
+            ${esc(store.state.currentUser?.role || "-")}
           </span>
         </div>
       </div>
@@ -102,21 +133,21 @@ export const renderSettings = async () => {
           <div class="settings-row__label">Nama Toko</div>
           <div class="settings-row__desc">Tampil di struk &amp; header</div>
         </div>
-        <input type="text" class="input" id="set-shopName" value="${esc(s.shopName || '')}" maxlength="80" style="max-width:260px">
+        <input type="text" class="input" id="set-shopName" value="${esc(s.shopName || "")}" maxlength="80" style="max-width:260px">
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">Alamat</div>
         </div>
-        <input type="text" class="input" id="set-shopAddress" value="${esc(s.shopAddress || '')}" maxlength="120" style="max-width:260px">
+        <input type="text" class="input" id="set-shopAddress" value="${esc(s.shopAddress || "")}" maxlength="120" style="max-width:260px">
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">No. Telepon</div>
         </div>
-        <input type="text" class="input" id="set-shopPhone" value="${esc(s.shopPhone || '')}" maxlength="20" style="max-width:200px">
+        <input type="text" class="input" id="set-shopPhone" value="${esc(s.shopPhone || "")}" maxlength="20" style="max-width:200px">
       </div>
 
       <div class="settings-row">
@@ -124,7 +155,7 @@ export const renderSettings = async () => {
           <div class="settings-row__label">Nama Kasir</div>
           <div class="settings-row__desc">Tampil di struk sebagai kasir</div>
         </div>
-        <input type="text" class="input" id="set-cashierName" value="${esc(s.cashierName || 'Admin')}" maxlength="40" style="max-width:200px">
+        <input type="text" class="input" id="set-cashierName" value="${esc(s.cashierName || "Admin")}" maxlength="40" style="max-width:200px">
       </div>
 
       <div class="settings-row">
@@ -144,21 +175,21 @@ export const renderSettings = async () => {
         <div class="settings-row__info">
           <div class="settings-row__label">Nama Bank</div>
         </div>
-        <input type="text" class="input" id="set-bankName" value="${esc(s.bankName || 'BCA')}" maxlength="30" style="max-width:200px">
+        <input type="text" class="input" id="set-bankName" value="${esc(s.bankName || "BCA")}" maxlength="30" style="max-width:200px">
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">Nomor Rekening</div>
         </div>
-        <input type="text" class="input" id="set-bankNumber" value="${esc(s.bankNumber || '')}" maxlength="30" style="max-width:220px" placeholder="1234567890">
+        <input type="text" class="input" id="set-bankNumber" value="${esc(s.bankNumber || "")}" maxlength="30" style="max-width:220px" placeholder="1234567890">
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">Atas Nama</div>
         </div>
-        <input type="text" class="input" id="set-bankHolder" value="${esc(s.bankHolder || '')}" maxlength="60" style="max-width:240px">
+        <input type="text" class="input" id="set-bankHolder" value="${esc(s.bankHolder || "")}" maxlength="60" style="max-width:240px">
       </div>
 
       <div class="settings-row">
@@ -166,7 +197,7 @@ export const renderSettings = async () => {
           <div class="settings-row__label">Kode String QRIS Toko (Statis)</div>
           <div class="settings-row__desc">Salin string QRIS dari BCA/Mandiri/Shopee/GoPay untuk diubah jadi Dynamic QRIS otomatis ber-nominal</div>
         </div>
-        <textarea class="input" id="set-qrisNumber" rows="2" style="max-width:280px;font-size:11px" placeholder="0002010102112659...">${esc(s.qrisNumber || '')}</textarea>
+        <textarea class="input" id="set-qrisNumber" rows="2" style="max-width:280px;font-size:11px" placeholder="0002010102112659...">${esc(s.qrisNumber || "")}</textarea>
       </div>
     </div>
 
@@ -180,9 +211,9 @@ export const renderSettings = async () => {
           <div class="settings-row__desc">Pilih ukuran roll kertas sesuai hardware printer kasir Anda</div>
         </div>
         <select class="input" id="set-printerPaper" style="max-width:260px">
-          <option value="48mm" ${s.printerPaper === '48mm' ? 'selected' : ''}>48mm (EDC / Mini Portable Bluetooth)</option>
-          <option value="58mm" ${!s.printerPaper || s.printerPaper === '58mm' ? 'selected' : ''}>58mm (Standar Mini POS Bluetooth)</option>
-          <option value="80mm" ${s.printerPaper === '80mm' ? 'selected' : ''}>80mm (Thermal Besar / Kasir Desktop / Resto)</option>
+          <option value="48mm" ${s.printerPaper === "48mm" ? "selected" : ""}>48mm (EDC / Mini Portable Bluetooth)</option>
+          <option value="58mm" ${!s.printerPaper || s.printerPaper === "58mm" ? "selected" : ""}>58mm (Standar Mini POS Bluetooth)</option>
+          <option value="80mm" ${s.printerPaper === "80mm" ? "selected" : ""}>80mm (Thermal Besar / Kasir Desktop / Resto)</option>
         </select>
       </div>
 
@@ -216,10 +247,11 @@ export const renderSettings = async () => {
           <div class="settings-row__label">Install sebagai App</div>
           <div class="settings-row__desc">Tambahkan ke layar utama perangkat</div>
         </div>
-        ${isStandalone
-          ? `<span class="badge badge--green">✅ App Terinstall</span>`
-          : `<button class="btn btn--primary btn--sm" id="btn-install-pwa">📲 Install</button>`
-        }
+        ${
+					isStandalone
+						? `<span class="badge badge--green">✅ App Terinstall</span>`
+						: `<button class="btn btn--primary btn--sm" id="btn-install-pwa">📲 Install</button>`
+				}
       </div>
 
       <div class="settings-row">
@@ -229,7 +261,7 @@ export const renderSettings = async () => {
         </div>
         <div style="text-align:right">
           <span class="badge badge--blue" style="font-size:12px;padding:6px 12px;font-weight:800;letter-spacing:0.02em">
-            v${esc(appVersion)}${gitHash ? ` (${esc(gitHash)})` : ''}
+            v${esc(appVersion)}${gitHash ? ` (${esc(gitHash)})` : ""}
           </span>
           <div style="font-size:10px;color:var(--text-muted);margin-top:4px">
             Build: ${esc(formattedBuildDate)} • ${esc(formattedBuildClock)}
@@ -256,11 +288,11 @@ export const renderSettings = async () => {
           <div class="settings-row__desc">Kunci partisi database utama: mengikat produk, pelanggan, transaksi &amp; akun operator</div>
         </div>
         <div style="text-align:right">
-          <span class="badge ${isDeviceIsolated() ? 'badge--red' : 'badge--blue'}" style="font-size:12px;padding:6px 12px;font-weight:800;letter-spacing:0.02em">
-            ${isDeviceIsolated() ? '🔒 Sandbox Terisolasi (Offline)' : esc(getMasterStoreId())}
+          <span class="badge ${isDeviceIsolated() ? "badge--red" : "badge--blue"}" style="font-size:12px;padding:6px 12px;font-weight:800;letter-spacing:0.02em">
+            ${isDeviceIsolated() ? "🔒 Sandbox Terisolasi (Offline)" : esc(getMasterStoreId())}
           </span>
           <div style="font-size:10px;color:var(--text-muted);margin-top:4px">
-            ${isDeviceIsolated() ? 'Perangkat terputus dari database utama' : 'Database resmi terenkripsi (fadhil2026)'}
+            ${isDeviceIsolated() ? "Perangkat terputus dari database utama" : "Database resmi terenkripsi (fadhil2026)"}
           </div>
         </div>
       </div>
@@ -274,7 +306,7 @@ export const renderSettings = async () => {
           <button class="btn btn--secondary btn--sm" id="btn-copy-master-key" style="font-weight:700">📋 Salin Kunci Master</button>
           <button class="btn btn--secondary btn--sm" id="btn-set-master-key" style="font-weight:700">🔑 Masukkan Kunci</button>
           <button class="btn btn--danger btn--sm" id="btn-toggle-isolate-device" style="font-weight:700">
-            ${isDeviceIsolated() ? '🔌 Hubungkan Kembali' : '🔒 Putuskan / Isolasi'}
+            ${isDeviceIsolated() ? "🔌 Hubungkan Kembali" : "🔒 Putuskan / Isolasi"}
           </button>
         </div>
       </div>
@@ -341,13 +373,15 @@ export const renderSettings = async () => {
     </div>
   `;
 
-  bindSettingsEvents();
+	bindSettingsEvents();
 };
 
 const bindSettingsEvents = () => {
-  // Show Supabase SQL Schema Modal
-  document.getElementById('btn-show-cloud-sql')?.addEventListener('click', () => {
-    const sqlCode = `-- Jalankan perintah ini di Supabase SQL Editor (https://supabase.com/dashboard/project/wiapnhpdgjbtkblowfig/sql):
+	// Show Supabase SQL Schema Modal
+	document
+		.getElementById("btn-show-cloud-sql")
+		?.addEventListener("click", () => {
+			const sqlCode = `-- Jalankan perintah ini di Supabase SQL Editor (https://supabase.com/dashboard/project/wiapnhpdgjbtkblowfig/sql):
 -- 1. Tambah Partisi store_id ke Semua Tabel
 ALTER TABLE IF EXISTS public.products ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8';
 ALTER TABLE IF EXISTS public.customers ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8';
@@ -393,7 +427,7 @@ DO $$ BEGIN
     END IF;
 END $$;`;
 
-    const html = `
+			const html = `
       <div class="modal-header">
         <h3 class="modal-title">🛡️ Skema SQL Master Tenant &amp; Akun (Supabase)</h3>
         <button class="modal-close" id="sql-modal-close" type="button">✕</button>
@@ -409,126 +443,206 @@ END $$;`;
         <button class="btn btn--secondary btn--sm" id="btn-close-sql">Tutup</button>
       </div>
     `;
-    openModal(html, 'modal-sql');
-    document.getElementById('sql-modal-close')?.addEventListener('click', () => closeModal('modal-sql'));
-    document.getElementById('btn-close-sql')?.addEventListener('click', () => closeModal('modal-sql'));
-    document.getElementById('btn-copy-sql')?.addEventListener('click', () => {
-      navigator.clipboard?.writeText(sqlCode).then(() => {
-        window.showToast?.('✅ Perintah SQL berhasil disalin ke clipboard!', 'success');
-      });
-    });
-  });
+			openModal(html, "modal-sql");
+			document
+				.getElementById("sql-modal-close")
+				?.addEventListener("click", () => closeModal("modal-sql"));
+			document
+				.getElementById("btn-close-sql")
+				?.addEventListener("click", () => closeModal("modal-sql"));
+			document.getElementById("btn-copy-sql")?.addEventListener("click", () => {
+				navigator.clipboard?.writeText(sqlCode).then(() => {
+					window.showToast?.(
+						"✅ Perintah SQL berhasil disalin ke clipboard!",
+						"success",
+					);
+				});
+			});
+		});
 
-  // Copy Master Store Key
-  document.getElementById('btn-copy-master-key')?.addEventListener('click', () => {
-    const key = getMasterStoreId();
-    navigator.clipboard?.writeText(key).then(() => {
-      window.showToast?.(`✅ Kunci Master (${key}) berhasil disalin!`, 'success');
-    });
-  });
+	// Copy Master Store Key
+	document
+		.getElementById("btn-copy-master-key")
+		?.addEventListener("click", () => {
+			const key = getMasterStoreId();
+			navigator.clipboard?.writeText(key).then(() => {
+				window.showToast?.(
+					`✅ Kunci Master (${key}) berhasil disalin!`,
+					"success",
+				);
+			});
+		});
 
-  // Set / Change Master Store Key
-  document.getElementById('btn-set-master-key')?.addEventListener('click', async () => {
-    const current = getMasterStoreId();
-    const input = prompt('Masukkan Kunci Master Database Toko (Master Store ID):', current === 'ISOLATED_SANDBOX' ? 'STORE-BM-856CFAC8' : current);
-    if (input && input.trim()) {
-      setMasterStoreId(input.trim());
-      setupRealtimeSubscription();
-      await syncInitialData();
-      window.showToast?.(`✅ Terminal terhubung ke Master ID: ${input.trim()}`, 'success');
-      renderSettings();
-    }
-  });
+	// Set / Change Master Store Key
+	document
+		.getElementById("btn-set-master-key")
+		?.addEventListener("click", async () => {
+			const current = getMasterStoreId();
+			const input = prompt(
+				"Masukkan Kunci Master Database Toko (Master Store ID):",
+				current === "ISOLATED_SANDBOX" ? "STORE-BM-856CFAC8" : current,
+			);
+			if (input?.trim()) {
+				setMasterStoreId(input.trim());
+				setupRealtimeSubscription();
+				await syncInitialData();
+				window.showToast?.(
+					`✅ Terminal terhubung ke Master ID: ${input.trim()}`,
+					"success",
+				);
+				renderSettings();
+			}
+		});
 
-  // Toggle Isolate Device
-  document.getElementById('btn-toggle-isolate-device')?.addEventListener('click', async () => {
-    if (isDeviceIsolated()) {
-      setMasterStoreId('STORE-BM-856CFAC8');
-      setupRealtimeSubscription();
-      await syncInitialData();
-      window.showToast?.('✅ Perangkat dihubungkan kembali ke Database Utama Toko!', 'success');
-    } else {
-      if (confirm('Isolasi perangkat ini? Perangkat akan beralih ke Mode Sandbox Demo Offline dan terputus dari database cloud toko.')) {
-        setMasterStoreId('ISOLATED_SANDBOX');
-        setupRealtimeSubscription();
-        window.showToast?.('🔒 Perangkat kini dalam Mode Sandbox Terisolasi.', 'info');
-      }
-    }
-    renderSettings();
-  });
+	// Toggle Isolate Device
+	document
+		.getElementById("btn-toggle-isolate-device")
+		?.addEventListener("click", async () => {
+			if (isDeviceIsolated()) {
+				setMasterStoreId("STORE-BM-856CFAC8");
+				setupRealtimeSubscription();
+				await syncInitialData();
+				window.showToast?.(
+					"✅ Perangkat dihubungkan kembali ke Database Utama Toko!",
+					"success",
+				);
+			} else {
+				if (
+					confirm(
+						"Isolasi perangkat ini? Perangkat akan beralih ke Mode Sandbox Demo Offline dan terputus dari database cloud toko.",
+					)
+				) {
+					setMasterStoreId("ISOLATED_SANDBOX");
+					setupRealtimeSubscription();
+					window.showToast?.(
+						"🔒 Perangkat kini dalam Mode Sandbox Terisolasi.",
+						"info",
+					);
+				}
+			}
+			renderSettings();
+		});
 
-  // Manual Supabase Cloud Sync
-  document.getElementById('btn-sync-cloud-now')?.addEventListener('click', async () => {
-    const btn = document.getElementById('btn-sync-cloud-now');
-    if (btn) { btn.textContent = '🔄 Menyinkronkan...'; btn.disabled = true; }
-    try {
-      await syncInitialData();
-      window.showToast('✅ Semua data & akun berhasil disinkronkan!', 'success');
-      setTimeout(() => renderSettings(), 600);
-    } catch (err) {
-      window.showToast('Gagal sinkron cloud: ' + (err.message || 'Error'), 'error');
-    } finally {
-      if (btn) { btn.textContent = '⚡ Sinkronkan Sekarang'; btn.disabled = false; }
-    }
-  });
+	// Manual Supabase Cloud Sync
+	document
+		.getElementById("btn-sync-cloud-now")
+		?.addEventListener("click", async () => {
+			const btn = document.getElementById("btn-sync-cloud-now");
+			if (btn) {
+				btn.textContent = "🔄 Menyinkronkan...";
+				btn.disabled = true;
+			}
+			try {
+				await syncInitialData();
+				window.showToast(
+					"✅ Semua data & akun berhasil disinkronkan!",
+					"success",
+				);
+				setTimeout(() => renderSettings(), 600);
+			} catch (err) {
+				window.showToast(
+					`Gagal sinkron cloud: ${err.message || "Error"}`,
+					"error",
+				);
+			} finally {
+				if (btn) {
+					btn.textContent = "⚡ Sinkronkan Sekarang";
+					btn.disabled = false;
+				}
+			}
+		});
 
-  // Export Full Backup JSON
-  document.getElementById('btn-export-backup')?.addEventListener('click', async () => {
-    const btn = document.getElementById('btn-export-backup');
-    if (btn) { btn.textContent = '⏳ Menyiapkan...'; btn.disabled = true; }
-    try {
-      const backup = await exportFullBackup();
-      const jsonStr = JSON.stringify(backup, null, 2);
-      const blob    = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
-      const nowStr  = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-      const cleanShop = (backup.shopName || 'KASIR').replace(/[^a-zA-Z0-9]/g, '_');
-      const fname   = `Backup-KASIR-${cleanShop}-${nowStr}.json`;
+	// Export Full Backup JSON
+	document
+		.getElementById("btn-export-backup")
+		?.addEventListener("click", async () => {
+			const btn = document.getElementById("btn-export-backup");
+			if (btn) {
+				btn.textContent = "⏳ Menyiapkan...";
+				btn.disabled = true;
+			}
+			try {
+				const backup = await exportFullBackup();
+				const jsonStr = JSON.stringify(backup, null, 2);
+				const blob = new Blob([jsonStr], {
+					type: "application/json;charset=utf-8",
+				});
+				const nowStr = new Date()
+					.toISOString()
+					.replace(/[-:T]/g, "")
+					.slice(0, 14);
+				const cleanShop = (backup.shopName || "KASIR").replace(
+					/[^a-zA-Z0-9]/g,
+					"_",
+				);
+				const fname = `Backup-KASIR-${cleanShop}-${nowStr}.json`;
 
-      const url = URL.createObjectURL(blob);
-      const a   = document.createElement('a');
-      a.href     = url;
-      a.download = fname;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement("a");
+				a.href = url;
+				a.download = fname;
+				document.body.appendChild(a);
+				a.click();
+				document.body.removeChild(a);
+				setTimeout(() => URL.revokeObjectURL(url), 5000);
 
-      window.showToast('✅ File backup berhasil diunduh!', 'success');
-    } catch (err) {
-      console.error('[export-backup]', err);
-      window.showToast('Gagal ekspor backup: ' + (err.message || 'Error'), 'error');
-    } finally {
-      if (btn) { btn.textContent = '📥 Unduh Backup JSON'; btn.disabled = false; }
-    }
-  });
+				window.showToast("✅ File backup berhasil diunduh!", "success");
+			} catch (err) {
+				console.error("[export-backup]", err);
+				window.showToast(
+					`Gagal ekspor backup: ${err.message || "Error"}`,
+					"error",
+				);
+			} finally {
+				if (btn) {
+					btn.textContent = "📥 Unduh Backup JSON";
+					btn.disabled = false;
+				}
+			}
+		});
 
-  // Import Backup JSON Trigger
-  document.getElementById('btn-trigger-import')?.addEventListener('click', () => {
-    document.getElementById('input-import-backup')?.click();
-  });
+	// Import Backup JSON Trigger
+	document
+		.getElementById("btn-trigger-import")
+		?.addEventListener("click", () => {
+			document.getElementById("input-import-backup")?.click();
+		});
 
-  // Import Backup File Change
-  document.getElementById('input-import-backup')?.addEventListener('change', (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const text = event.target?.result;
-        const parsed = JSON.parse(text);
+	// Import Backup File Change
+	document
+		.getElementById("input-import-backup")
+		?.addEventListener("change", (e) => {
+			const file = e.target.files?.[0];
+			if (!file) return;
+			const reader = new FileReader();
+			reader.onload = async (event) => {
+				try {
+					const text = event.target?.result;
+					const parsed = JSON.parse(text);
 
-        if (!parsed.data || (!parsed.data.products && !parsed.data.transactions)) {
-          window.showToast('Format file backup tidak valid!', 'error');
-          return;
-        }
+					if (
+						!parsed.data ||
+						(!parsed.data.products && !parsed.data.transactions)
+					) {
+						window.showToast("Format file backup tidak valid!", "error");
+						return;
+					}
 
-        const pCount = (parsed.data.products || []).length;
-        const cCount = (parsed.data.customers || []).length;
-        const tCount = (parsed.data.transactions || []).length;
-        const eCount = (parsed.data.expenses || []).length;
-        const expDate = parsed.exportedAt ? new Date(parsed.exportedAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Tidak diketahui';
+					const pCount = (parsed.data.products || []).length;
+					const cCount = (parsed.data.customers || []).length;
+					const tCount = (parsed.data.transactions || []).length;
+					const eCount = (parsed.data.expenses || []).length;
+					const expDate = parsed.exportedAt
+						? new Date(parsed.exportedAt).toLocaleDateString("id-ID", {
+								day: "2-digit",
+								month: "short",
+								year: "numeric",
+								hour: "2-digit",
+								minute: "2-digit",
+							})
+						: "Tidak diketahui";
 
-        const modalHtml = `
+					const modalHtml = `
           <div class="modal-header">
             <span class="modal-title">📤 Konfirmasi Impor Data</span>
             <button class="modal-close" id="imp-x">✕</button>
@@ -536,7 +650,7 @@ END $$;`;
           <div class="modal-body">
             <div style="padding:12px;background:#dbeafe;border-radius:10px;font-size:12px;color:#1e40af;margin-bottom:12px">
               ℹ️ <strong>File Backup Terdeteksi:</strong><br>
-              Toko: <strong>${esc(parsed.shopName || 'Blue Mountain')}</strong><br>
+              Toko: <strong>${esc(parsed.shopName || "Blue Mountain")}</strong><br>
               Waktu Ekspor: ${expDate}
             </div>
 
@@ -583,139 +697,194 @@ END $$;`;
           </div>
         `;
 
-        openModal(modalHtml, 'import-confirm-modal');
+					openModal(modalHtml, "import-confirm-modal");
 
-        setTimeout(() => {
-          document.getElementById('imp-x')?.addEventListener('click',      () => closeModal('import-confirm-modal'));
-          document.getElementById('imp-cancel')?.addEventListener('click', () => closeModal('import-confirm-modal'));
-          document.getElementById('imp-confirm')?.addEventListener('click', async () => {
-            const mode = document.querySelector('input[name="import-mode"]:checked')?.value || 'replace';
-            const btnConfirm = document.getElementById('imp-confirm');
-            if (btnConfirm) { btnConfirm.textContent = '⏳ Memulihkan...'; btnConfirm.disabled = true; }
+					setTimeout(() => {
+						document
+							.getElementById("imp-x")
+							?.addEventListener("click", () =>
+								closeModal("import-confirm-modal"),
+							);
+						document
+							.getElementById("imp-cancel")
+							?.addEventListener("click", () =>
+								closeModal("import-confirm-modal"),
+							);
+						document
+							.getElementById("imp-confirm")
+							?.addEventListener("click", async () => {
+								const mode =
+									document.querySelector('input[name="import-mode"]:checked')
+										?.value || "replace";
+								const btnConfirm = document.getElementById("imp-confirm");
+								if (btnConfirm) {
+									btnConfirm.textContent = "⏳ Memulihkan...";
+									btnConfirm.disabled = true;
+								}
 
-            try {
-              await importFullBackup(parsed, mode);
-              // Reload fresh data into store
-              const [newProds, newCusts, newTxs, newExps] = await Promise.all([
-                getAllProducts(),
-                getAllCustomers(),
-                getAllTransactions(),
-                getAllExpenses(),
-              ]);
-              store.setProducts(newProds);
-              store.setCustomers(newCusts);
-              store.setTransactions(newTxs);
-              store.setExpenses(newExps);
+								try {
+									await importFullBackup(parsed, mode);
+									// Reload fresh data into store
+									const [newProds, newCusts, newTxs, newExps] =
+										await Promise.all([
+											getAllProducts(),
+											getAllCustomers(),
+											getAllTransactions(),
+											getAllExpenses(),
+										]);
+									store.setProducts(newProds);
+									store.setCustomers(newCusts);
+									store.setTransactions(newTxs);
+									store.setExpenses(newExps);
 
-              closeModal('import-confirm-modal');
-              window.showToast('🎉 Data berhasil dipulihkan & sinkron!', 'success');
-              setTimeout(() => renderSettings(), 600);
-            } catch (err) {
-              console.error('[import-backup]', err);
-              window.showToast('Gagal memulihkan data: ' + err.message, 'error');
-            }
-          });
-        }, 0);
+									closeModal("import-confirm-modal");
+									window.showToast(
+										"🎉 Data berhasil dipulihkan & sinkron!",
+										"success",
+									);
+									setTimeout(() => renderSettings(), 600);
+								} catch (err) {
+									console.error("[import-backup]", err);
+									window.showToast(
+										`Gagal memulihkan data: ${err.message}`,
+										"error",
+									);
+								}
+							});
+					}, 0);
+				} catch (err) {
+					console.error("[parse-backup]", err);
+					window.showToast("File JSON rusak atau tidak terbaca!", "error");
+				}
+			};
+			reader.readAsText(file);
+			e.target.value = ""; // reset
+		});
+	document
+		.getElementById("btn-save-settings")
+		?.addEventListener("click", async () => {
+			const fields = [
+				"shopName",
+				"shopAddress",
+				"shopPhone",
+				"cashierName",
+				"taxRate",
+				"bankName",
+				"bankNumber",
+				"bankHolder",
+				"printerUrl",
+				"printerPaper",
+				"qrisNumber",
+			];
+			const updates = {};
+			for (const f of fields) {
+				const el = document.getElementById(`set-${f}`);
+				if (el) {
+					updates[f] =
+						f === "taxRate" ? parseFloat(el.value) || 0 : el.value.trim();
+					await setSetting(f, updates[f]);
+				}
+			}
 
-      } catch (err) {
-        console.error('[parse-backup]', err);
-        window.showToast('File JSON rusak atau tidak terbaca!', 'error');
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = ''; // reset
-  });
-  document.getElementById('btn-save-settings')?.addEventListener('click', async () => {
-    const fields = [
-      'shopName', 'shopAddress', 'shopPhone', 'cashierName', 'taxRate',
-      'bankName', 'bankNumber', 'bankHolder', 'printerUrl', 'printerPaper', 'qrisNumber',
-    ];
-    const updates = {};
-    for (const f of fields) {
-      const el = document.getElementById(`set-${f}`);
-      if (el) {
-        updates[f] = f === 'taxRate' ? parseFloat(el.value) || 0 : el.value.trim();
-        await setSetting(f, updates[f]);
-      }
-    }
+			store.updateSettings(updates);
+			window.showToast("Pengaturan berhasil disimpan", "success");
+		});
 
-    store.updateSettings(updates);
-    window.showToast('Pengaturan berhasil disimpan', 'success');
-  });
+	document
+		.getElementById("btn-settings-switch-op")
+		?.addEventListener("click", () => {
+			window.dispatchEvent(new CustomEvent("request-operator-switch"));
+		});
 
-  document.getElementById('btn-settings-switch-op')?.addEventListener('click', () => {
-    window.dispatchEvent(new CustomEvent('request-operator-switch'));
-  });
+	document
+		.getElementById("btn-settings-logout")
+		?.addEventListener("click", () => {
+			if (confirm("Keluar dari sesi operator kasir?")) {
+				window.dispatchEvent(new CustomEvent("request-logout"));
+			}
+		});
 
-  document.getElementById('btn-settings-logout')?.addEventListener('click', () => {
-    if (confirm('Keluar dari sesi operator kasir?')) {
-      window.dispatchEvent(new CustomEvent('request-logout'));
-    }
-  });
+	document.getElementById("btn-test-48")?.addEventListener("click", () => {
+		printTestReceipt("48mm");
+	});
 
-  document.getElementById('btn-test-48')?.addEventListener('click', () => {
-    printTestReceipt('48mm');
-  });
+	document.getElementById("btn-test-58")?.addEventListener("click", () => {
+		printTestReceipt("58mm");
+	});
 
-  document.getElementById('btn-test-58')?.addEventListener('click', () => {
-    printTestReceipt('58mm');
-  });
+	document.getElementById("btn-test-80")?.addEventListener("click", () => {
+		printTestReceipt("80mm");
+	});
 
-  document.getElementById('btn-test-80')?.addEventListener('click', () => {
-    printTestReceipt('80mm');
-  });
+	document
+		.getElementById("btn-printer-guide")
+		?.addEventListener("click", () => {
+			showPrinterGuide();
+		});
 
-  document.getElementById('btn-printer-guide')?.addEventListener('click', () => {
-    showPrinterGuide();
-  });
+	document.getElementById("btn-install-pwa")?.addEventListener("click", () => {
+		if (window._pwaPrompt) {
+			window._pwaPrompt.prompt();
+		} else {
+			window.showToast(
+				"Buka di Chrome / Edge untuk meng-install aplikasi ini",
+				"info",
+			);
+		}
+	});
 
-  document.getElementById('btn-install-pwa')?.addEventListener('click', () => {
-    if (window._pwaPrompt) {
-      window._pwaPrompt.prompt();
-    } else {
-      window.showToast('Buka di Chrome / Edge untuk meng-install aplikasi ini', 'info');
-    }
-  });
+	document
+		.getElementById("btn-clear-cache")
+		?.addEventListener("click", async () => {
+			try {
+				if ("caches" in window) {
+					const keys = await caches.keys();
+					await Promise.all(keys.map((k) => caches.delete(k)));
+				}
+				if ("serviceWorker" in navigator) {
+					const registrations =
+						await navigator.serviceWorker.getRegistrations();
+					for (const reg of registrations) {
+						await reg.unregister();
+					}
+				}
+				window.showToast("Cache dihapus. Memperbarui...", "success");
+				setTimeout(() => window.location.reload(), 1000);
+			} catch (err) {
+				console.error("[cache]", err);
+				window.showToast("Gagal hapus cache", "error");
+			}
+		});
 
-  document.getElementById('btn-clear-cache')?.addEventListener('click', async () => {
-    try {
-      if ('caches' in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map(k => caches.delete(k)));
-      }
-      if ('serviceWorker' in navigator) {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        for (const reg of registrations) {
-          await reg.unregister();
-        }
-      }
-      window.showToast('Cache dihapus. Memperbarui...', 'success');
-      setTimeout(() => window.location.reload(), 1000);
-    } catch (err) {
-      console.error('[cache]', err);
-      window.showToast('Gagal hapus cache', 'error');
-    }
-  });
-
-  document.getElementById('btn-reset-all')?.addEventListener('click', async () => {
-    const keyword = prompt('⚠️ KONFIRMASI PENGHAPUSAN PERMANEN\n\nTindakan ini akan menghapus SELURUH data lokal (transaksi, pelanggan, pengeluaran, dan produk).\n\nKetik kata "HAPUS" dengan huruf besar untuk melanjutkan:');
-    if (keyword === 'HAPUS') {
-      try {
-        await clearAllData();
-        window.showToast('Semua data lokal berhasil dihapus. Memuat ulang...', 'error');
-        setTimeout(() => window.location.reload(), 1500);
-      } catch (err) {
-        console.error('[reset]', err);
-        window.showToast('Gagal menghapus data', 'error');
-      }
-    } else if (keyword !== null) {
-      window.showToast('Penghapusan dibatalkan (kata sandi konfirmasi salah)', 'info');
-    }
-  });
+	document
+		.getElementById("btn-reset-all")
+		?.addEventListener("click", async () => {
+			const keyword = prompt(
+				'⚠️ KONFIRMASI PENGHAPUSAN PERMANEN\n\nTindakan ini akan menghapus SELURUH data lokal (transaksi, pelanggan, pengeluaran, dan produk).\n\nKetik kata "HAPUS" dengan huruf besar untuk melanjutkan:',
+			);
+			if (keyword === "HAPUS") {
+				try {
+					await clearAllData();
+					window.showToast(
+						"Semua data lokal berhasil dihapus. Memuat ulang...",
+						"error",
+					);
+					setTimeout(() => window.location.reload(), 1500);
+				} catch (err) {
+					console.error("[reset]", err);
+					window.showToast("Gagal menghapus data", "error");
+				}
+			} else if (keyword !== null) {
+				window.showToast(
+					"Penghapusan dibatalkan (kata sandi konfirmasi salah)",
+					"info",
+				);
+			}
+		});
 };
 
 const showPrinterGuide = () => {
-  const html = `
+	const html = `
     <div class="modal-header">
       <span class="modal-title">🖨️ Panduan Lengkap Koneksi Printer Thermal (48/58/80mm)</span>
       <button class="modal-close" id="pg-close">✕</button>
@@ -741,9 +910,13 @@ const showPrinterGuide = () => {
       <button class="btn btn--primary" id="pg-close2">Mengerti 👍</button>
     </div>
   `;
-  openModal(html, 'printer-guide');
-  setTimeout(() => {
-    document.getElementById('pg-close')?.addEventListener('click',  () => closeModal('printer-guide'));
-    document.getElementById('pg-close2')?.addEventListener('click', () => closeModal('printer-guide'));
-  }, 0);
+	openModal(html, "printer-guide");
+	setTimeout(() => {
+		document
+			.getElementById("pg-close")
+			?.addEventListener("click", () => closeModal("printer-guide"));
+		document
+			.getElementById("pg-close2")
+			?.addEventListener("click", () => closeModal("printer-guide"));
+	}, 0);
 };

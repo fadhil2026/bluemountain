@@ -2,372 +2,386 @@
  * db.js — Dexie.js IndexedDB wrapper
  * Replaces manual IndexedDB with reactive, typed, clean API.
  */
-import Dexie from 'dexie';
+import Dexie from "dexie";
 import {
-  pushProductToCloud,
-  deleteProductFromCloud,
-  pushCustomerToCloud,
-  deleteCustomerFromCloud,
-  pushTransactionToCloud,
-  deleteTransactionFromCloud,
-  pushExpenseToCloud,
-  deleteExpenseFromCloud,
-  pushSettingToCloud,
-  pushUserToCloud,
-  deleteUserFromCloud,
-  isServerOnline,
-  checkStagedOfflineTransactions,
-} from './supabase.js';
-import { generateUUID } from './utils/crypto.js';
+	checkStagedOfflineTransactions,
+	deleteCustomerFromCloud,
+	deleteExpenseFromCloud,
+	deleteProductFromCloud,
+	deleteTransactionFromCloud,
+	deleteUserFromCloud,
+	isServerOnline,
+	pushCustomerToCloud,
+	pushExpenseToCloud,
+	pushProductToCloud,
+	pushSettingToCloud,
+	pushTransactionToCloud,
+	pushUserToCloud,
+} from "./supabase.js";
+import { generateUUID } from "./utils/crypto.js";
 
-export const db = new Dexie('BlueMountainPOS');
+export const db = new Dexie("BlueMountainPOS");
 
 db.version(2).stores({
-  products:     '++id, category',
-  transactions: '++id, dateKey, paymentStatus, paymentMethod',
-  settings:     'key',
-  expenses:     '++id, dateKey, category',
+	products: "++id, category",
+	transactions: "++id, dateKey, paymentStatus, paymentMethod",
+	settings: "key",
+	expenses: "++id, dateKey, category",
 });
 
 db.version(3).stores({
-  products:     '++id, category, sku',
-  customers:    '++id, name, phone, category, totalDebt',
-  transactions: '++id, dateKey, paymentStatus, paymentMethod, customerName',
-  settings:     'key',
-  expenses:     '++id, dateKey, category',
+	products: "++id, category, sku",
+	customers: "++id, name, phone, category, totalDebt",
+	transactions: "++id, dateKey, paymentStatus, paymentMethod, customerName",
+	settings: "key",
+	expenses: "++id, dateKey, category",
 });
 
 db.version(4).stores({
-  products:     '++id, category, sku',
-  customers:    '++id, name, phone, category, totalDebt',
-  transactions: '++id, dateKey, paymentStatus, paymentMethod, customerName',
-  settings:     'key',
-  expenses:     '++id, dateKey, category',
-  users:        '++id, username, role, isActive',
+	products: "++id, category, sku",
+	customers: "++id, name, phone, category, totalDebt",
+	transactions: "++id, dateKey, paymentStatus, paymentMethod, customerName",
+	settings: "key",
+	expenses: "++id, dateKey, category",
+	users: "++id, username, role, isActive",
 });
 
 // v5: Enterprise Web2 UUIDs + Tombstone Soft Deletion
 db.version(5).stores({
-  products:     'id, category, sku, deleted_at',
-  customers:    'id, name, phone, category, totalDebt, deleted_at',
-  transactions: 'id, invoiceNo, dateKey, paymentStatus, paymentMethod, customerName, syncStatus, deleted_at',
-  settings:     'key',
-  expenses:     'id, dateKey, category, deleted_at',
-  users:        'id, username, role, isActive',
+	products: "id, category, sku, deleted_at",
+	customers: "id, name, phone, category, totalDebt, deleted_at",
+	transactions:
+		"id, invoiceNo, dateKey, paymentStatus, paymentMethod, customerName, syncStatus, deleted_at",
+	settings: "key",
+	expenses: "id, dateKey, category, deleted_at",
+	users: "id, username, role, isActive",
 });
 
 // ── Users (RBAC) ──
-export const getAllUsers        = () => db.users.toArray();
-export const getUserById        = (id) => db.users.get(id);
-export const getUserByUsername  = (username) => db.users.where('username').equalsIgnoreCase(String(username).trim()).first();
-export const addUser            = async (u) => {
-  const user = { ...u, id: u.id ? String(u.id) : generateUUID('usr') };
-  await db.users.put(user);
-  pushUserToCloud(user).catch(() => {});
-  return user.id;
+export const getAllUsers = () => db.users.toArray();
+export const getUserById = (id) => db.users.get(id);
+export const getUserByUsername = (username) =>
+	db.users.where("username").equalsIgnoreCase(String(username).trim()).first();
+export const addUser = async (u) => {
+	const user = { ...u, id: u.id ? String(u.id) : generateUUID("usr") };
+	await db.users.put(user);
+	pushUserToCloud(user).catch(() => {});
+	return user.id;
 };
-export const updateUser         = async (u) => {
-  const user = { ...u, id: u.id ? String(u.id) : (u.username ? `usr_${String(u.username).toLowerCase().trim()}` : generateUUID('usr')) };
-  const res = await db.users.put(user);
-  pushUserToCloud(user).catch(() => {});
-  return res;
+export const updateUser = async (u) => {
+	const user = {
+		...u,
+		id: u.id
+			? String(u.id)
+			: u.username
+				? `usr_${String(u.username).toLowerCase().trim()}`
+				: generateUUID("usr"),
+	};
+	const res = await db.users.put(user);
+	pushUserToCloud(user).catch(() => {});
+	return res;
 };
-export const deleteUser         = async (id) => {
-  const user = await db.users.get(id);
-  const res = await db.users.delete(id);
-  if (user && user.username) {
-    deleteUserFromCloud(user.username).catch(() => {});
-  }
-  return res;
+export const deleteUser = async (id) => {
+	const user = await db.users.get(id);
+	const res = await db.users.delete(id);
+	if (user?.username) {
+		deleteUserFromCloud(user.username).catch(() => {});
+	}
+	return res;
 };
 
 // ── Customers ──
 export const getAllCustomers = async () => {
-  const list = await db.customers.toArray();
-  return list.filter(c => !c.deleted_at);
+	const list = await db.customers.toArray();
+	return list.filter((c) => !c.deleted_at);
 };
 export const getCustomerById = (id) => db.customers.get(id);
-export const addCustomer     = async (c) => {
-  const customer = {
-    ...c,
-    id: c.id ? String(c.id) : generateUUID('cust'),
-    deleted_at: null,
-    updated_at: new Date().toISOString()
-  };
-  await db.customers.put(customer);
-  pushCustomerToCloud(customer).catch(() => {});
-  return customer.id;
+export const addCustomer = async (c) => {
+	const customer = {
+		...c,
+		id: c.id ? String(c.id) : generateUUID("cust"),
+		deleted_at: null,
+		updated_at: new Date().toISOString(),
+	};
+	await db.customers.put(customer);
+	pushCustomerToCloud(customer).catch(() => {});
+	return customer.id;
 };
-export const updateCustomer  = async (c) => {
-  const customer = { ...c, updated_at: new Date().toISOString() };
-  const res = await db.customers.put(customer);
-  pushCustomerToCloud(customer).catch(() => {});
-  return res;
+export const updateCustomer = async (c) => {
+	const customer = { ...c, updated_at: new Date().toISOString() };
+	const res = await db.customers.put(customer);
+	pushCustomerToCloud(customer).catch(() => {});
+	return res;
 };
-export const deleteCustomer  = async (id) => {
-  const existing = await db.customers.get(id);
-  if (existing) {
-    const tombstone = {
-      ...existing,
-      deleted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    await db.customers.put(tombstone);
-    deleteCustomerFromCloud(id).catch(() => {});
-  }
-  return id;
+export const deleteCustomer = async (id) => {
+	const existing = await db.customers.get(id);
+	if (existing) {
+		const tombstone = {
+			...existing,
+			deleted_at: new Date().toISOString(),
+			updated_at: new Date().toISOString(),
+		};
+		await db.customers.put(tombstone);
+		deleteCustomerFromCloud(id).catch(() => {});
+	}
+	return id;
 };
 
 // ── Products ──
 export const getAllProducts = async () => {
-  const list = await db.products.toArray();
-  return list.filter(p => !p.deleted_at);
+	const list = await db.products.toArray();
+	return list.filter((p) => !p.deleted_at);
 };
 export const addProduct = async (p) => {
-  const product = {
-    ...p,
-    id: p.id ? String(p.id) : generateUUID('prod'),
-    deleted_at: null,
-    updated_at: new Date().toISOString()
-  };
-  await db.products.put(product);
-  pushProductToCloud(product).catch(() => {});
-  return product.id;
+	const product = {
+		...p,
+		id: p.id ? String(p.id) : generateUUID("prod"),
+		deleted_at: null,
+		updated_at: new Date().toISOString(),
+	};
+	await db.products.put(product);
+	pushProductToCloud(product).catch(() => {});
+	return product.id;
 };
 export const updateProduct = async (p) => {
-  const product = { ...p, updated_at: new Date().toISOString() };
-  const res = await db.products.put(product);
-  pushProductToCloud(product).catch(() => {});
-  return res;
+	const product = { ...p, updated_at: new Date().toISOString() };
+	const res = await db.products.put(product);
+	pushProductToCloud(product).catch(() => {});
+	return res;
 };
 export const deleteProduct = async (id) => {
-  const existing = await db.products.get(id);
-  if (existing) {
-    const tombstone = {
-      ...existing,
-      deleted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    await db.products.put(tombstone);
-    deleteProductFromCloud(id).catch(() => {});
-  }
-  return id;
+	const existing = await db.products.get(id);
+	if (existing) {
+		const tombstone = {
+			...existing,
+			deleted_at: new Date().toISOString(),
+			updated_at: new Date().toISOString(),
+		};
+		await db.products.put(tombstone);
+		deleteProductFromCloud(id).catch(() => {});
+	}
+	return id;
 };
 
 // ── Transactions ──
 export const saveTransaction = async (tx) => {
-  const online = typeof isServerOnline === 'function' ? isServerOnline() : navigator.onLine;
-  const transaction = {
-    ...tx,
-    id: tx.id ? String(tx.id) : generateUUID('tx'),
-    syncStatus: online ? 'synced' : 'staged_offline',
-    deleted_at: null,
-    updated_at: new Date().toISOString()
-  };
-  await db.transactions.put(transaction);
-  if (online) {
-    pushTransactionToCloud(transaction).catch(() => {});
-  } else {
-    try { checkStagedOfflineTransactions?.(); } catch (_) {}
-  }
-  return transaction.id;
+	const online =
+		typeof isServerOnline === "function" ? isServerOnline() : navigator.onLine;
+	const transaction = {
+		...tx,
+		id: tx.id ? String(tx.id) : generateUUID("tx"),
+		syncStatus: online ? "synced" : "staged_offline",
+		deleted_at: null,
+		updated_at: new Date().toISOString(),
+	};
+	await db.transactions.put(transaction);
+	if (online) {
+		pushTransactionToCloud(transaction).catch(() => {});
+	} else {
+		try {
+			checkStagedOfflineTransactions?.();
+		} catch (_) {}
+	}
+	return transaction.id;
 };
 export const getAllTransactions = async () => {
-  const list = await db.transactions.toArray();
-  return list.filter(t => !t.deleted_at);
+	const list = await db.transactions.toArray();
+	return list.filter((t) => !t.deleted_at);
 };
 export const deleteTransaction = async (id) => {
-  const existing = await db.transactions.get(id);
-  if (existing) {
-    const tombstone = {
-      ...existing,
-      deleted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    await db.transactions.put(tombstone);
-    deleteTransactionFromCloud(id).catch(() => {});
-  }
-  return id;
+	const existing = await db.transactions.get(id);
+	if (existing) {
+		const tombstone = {
+			...existing,
+			deleted_at: new Date().toISOString(),
+			updated_at: new Date().toISOString(),
+		};
+		await db.transactions.put(tombstone);
+		deleteTransactionFromCloud(id).catch(() => {});
+	}
+	return id;
 };
 export const updateTransaction = async (tx) => {
-  const transaction = { ...tx, updated_at: new Date().toISOString() };
-  const res = await db.transactions.put(transaction);
-  pushTransactionToCloud(transaction).catch(() => {});
-  return res;
+	const transaction = { ...tx, updated_at: new Date().toISOString() };
+	const res = await db.transactions.put(transaction);
+	pushTransactionToCloud(transaction).catch(() => {});
+	return res;
 };
 export const getTransactionsByDateKey = async (dateKey) => {
-  const list = await db.transactions.where('dateKey').equals(dateKey).toArray();
-  return list.filter(t => !t.deleted_at);
+	const list = await db.transactions.where("dateKey").equals(dateKey).toArray();
+	return list.filter((t) => !t.deleted_at);
 };
 
 // ── Expenses ──
 export const saveExpense = async (exp) => {
-  const online = typeof isServerOnline === 'function' ? isServerOnline() : navigator.onLine;
-  const expense = {
-    ...exp,
-    id: exp.id ? String(exp.id) : generateUUID('exp'),
-    syncStatus: online ? 'synced' : 'staged_offline',
-    deleted_at: null,
-    updated_at: new Date().toISOString()
-  };
-  await db.expenses.put(expense);
-  if (online) {
-    pushExpenseToCloud(expense).catch(() => {});
-  }
-  return expense.id;
+	const online =
+		typeof isServerOnline === "function" ? isServerOnline() : navigator.onLine;
+	const expense = {
+		...exp,
+		id: exp.id ? String(exp.id) : generateUUID("exp"),
+		syncStatus: online ? "synced" : "staged_offline",
+		deleted_at: null,
+		updated_at: new Date().toISOString(),
+	};
+	await db.expenses.put(expense);
+	if (online) {
+		pushExpenseToCloud(expense).catch(() => {});
+	}
+	return expense.id;
 };
 export const getAllExpenses = async () => {
-  const list = await db.expenses.toArray();
-  return list.filter(e => !e.deleted_at);
+	const list = await db.expenses.toArray();
+	return list.filter((e) => !e.deleted_at);
 };
 export const deleteExpense = async (id) => {
-  const existing = await db.expenses.get(id);
-  if (existing) {
-    const tombstone = {
-      ...existing,
-      deleted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    await db.expenses.put(tombstone);
-    deleteExpenseFromCloud(id).catch(() => {});
-  }
-  return id;
+	const existing = await db.expenses.get(id);
+	if (existing) {
+		const tombstone = {
+			...existing,
+			deleted_at: new Date().toISOString(),
+			updated_at: new Date().toISOString(),
+		};
+		await db.expenses.put(tombstone);
+		deleteExpenseFromCloud(id).catch(() => {});
+	}
+	return id;
 };
 
 // ── Settings ──
 export const getSetting = async (key) => {
-  const row = await db.settings.get(key);
-  return row?.value ?? null;
+	const row = await db.settings.get(key);
+	return row?.value ?? null;
 };
 export const setSetting = async (key, value) => {
-  await db.settings.put({ key, value });
-  pushSettingToCloud(key, value).catch(() => {});
+	await db.settings.put({ key, value });
+	pushSettingToCloud(key, value).catch(() => {});
 };
 
 // ── Server-Authoritative: Products are strictly fetched from Supabase Cloud ──
 export const seedDefaultProducts = async () => {
-  // Zero mock/dummy products. Single source of truth is Supabase Cloud.
+	// Zero mock/dummy products. Single source of truth is Supabase Cloud.
 };
 
 // ── Server-Authoritative: Master Fallback for Brand New Device ──
 // ponytail: Seed default master owner if cache is completely empty, overwritten by cloud roster once online.
 export const seedDefaultUsers = async () => {
-  const count = await db.users.count();
-  if (count > 0) return;
-  // PIN default: 123456 (6 digit) — hash di-generate dari cloud reset script
-  await db.users.put({
-    id: 'usr_admin',
-    username: 'admin',
-    name: 'Fadhilah Ramadhan',
-    role: 'owner',
-    pinHash: 'c3b558e7f7bd99bf1a0e50aa083c1ba8811e840dab3bf07bc020c724ce771e83',
-    pinSalt: '9bc6c2b0806a1040516484af5df10112',
-    isActive: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+	const count = await db.users.count();
+	if (count > 0) return;
+	// PIN default: 123456 (6 digit) — hash di-generate dari cloud reset script
+	await db.users.put({
+		id: "usr_admin",
+		username: "admin",
+		name: "Fadhilah Ramadhan",
+		role: "owner",
+		pinHash: "c3b558e7f7bd99bf1a0e50aa083c1ba8811e840dab3bf07bc020c724ce771e83",
+		pinSalt: "9bc6c2b0806a1040516484af5df10112",
+		isActive: true,
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+	});
 };
 
 // ── Clear All Data (Robust Reset) ──
 export const clearAllData = async () => {
-  await Promise.all([
-    db.products.clear(),
-    db.customers.clear(),
-    db.transactions.clear(),
-    db.expenses.clear(),
-    db.settings.clear(),
-    db.users.clear(),
-  ]);
-  sessionStorage.clear();
-  localStorage.clear();
+	await Promise.all([
+		db.products.clear(),
+		db.customers.clear(),
+		db.transactions.clear(),
+		db.expenses.clear(),
+		db.settings.clear(),
+		db.users.clear(),
+	]);
+	sessionStorage.clear();
+	localStorage.clear();
 };
 
 // ── Export Full Backup JSON (Cross-device sync) ──
 export const exportFullBackup = async () => {
-  const [products, customers, transactions, expenses, settings, users] = await Promise.all([
-    db.products.toArray(),
-    db.customers.toArray(),
-    db.transactions.toArray(),
-    db.expenses.toArray(),
-    db.settings.toArray(),
-    db.users.toArray(),
-  ]);
+	const [products, customers, transactions, expenses, settings, users] =
+		await Promise.all([
+			db.products.toArray(),
+			db.customers.toArray(),
+			db.transactions.toArray(),
+			db.expenses.toArray(),
+			db.settings.toArray(),
+			db.users.toArray(),
+		]);
 
-  const shopSetting = settings.find(s => s.key === 'shopName');
-  const shopName = shopSetting?.value || 'Blue Mountain';
+	const shopSetting = settings.find((s) => s.key === "shopName");
+	const shopName = shopSetting?.value || "Blue Mountain";
 
-  return {
-    app: 'Blue Mountain POS',
-    version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0',
-    exportedAt: new Date().toISOString(),
-    shopName,
-    data: {
-      products,
-      customers,
-      transactions,
-      expenses,
-      settings,
-      users,
-    },
-    meta: {
-      productCount: products.length,
-      customerCount: customers.length,
-      transactionCount: transactions.length,
-      expenseCount: expenses.length,
-      settingCount: settings.length,
-      userCount: users.length,
-    },
-  };
+	return {
+		app: "Blue Mountain POS",
+		version: typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.0.0",
+		exportedAt: new Date().toISOString(),
+		shopName,
+		data: {
+			products,
+			customers,
+			transactions,
+			expenses,
+			settings,
+			users,
+		},
+		meta: {
+			productCount: products.length,
+			customerCount: customers.length,
+			transactionCount: transactions.length,
+			expenseCount: expenses.length,
+			settingCount: settings.length,
+			userCount: users.length,
+		},
+	};
 };
 
 // ── Import Full Backup JSON (Cross-device sync) ──
-export const importFullBackup = async (backupJson, mode = 'replace') => {
-  if (!backupJson || !backupJson.data) {
-    throw new Error('Format file backup tidak valid atau rusak.');
-  }
+export const importFullBackup = async (backupJson, mode = "replace") => {
+	if (!backupJson?.data) {
+		throw new Error("Format file backup tidak valid atau rusak.");
+	}
 
-  const {
-    products = [],
-    customers = [],
-    transactions = [],
-    expenses = [],
-    settings = [],
-    users = []
-  } = backupJson.data;
+	const {
+		products = [],
+		customers = [],
+		transactions = [],
+		expenses = [],
+		settings = [],
+		users = [],
+	} = backupJson.data;
 
-  if (mode === 'replace') {
-    await Promise.all([
-      db.products.clear(),
-      db.customers.clear(),
-      db.transactions.clear(),
-      db.expenses.clear(),
-      db.settings.clear(),
-      db.users.clear(),
-    ]);
+	if (mode === "replace") {
+		await Promise.all([
+			db.products.clear(),
+			db.customers.clear(),
+			db.transactions.clear(),
+			db.expenses.clear(),
+			db.settings.clear(),
+			db.users.clear(),
+		]);
 
-    if (products.length)     await db.products.bulkAdd(products);
-    if (customers.length)    await db.customers.bulkAdd(customers);
-    if (transactions.length) await db.transactions.bulkAdd(transactions);
-    if (expenses.length)     await db.expenses.bulkAdd(expenses);
-    if (settings.length)     await db.settings.bulkPut(settings);
-    if (users.length)        await db.users.bulkAdd(users);
-  } else if (mode === 'merge') {
-    if (products.length)     await db.products.bulkPut(products);
-    if (customers.length)    await db.customers.bulkPut(customers);
-    if (transactions.length) await db.transactions.bulkPut(transactions);
-    if (expenses.length)     await db.expenses.bulkPut(expenses);
-    if (settings.length)     await db.settings.bulkPut(settings);
-    if (users.length)        await db.users.bulkPut(users);
-  }
+		if (products.length) await db.products.bulkAdd(products);
+		if (customers.length) await db.customers.bulkAdd(customers);
+		if (transactions.length) await db.transactions.bulkAdd(transactions);
+		if (expenses.length) await db.expenses.bulkAdd(expenses);
+		if (settings.length) await db.settings.bulkPut(settings);
+		if (users.length) await db.users.bulkAdd(users);
+	} else if (mode === "merge") {
+		if (products.length) await db.products.bulkPut(products);
+		if (customers.length) await db.customers.bulkPut(customers);
+		if (transactions.length) await db.transactions.bulkPut(transactions);
+		if (expenses.length) await db.expenses.bulkPut(expenses);
+		if (settings.length) await db.settings.bulkPut(settings);
+		if (users.length) await db.users.bulkPut(users);
+	}
 
-  return {
-    products: products.length,
-    customers: customers.length,
-    transactions: transactions.length,
-    expenses: expenses.length,
-    settings: settings.length,
-    users: users.length,
-  };
+	return {
+		products: products.length,
+		customers: customers.length,
+		transactions: transactions.length,
+		expenses: expenses.length,
+		settings: settings.length,
+		users: users.length,
+	};
 };
 
 // ── Open DB (Dexie opens lazily, but we can pre-open) ──

@@ -6,9 +6,9 @@
 ## 1. 14 Aturan Mutlak Pengembangan (Absolute Rules)
 
 1. **Zero Placeholder / Zero Mock**:
-   - Dilarang keras menyisakan data tiruan, dummy hardcoded, atau placeholder statis pada alur data produksi.
+   - Dilarang keras menyisakan data tiruan, dummy hardcoded, atau placeholder statis pada alur data produksi. Seluruh master data produk diambil nyata dari Supabase Cloud.
 2. **Zero Syntax & Compilation Error**:
-   - Setiap file JavaScript wajib lolos verifikasi AST parser Node.js (`node --check`) tanpa peringatan sintaksis.
+   - Setiap file JavaScript wajib lolos verifikasi AST parser Node.js (`node --check`) dan Biome (`npx @biomejs/biome check`) tanpa error/warning.
 3. **Immutability Versioning**:
    - Versi `package.json`, runtime `__APP_VERSION__`, dan badge `README.md` wajib tersinkronisasi otomatis via `scripts/verify.js` berdasarkan revisi commit Git aktual.
 4. **Mandatory Build Validation**:
@@ -39,15 +39,21 @@
 ## 2. Checklist Eksekusi Pra-Deploy (Deployment Quality Gate)
 
 ```bash
-# 1. Jalankan audit sintaksis seluruh file JS & verifikasi versi
+# 1. Jalankan linter & formatter Rust Biome (0 warning)
+npx @biomejs/biome check --write js functions scripts
+
+# 2. Jalankan audit sintaksis seluruh file JS & verifikasi versi
 npm run verify
 
-# 2. Jalankan build bundling Vite & PWA Service Worker
+# 3. Jalankan pengujian logika bisnis, matematika & kriptografi
+node scripts/audit-e2e.js
+
+# 4. Jalankan build bundling Vite & PWA Service Worker
 npm run build
 
-# 3. Validasi status git & commit
+# 5. Validasi status git & commit
 git status
 git add -A
-git commit -m "..."
+git commit -m "chore(release): auto-sync production artifacts"
 git push origin main
 ```

@@ -1,5 +1,5 @@
-# 📐 01 — MASTER BLUEPRINT: ARSITEKTUR POS & CRM ENTERPRISE (v1.0.1)
-**Blue Mountain Refilling Station POS & CRM — Personal & Proprietary Architecture (v1.0.1)**
+# 📐 01 — MASTER BLUEPRINT: ARSITEKTUR POS & CRM ENTERPRISE (v1.1.0)
+**Blue Mountain Refilling Station POS & CRM — Personal & Proprietary Architecture (v1.1.0)**
 
 ---
 
@@ -10,8 +10,8 @@
 │               ENTERPRISE POINT OF SALE & RETAIL ENGINE (PWA)                     │
 │                                                                                  │
 │  ┌──────────────┐     ┌──────────────┐     ┌───────────────────────────────────┐ │
-│  │   8 Views    │ <-> │ Reactive     │ <-> │ Dexie.js (IndexedDB v5)           │ │
-│  │ Seragam & Res│     │ Store Event  │     │ High-Speed Read Cache (0ms)       │ │
+│  │   9 Views    │ <-> │ Reactive     │ <-> │ Dexie.js (IndexedDB v5)           │ │
+│  │ (Seragam)    │     │ Store Event  │     │ High-Speed Read Cache (0ms)       │ │
 │  └──────────────┘     └──────────────┘     └───────────────────────────────────┘ │
 │         │                                                   │                    │
 │         ├────────────────────────┬──────────────────────────┤                    │
@@ -40,60 +40,60 @@
 
 ---
 
-## 2. 8 Modul Tampilan Inti & Mesin Utilitas
+## 2. 9 Modul Tampilan Inti & Mesin Utilitas
 
-1. **Kasir Point of Sale (`pos.js`)**:
+1. **Portal Masuk Kasir & Operator (`login.js`)**:
+   - Fullscreen portal dengan keypad on-screen dan input keyboard fisik.
+   - Salted SHA-256 + 16-byte random salt & Web Crypto API constant-time comparison.
+   - Fallback login manual (Username + PIN) bila cache lokal kosong.
+2. **Kasir Point of Sale (`pos.js`)**:
    - Multi-tender payment (Tunai, Transfer Bank, Piutang/Hutang, Dinamis QRIS).
    - Pemilihan & pembersihan pelanggan transaksi reaktif.
    - Quick-add customer & kalkulasi diskon/pajak presisi integer Rupiah.
-2. **Master Produk & Inventaris (`products.js`)**:
+3. **Master Produk & Inventaris (`products.js`)**:
    - Auto SKU generator (`BM-001`, `BM-002`).
    - Client-side Canvas WebP photo compression (128px, ~4KB) & emoji fallback.
    - Manajemen stok minimum, harga modal (cost price), harga jual, & kategori produk.
-3. **Manajemen Pelanggan & CRM 360° (`customers.js`)**:
+   - Single source of truth: 100% tersinkronisasi dari Supabase Cloud (Zero local mock/dummy).
+4. **Manajemen Pelanggan & CRM 360° (`customers.js`)**:
    - Profil pelanggan, segmentasi (*Rumah Tangga, Kantor, Reseller, VIP*).
    - Sub-buku besar piutang pelanggan (*Accounts Receivable Sub-Ledger*).
    - Pelacakan saldo aset galon fisik pinjaman (*Loaned Container Tracking*).
    - Tombol instan WhatsApp pesan tagihan/sapaan (`wa.me`).
    - Tata letak responsif adaptif resolusi HP/Tablet/Desktop dengan tabel scroll horizontal & paginasi permanen.
-4. **Riwayat & Detail Transaksi (`transactions.js`)**:
+5. **Riwayat & Detail Transaksi (`transactions.js`)**:
    - Filter rentang tanggal fleksibel (Hari ini, 7 hari, 30 hari, kustom).
    - Paginasi permanen & pencarian transaksi.
    - Modal pelunasan piutang bertahap & cetak ulang struk thermal.
-5. **Laporan Analitik & Portabilitas Data (`reports.js`)**:
+6. **Laporan Analitik & Portabilitas Data (`reports.js`)**:
    - Ringkasan omzet kotor, HPP (COGS), laba kotor, dan laba bersih.
-   - Grafik penjualan harian/bulanan & jam sibuk kasir.
+   - Grafik penjualan harian/bulanan & jam sibuk kasir via Chart.js.
    - Export Laporan PDF Resmi (jsPDF + autoTable) & Export Spreadsheet CSV/Excel.
-6. **Keuangan & Valuasi Aset (`finance.js`)**:
+7. **Keuangan & Valuasi Aset (`finance.js`)**:
    - Standar Bagan Akun (COA: 1001 Kas, 1002 Bank, 1101 Piutang, 4001 Pendapatan, 6001-6099 Beban).
-   - Laporan arus kas masuk vs beban operasional.
+   - Laporan arus kas masuk vs beban operasional berbasis integer precision.
    - Valuasi aset fisik galon toko (saldo dipinjamkan vs saldo di toko).
-7. **Pengaturan & Integrasi Perangkat (`settings.js`)**:
-   - Profil toko, rekening bank, kustomisasi teks struk & WhatsApp.
-   - Pemilihan ukuran kertas thermal (48mm, 58mm, 80mm).
-   - Kredensial Supabase Cloud Sync, backup database JSON lokal, & restore aman.
-8. **Manajemen Akun & Kontrol Akses Berbasis Peran / RBAC (`users.js`)**:
-   - Tiga tingkatan peran: `owner`, `supervisor`, `cashier`.
-   - Modul eksklusif Owner untuk manajemen staf, aktivasi/penonaktifan, dan atur ulang PIN aman.
-   - Modal login numpad layar sentuh interaktif dengan indikator masking PIN 6-titik anti-intip (`modals.js`).
-   - Kriptografi PIN Salted SHA-256 (16-byte random salt + Web Crypto API) dengan perbandingan waktu konstan (*constant-time XOR*) mencegah serangan *timing attack* (`crypto.js`).
-9. **Universal Thermal Print & QRIS Engine (`printer.js`, `qris.js`, `receipt.js`)**:
-   - Pure Base64 Synchronous High-Contrast Logo rendering.
-   - Direct Print Spooler CSS `@page` zero-margin.
-   - EMVCo Dynamic QRIS TLV Tag 54 injection & CRC16-CCITT generator.
+8. **Pengaturan Sistem & Toko (`settings.js`)**:
+   - Profil outlet, alamat, nomor telepon, dan identitas struk thermal.
+   - Backup & Restore JSON terenkripsi lintas perangkat.
+   - Konfigurasi tarif pajak dan saldo modal awal kasir.
+9. **Manajemen Pengguna & RBAC (`users.js`)**:
+   - Multi-role isolation: `owner`, `supervisor`, `cashier`.
+   - Reset PIN operator aman dengan hashing client-side.
+   - Roster pengguna tersinkronisasi otomatis dengan Cloud PostgreSQL settings.
 
 ---
 
-## 3. Matriks Keamanan & Hardening Industri
+## 3. Ekosistem Tooling Vibe Coding 10-Fase (0–100 Pipeline)
 
- 1. **Content Security Policy (CSP)**: `default-src 'self'`, `connect-src` terisolasi ketat ke Supabase WSS/HTTPS.
- 2. **Zero-Plaintext PIN Storage**: PIN tidak pernah disimpan plaintext di IndexedDB, Cloud, maupun Git. Hanya hash salted 64 karakter heksadesimal yang tersimpan.
- 3. **Role-Based Access Control (RBAC)**: Guard navigasi otomatis mencegah kasir mengakses modul Pengaturan, Keuangan, dan Manajemen Akun.
- 4. **Anti-XSS**: Sanitasi input ganda via `esc()` dan DOMPurify.
- 5. **Segregasi Kunci Cloud**: `sb_publishable_...` untuk client publik; `sb_secret_...` terisolasi lokal di `.env` untuk automasi `scripts/supabase-admin.js`.
- 6. **Row Level Security (RLS)**: Hak akses tabel dibatasi ketat via SQL policies (`docs/05_SECURITY_HARDENING.sql` dan `docs/08_USERS_MANAGEMENT_SCHEMA.sql`).
- 7. **Production Stripping**: Esbuild otomatis menghapus `console.log` dan `debugger` di dist.
- 8. **Zero Memory Leak**: Kompresi gambar client-side membatasi pemakaian RAM browser.
- 9. **Reactive Event Parity**: Semua modul terhubung ke bus event (`store.on(...)`) untuk sinkronisasi seketika antar-tampilan.
- 10. **Ergonomi Layanan Layar Sentuh**: Docking macOS otomatis kembali ke posisi bawah dan mendukung navigasi gesture swipe antar-halaman pada layar sentuh.
- 11. **Edge Deployment Cloudflare Pages**: Terhubung ke proyek `bluemountain-pos` dengan domain produksi aktif: `https://bluemountain-pos-c2k.pages.dev`.
+Sistem ini didukung oleh toolchain enterprise yang terpasang di Antigravity IDE:
+* **Fase 0**: `graphify` (pemetaan AST & dependensi) + `graphrag` + `mem0`.
+* **Fase 1**: `prd-taskmaster` (graf tugas deterministik) + `ralph` (loop PRD otonom).
+* **Fase 2**: `akaunting` (standar buku besar) + `trpc-architecture` (typesafe contract).
+* **Fase 3**: `vibe-coding-engineer` + `ui-ux-design-system` (glassmorphism & dark mode).
+* **Fase 4**: `anti-hallucination-verifier` + `production-code-enforcer` + `bug-hunter-debugger`.
+* **Fase 5**: `claude-bughunter` (83 modul hunt-*) + `semgrep` + `gitleaks`.
+* **Fase 6**: `biome-linter` (Rust-based instant format & zero-warning linting).
+* **Fase 7**: `vitest-runner` (unit test cepat) + `playwright-e2e` (browser & mobile testing).
+* **Fase 8**: `performance-seo-finishing-polisher` + `pre-commit-qa-gate`.
+* **Fase 9**: `report-writing` + `triage-validation`.

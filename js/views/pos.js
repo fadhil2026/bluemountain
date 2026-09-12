@@ -3,44 +3,47 @@
  * FIX: Memory leak — store.on() subscriptions properly cleaned up
  * FEATURE: Manual item & custom price entry directly in POS
  */
-import store                        from '../store.js';
-import { getAllProducts, addProduct, getAllCustomers } from '../db.js';
-import { formatRupiah }             from '../utils/currency.js';
-import { esc }                      from '../utils/sanitize.js';
-import { showPaymentModal, openModal, closeModal } from './modals.js';
-import { showCustomerModal }        from './customers.js';
 
-let _searchQuery    = '';
-let _activeCategory = 'Semua';
-let _posAbort       = null;
-let _posUnsubs      = [];   // FIX: track store subscriptions
+import { addProduct, getAllCustomers, getAllProducts } from "../db.js";
+import store from "../store.js";
+import { formatRupiah } from "../utils/currency.js";
+import { esc } from "../utils/sanitize.js";
+import { showCustomerModal } from "./customers.js";
+import { closeModal, openModal, showPaymentModal } from "./modals.js";
+
+let _searchQuery = "";
+let _activeCategory = "Semua";
+let _posAbort = null;
+let _posUnsubs = []; // FIX: track store subscriptions
 
 export const initPOS = async () => {
-  const [products, customers] = await Promise.all([
-    getAllProducts(),
-    getAllCustomers(),
-  ]);
-  store.setProducts(products);
-  store.setCustomers(customers);
-  renderPOS();
+	const [products, customers] = await Promise.all([
+		getAllProducts(),
+		getAllCustomers(),
+	]);
+	store.setProducts(products);
+	store.setCustomers(customers);
+	renderPOS();
 
-  // Cleanup previous listeners
-  if (_posAbort) _posAbort.abort();
-  _posAbort = new AbortController();
-  _posUnsubs.forEach(u => u());   // FIX: cleanup previous store listeners
-  _posUnsubs = [
-    store.on('cart:change',             updateCartUI),
-    store.on('products:change',         () => renderProductGrid()),
-    store.on('selectedCustomer:change', () => renderCustomerRow()),
-    store.on('customers:change',        () => renderCustomerRow()),
-  ];
+	// Cleanup previous listeners
+	if (_posAbort) _posAbort.abort();
+	_posAbort = new AbortController();
+	for (const u of _posUnsubs) {
+		u();
+	}
+	_posUnsubs = [
+		store.on("cart:change", updateCartUI),
+		store.on("products:change", () => renderProductGrid()),
+		store.on("selectedCustomer:change", () => renderCustomerRow()),
+		store.on("customers:change", () => renderCustomerRow()),
+	];
 
-  bindPOSEvents(_posAbort.signal);
+	bindPOSEvents(_posAbort.signal);
 };
 
 const renderPOS = () => {
-  const view = document.getElementById('view-pos');
-  view.innerHTML = `
+	const view = document.getElementById("view-pos");
+	view.innerHTML = `
     <div class="pos-layout">
       <!-- Left: Products -->
       <div class="pos-left">
@@ -82,7 +85,7 @@ const renderPOS = () => {
           <div class="discount-row">
             <span style="font-size:13px;color:var(--text-secondary);flex:1">💳 Diskon (Rp)</span>
             <input type="number" class="discount-input" id="discount-input"
-              value="${store.state.discount || ''}" min="0" max="99999999" placeholder="0" inputmode="numeric">
+              value="${store.state.discount || ""}" min="0" max="99999999" placeholder="0" inputmode="numeric">
           </div>
           <div class="cart-summary-row" id="tax-row" style="display:none">
             <span class="label">Pajak</span>
@@ -112,54 +115,61 @@ const renderPOS = () => {
     </div>
   `;
 
-  renderCategoryPills();
-  renderProductGrid();
-  renderCustomerRow();
-  updateCartUI();
+	renderCategoryPills();
+	renderProductGrid();
+	renderCustomerRow();
+	updateCartUI();
 };
 
-const getCategories = () =>
-  ['Semua', ...new Set(store.state.products.map(p => p.category))];
+const getCategories = () => [
+	"Semua",
+	...new Set(store.state.products.map((p) => p.category)),
+];
 
 const renderCategoryPills = () => {
-  const container = document.getElementById('category-pills');
-  if (!container) return;
-  container.innerHTML = getCategories().map(cat => `
-    <button class="cat-pill ${cat === _activeCategory ? 'active' : ''}"
+	const container = document.getElementById("category-pills");
+	if (!container) return;
+	container.innerHTML = getCategories()
+		.map(
+			(cat) => `
+    <button class="cat-pill ${cat === _activeCategory ? "active" : ""}"
       data-cat="${esc(cat)}">${esc(cat)}</button>
-  `).join('');
+  `,
+		)
+		.join("");
 };
 
 const renderProductGrid = () => {
-  const grid = document.getElementById('product-grid');
-  if (!grid) return;
+	const grid = document.getElementById("product-grid");
+	if (!grid) return;
 
-  let products = store.state.products;
-  if (_activeCategory !== 'Semua') {
-    products = products.filter(p => p.category === _activeCategory);
-  }
-  if (_searchQuery) {
-    const q = _searchQuery.toLowerCase();
-    products = products.filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      (p.sku && p.sku.toLowerCase().includes(q))
-    );
-  }
+	let products = store.state.products;
+	if (_activeCategory !== "Semua") {
+		products = products.filter((p) => p.category === _activeCategory);
+	}
+	if (_searchQuery) {
+		const q = _searchQuery.toLowerCase();
+		products = products.filter(
+			(p) =>
+				p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q),
+		);
+	}
 
-  if (!products.length) {
-    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+	if (!products.length) {
+		grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
       <div class="empty-state__icon">🔍</div>
       <div class="empty-state__text">Produk tidak ditemukan</div>
     </div>`;
-    return;
-  }
+		return;
+	}
 
-  grid.innerHTML = products.map(p => {
-    const thumb = p.image
-      ? `<img src="${esc(p.image)}" class="product-card__thumb" alt="${esc(p.name)}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;margin-bottom:2px">`
-      : `<div class="product-card__emoji">${p.emoji || '📦'}</div>`;
+	grid.innerHTML = products
+		.map((p) => {
+			const thumb = p.image
+				? `<img src="${esc(p.image)}" class="product-card__thumb" alt="${esc(p.name)}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;margin-bottom:2px">`
+				: `<div class="product-card__emoji">${p.emoji || "📦"}</div>`;
 
-    return `
+			return `
       <div class="product-card" data-id="${p.id}" role="button" tabindex="0"
         aria-label="${esc(p.name)} — ${formatRupiah(p.price)}">
         <span class="product-card__sku" style="font-size:9px;font-weight:700;color:var(--text-muted);background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:4px;padding:1px 4px;margin-bottom:2px">${esc(p.sku || `BM-${p.id}`)}</span>
@@ -169,83 +179,92 @@ const renderProductGrid = () => {
         <div class="product-card__unit">per ${esc(p.unit)}</div>
       </div>
     `;
-  }).join('');
+		})
+		.join("");
 
-  grid.querySelectorAll('.product-card').forEach(card => {
-    const addFn = () => {
-      const id      = card.dataset.id;
-      const product = store.state.products.find(p => String(p.id) === String(id));
-      if (!product) return;
-      store.addToCart(product);
-      card.style.transform = 'scale(0.94)';
-      setTimeout(() => { card.style.transform = ''; }, 120);
-    };
-    card.addEventListener('click', addFn);
-    card.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addFn(); }
-    });
-  });
+	grid.querySelectorAll(".product-card").forEach((card) => {
+		const addFn = () => {
+			const id = card.dataset.id;
+			const product = store.state.products.find(
+				(p) => String(p.id) === String(id),
+			);
+			if (!product) return;
+			store.addToCart(product);
+			card.style.transform = "scale(0.94)";
+			setTimeout(() => {
+				card.style.transform = "";
+			}, 120);
+		};
+		card.addEventListener("click", addFn);
+		card.addEventListener("keydown", (e) => {
+			if (e.key === "Enter" || e.key === " ") {
+				e.preventDefault();
+				addFn();
+			}
+		});
+	});
 };
 
 const updateCartUI = () => {
-  const cartItems = document.getElementById('cart-items');
-  const cartCount = document.getElementById('cart-count');
-  const cartTotal = document.getElementById('cart-total');
-  const taxAmount = document.getElementById('tax-amount');
-  const taxRow    = document.getElementById('tax-row');
-  const custInput = document.getElementById('customer-name');
-  const discInput = document.getElementById('discount-input');
+	const cartItems = document.getElementById("cart-items");
+	const cartCount = document.getElementById("cart-count");
+	const cartTotal = document.getElementById("cart-total");
+	const taxAmount = document.getElementById("tax-amount");
+	const taxRow = document.getElementById("tax-row");
+	const custInput = document.getElementById("customer-name");
+	const discInput = document.getElementById("discount-input");
 
-  // Automatically reset/sync customer name when cart is cleared or updated
-  if (custInput && !custInput.matches(':focus')) {
-    custInput.value = store.state.customerName || '';
-  }
+	// Automatically reset/sync customer name when cart is cleared or updated
+	if (custInput && !custInput.matches(":focus")) {
+		custInput.value = store.state.customerName || "";
+	}
 
-  // Automatically reset/sync discount input when cart is cleared or updated
-  if (discInput && !discInput.matches(':focus')) {
-    discInput.value = store.state.discount || '';
-  }
+	// Automatically reset/sync discount input when cart is cleared or updated
+	if (discInput && !discInput.matches(":focus")) {
+		discInput.value = store.state.discount || "";
+	}
 
-  if (!cartItems) return;
+	if (!cartItems) return;
 
-  const cart = store.state.cart;
+	const cart = store.state.cart;
 
-  if (cartCount) {
-    const prev = cartCount.textContent;
-    cartCount.textContent = store.cartCount;
-    if (prev !== String(store.cartCount)) {
-      cartCount.classList.remove('bump');
-      void cartCount.offsetWidth;
-      cartCount.classList.add('bump');
-    }
-  }
+	if (cartCount) {
+		const prev = cartCount.textContent;
+		cartCount.textContent = store.cartCount;
+		if (prev !== String(store.cartCount)) {
+			cartCount.classList.remove("bump");
+			void cartCount.offsetWidth;
+			cartCount.classList.add("bump");
+		}
+	}
 
-  if (cartTotal) cartTotal.textContent = formatRupiah(store.total);
+	if (cartTotal) cartTotal.textContent = formatRupiah(store.total);
 
-  if (taxRow && taxAmount) {
-    if (store.tax > 0) {
-      taxRow.style.display = 'flex';
-      taxAmount.textContent = formatRupiah(store.tax);
-    } else {
-      taxRow.style.display = 'none';
-    }
-  }
+	if (taxRow && taxAmount) {
+		if (store.tax > 0) {
+			taxRow.style.display = "flex";
+			taxAmount.textContent = formatRupiah(store.tax);
+		} else {
+			taxRow.style.display = "none";
+		}
+	}
 
-  if (!cart.length) {
-    cartItems.innerHTML = `
+	if (!cart.length) {
+		cartItems.innerHTML = `
       <div class="cart-empty">
         <div class="cart-empty__icon">🛒</div>
         <div style="font-size:13px;color:var(--text-muted)">Pilih produk untuk mulai</div>
       </div>`;
-    return;
-  }
+		return;
+	}
 
-  cartItems.innerHTML = cart.map(item => {
-    const itemThumb = item.product.image
-      ? `<img src="${item.product.image}" style="width:20px;height:20px;object-fit:cover;border-radius:4px;vertical-align:middle;margin-right:4px">`
-      : `${item.product.emoji || ''} `;
+	cartItems.innerHTML = cart
+		.map((item) => {
+			const itemThumb = item.product.image
+				? `<img src="${item.product.image}" style="width:20px;height:20px;object-fit:cover;border-radius:4px;vertical-align:middle;margin-right:4px">`
+				: `${item.product.emoji || ""} `;
 
-    return `
+			return `
       <div class="cart-item" data-pid="${item.product.id}">
         <div class="cart-item__info">
           <div class="cart-item__name">${itemThumb}${esc(item.product.name)} <span style="font-size:10px;color:var(--text-muted)">(${esc(item.product.sku || `BM-${item.product.id}`)})</span></div>
@@ -262,23 +281,26 @@ const updateCartUI = () => {
         </div>
       </div>
     `;
-  }).join('');
+		})
+		.join("");
 
-  cartItems.querySelectorAll('[data-action]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const pid    = btn.dataset.pid;
-      const action = btn.dataset.action;
-      const item   = store.state.cart.find(i => String(i.product.id) === String(pid));
-      if (!item) return;
-      if (action === 'inc')         store.setQty(item.product.id, item.qty + 1);
-      else if (action === 'dec')    store.setQty(item.product.id, item.qty - 1);
-      else if (action === 'remove') store.removeFromCart(item.product.id);
-    });
-  });
+	cartItems.querySelectorAll("[data-action]").forEach((btn) => {
+		btn.addEventListener("click", () => {
+			const pid = btn.dataset.pid;
+			const action = btn.dataset.action;
+			const item = store.state.cart.find(
+				(i) => String(i.product.id) === String(pid),
+			);
+			if (!item) return;
+			if (action === "inc") store.setQty(item.product.id, item.qty + 1);
+			else if (action === "dec") store.setQty(item.product.id, item.qty - 1);
+			else if (action === "remove") store.removeFromCart(item.product.id);
+		});
+	});
 };
 
 const showManualItemModal = () => {
-  const html = `
+	const html = `
     <div class="modal-header">
       <span class="modal-title">🏷️ Input Item / Harga Manual</span>
       <button class="modal-close" id="mi-close">✕</button>
@@ -319,11 +341,28 @@ const showManualItemModal = () => {
       <div class="input-group" style="margin-top:10px">
         <label class="input-label">Emoji Ikon</label>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
-          ${['🏷️','💧','🪣','🍶','🥤','💦','🛵','🚚','⚗️','📦','🫙','🧊'].map((e, idx) => `
-            <button type="button" class="emoji-pick-mi ${idx === 0 ? 'emoji-pick--active' : ''}"
+          ${[
+						"🏷️",
+						"💧",
+						"🪣",
+						"🍶",
+						"🥤",
+						"💦",
+						"🛵",
+						"🚚",
+						"⚗️",
+						"📦",
+						"🫙",
+						"🧊",
+					]
+						.map(
+							(e, idx) => `
+            <button type="button" class="emoji-pick-mi ${idx === 0 ? "emoji-pick--active" : ""}"
               data-emoji="${e}"
-              style="font-size:24px;width:38px;height:38px;border-radius:8px;border:2px solid ${idx === 0 ? 'var(--blue-400)' : 'var(--border-subtle)'};background:var(--bg-glass);cursor:pointer;transition:all 150ms">${e}</button>
-          `).join('')}
+              style="font-size:24px;width:38px;height:38px;border-radius:8px;border:2px solid ${idx === 0 ? "var(--blue-400)" : "var(--border-subtle)"};background:var(--bg-glass);cursor:pointer;transition:all 150ms">${e}</button>
+          `,
+						)
+						.join("")}
         </div>
         <input type="hidden" id="mi-emoji" value="🏷️">
       </div>
@@ -341,133 +380,186 @@ const showManualItemModal = () => {
     </div>
   `;
 
-  openModal(html, 'manual-item-modal');
+	openModal(html, "manual-item-modal");
 
-  setTimeout(() => {
-    document.getElementById('mi-close')?.addEventListener('click',  () => closeModal('manual-item-modal'));
-    document.getElementById('mi-cancel')?.addEventListener('click', () => closeModal('manual-item-modal'));
+	setTimeout(() => {
+		document
+			.getElementById("mi-close")
+			?.addEventListener("click", () => closeModal("manual-item-modal"));
+		document
+			.getElementById("mi-cancel")
+			?.addEventListener("click", () => closeModal("manual-item-modal"));
 
-    document.getElementById('mi-name')?.focus();
+		document.getElementById("mi-name")?.focus();
 
-    // Emoji picker
-    document.querySelectorAll('.emoji-pick-mi').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.emoji-pick-mi').forEach(b => {
-          b.style.borderColor = 'var(--border-subtle)';
-          b.classList.remove('emoji-pick--active');
-        });
-        btn.style.borderColor = 'var(--blue-400)';
-        btn.classList.add('emoji-pick--active');
-        document.getElementById('mi-emoji').value = btn.dataset.emoji;
-      });
-    });
+		// Emoji picker
+		document.querySelectorAll(".emoji-pick-mi").forEach((btn) => {
+			btn.addEventListener("click", () => {
+				document.querySelectorAll(".emoji-pick-mi").forEach((b) => {
+					b.style.borderColor = "var(--border-subtle)";
+					b.classList.remove("emoji-pick--active");
+				});
+				btn.style.borderColor = "var(--blue-400)";
+				btn.classList.add("emoji-pick--active");
+				document.getElementById("mi-emoji").value = btn.dataset.emoji;
+			});
+		});
 
-    // Save
-    document.getElementById('mi-save')?.addEventListener('click', async () => {
-      const name        = document.getElementById('mi-name')?.value.trim();
-      const priceInput  = document.getElementById('mi-price')?.value;
-      const price       = parseFloat(priceInput) || 0;
-      const qty         = Math.max(1, parseInt(document.getElementById('mi-qty')?.value) || 1);
-      const unit        = document.getElementById('mi-unit')?.value.trim() || 'pcs';
-      const category    = document.getElementById('mi-category')?.value || 'Lainnya';
-      const emoji       = document.getElementById('mi-emoji')?.value || '🏷️';
-      const saveCatalog = document.getElementById('mi-save-catalog')?.checked;
+		// Save
+		document.getElementById("mi-save")?.addEventListener("click", async () => {
+			const name = document.getElementById("mi-name")?.value.trim();
+			const priceInput = document.getElementById("mi-price")?.value;
+			const price = parseFloat(priceInput) || 0;
+			const qty = Math.max(
+				1,
+				parseInt(document.getElementById("mi-qty")?.value, 10) || 1,
+			);
+			const unit = document.getElementById("mi-unit")?.value.trim() || "pcs";
+			const category =
+				document.getElementById("mi-category")?.value || "Lainnya";
+			const emoji = document.getElementById("mi-emoji")?.value || "🏷️";
+			const saveCatalog = document.getElementById("mi-save-catalog")?.checked;
 
-      if (!name) { window.showToast('Nama produk wajib diisi!', 'warning'); return; }
-      if (priceInput === '' || price < 0) { window.showToast('Harga tidak boleh kosong atau negatif!', 'warning'); return; }
+			if (!name) {
+				window.showToast("Nama produk wajib diisi!", "warning");
+				return;
+			}
+			if (priceInput === "" || price < 0) {
+				window.showToast("Harga tidak boleh kosong atau negatif!", "warning");
+				return;
+			}
 
-      try {
-        if (saveCatalog) {
-          const newId = await addProduct({ name, price, unit, category, emoji, stock: 999 });
-          const allProducts = await getAllProducts();
-          store.setProducts(allProducts);
-          const savedProduct = allProducts.find(p => p.id === newId) || { id: newId, name, price, unit, category, emoji };
-          store.addToCart(savedProduct, qty);
-          window.showToast(`Product "${name}" ditambahkan ke katalog & keranjang`, 'success');
-        } else {
-          const manualProduct = {
-            id: 'manual_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-            name,
-            price,
-            unit,
-            category,
-            emoji
-          };
-          store.addToCart(manualProduct, qty);
-          window.showToast(`"${name}" ditambahkan ke keranjang`, 'success');
-        }
+			try {
+				if (saveCatalog) {
+					const newId = await addProduct({
+						name,
+						price,
+						unit,
+						category,
+						emoji,
+						stock: 999,
+					});
+					const allProducts = await getAllProducts();
+					store.setProducts(allProducts);
+					const savedProduct = allProducts.find((p) => p.id === newId) || {
+						id: newId,
+						name,
+						price,
+						unit,
+						category,
+						emoji,
+					};
+					store.addToCart(savedProduct, qty);
+					window.showToast(
+						`Product "${name}" ditambahkan ke katalog & keranjang`,
+						"success",
+					);
+				} else {
+					const manualProduct = {
+						id:
+							"manual_" +
+							Date.now() +
+							"_" +
+							Math.random().toString(36).slice(2, 6),
+						name,
+						price,
+						unit,
+						category,
+						emoji,
+					};
+					store.addToCart(manualProduct, qty);
+					window.showToast(`"${name}" ditambahkan ke keranjang`, "success");
+				}
 
-        closeModal('manual-item-modal');
-      } catch (err) {
-        window.showToast('Gagal menambahkan item manual!', 'error');
-        console.error('[manual-item]', err);
-      }
-    });
-  }, 0);
+				closeModal("manual-item-modal");
+			} catch (err) {
+				window.showToast("Gagal menambahkan item manual!", "error");
+				console.error("[manual-item]", err);
+			}
+		});
+	}, 0);
 };
 
 const bindPOSEvents = (signal) => {
-  document.addEventListener('click', (e) => {
-    const pill = e.target.closest('.cat-pill');
-    if (pill) {
-      _activeCategory = pill.dataset.cat;
-      renderCategoryPills();
-      renderProductGrid();
-      return;
-    }
+	document.addEventListener(
+		"click",
+		(e) => {
+			const pill = e.target.closest(".cat-pill");
+			if (pill) {
+				_activeCategory = pill.dataset.cat;
+				renderCategoryPills();
+				renderProductGrid();
+				return;
+			}
 
-    if (e.target.closest('#btn-manual-item')) {
-      showManualItemModal();
-      return;
-    }
+			if (e.target.closest("#btn-manual-item")) {
+				showManualItemModal();
+				return;
+			}
 
-    if (e.target.closest('#btn-pay-cash')) {
-      if (!store.state.cart.length) { window.showToast('Keranjang kosong!', 'warning'); return; }
-      showPaymentModal('cash');
-    }
-    if (e.target.closest('#btn-pay-transfer')) {
-      if (!store.state.cart.length) { window.showToast('Keranjang kosong!', 'warning'); return; }
-      showPaymentModal('transfer');
-    }
-    if (e.target.closest('#btn-pay-debt')) {
-      if (!store.state.cart.length) { window.showToast('Keranjang kosong!', 'warning'); return; }
-      showPaymentModal('debt');
-    }
-    if (e.target.closest('#btn-clear-cart')) {
-      if (store.state.cart.length) {
-        store.clearCart();
-        window.showToast('Keranjang dikosongkan', 'info');
-      }
-    }
-  }, { signal });
+			if (e.target.closest("#btn-pay-cash")) {
+				if (!store.state.cart.length) {
+					window.showToast("Keranjang kosong!", "warning");
+					return;
+				}
+				showPaymentModal("cash");
+			}
+			if (e.target.closest("#btn-pay-transfer")) {
+				if (!store.state.cart.length) {
+					window.showToast("Keranjang kosong!", "warning");
+					return;
+				}
+				showPaymentModal("transfer");
+			}
+			if (e.target.closest("#btn-pay-debt")) {
+				if (!store.state.cart.length) {
+					window.showToast("Keranjang kosong!", "warning");
+					return;
+				}
+				showPaymentModal("debt");
+			}
+			if (e.target.closest("#btn-clear-cart")) {
+				if (store.state.cart.length) {
+					store.clearCart();
+					window.showToast("Keranjang dikosongkan", "info");
+				}
+			}
+		},
+		{ signal },
+	);
 
-  document.addEventListener('input', (e) => {
-    if (e.target.id === 'pos-search') {
-      _searchQuery = e.target.value.trim();
-      renderProductGrid();
-    }
-    if (e.target.id === 'discount-input') {
-      store.setDiscount(parseFloat(e.target.value) || 0);
-    }
-    if (e.target.id === 'customer-name') {
-      const query = e.target.value.trim().toLowerCase();
-      store.setCustomerName(e.target.value);
+	document.addEventListener(
+		"input",
+		(e) => {
+			if (e.target.id === "pos-search") {
+				_searchQuery = e.target.value.trim();
+				renderProductGrid();
+			}
+			if (e.target.id === "discount-input") {
+				store.setDiscount(parseFloat(e.target.value) || 0);
+			}
+			if (e.target.id === "customer-name") {
+				const query = e.target.value.trim().toLowerCase();
+				store.setCustomerName(e.target.value);
 
-      const dropdown = document.getElementById('cust-autocomplete-dropdown');
-      if (!dropdown) return;
+				const dropdown = document.getElementById("cust-autocomplete-dropdown");
+				if (!dropdown) return;
 
-      if (!query) {
-        dropdown.style.display = 'none';
-        return;
-      }
+				if (!query) {
+					dropdown.style.display = "none";
+					return;
+				}
 
-      const matches = (store.state.customers || []).filter(c =>
-        (c.name || '').toLowerCase().includes(query) ||
-        (c.phone || '').includes(query)
-      ).slice(0, 6);
+				const matches = (store.state.customers || [])
+					.filter(
+						(c) =>
+							(c.name || "").toLowerCase().includes(query) ||
+							(c.phone || "").includes(query),
+					)
+					.slice(0, 6);
 
-      if (matches.length === 0) {
-        dropdown.innerHTML = `
+				if (matches.length === 0) {
+					dropdown.innerHTML = `
           <div style="padding:12px;font-size:12px;color:#64748b;display:flex;justify-content:space-between;align-items:center;background:#ffffff">
             <span>Pelanggan belum terdaftar</span>
             <button type="button" class="btn btn--sm btn--primary" id="btn-dropdown-quick-add" style="font-size:11px;padding:3px 10px;font-weight:700">
@@ -475,72 +567,90 @@ const bindPOSEvents = (signal) => {
             </button>
           </div>
         `;
-        dropdown.style.display = 'block';
-        dropdown.querySelector('#btn-dropdown-quick-add')?.addEventListener('click', () => {
-          dropdown.style.display = 'none';
-          showCustomerModal({ name: e.target.value.trim() });
-        });
-        return;
-      }
+					dropdown.style.display = "block";
+					dropdown
+						.querySelector("#btn-dropdown-quick-add")
+						?.addEventListener("click", () => {
+							dropdown.style.display = "none";
+							showCustomerModal({ name: e.target.value.trim() });
+						});
+					return;
+				}
 
-      dropdown.innerHTML = matches.map(c => `
+				dropdown.innerHTML = matches
+					.map(
+						(c) => `
         <div class="cust-option" data-id="${c.id}" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:12px;display:flex;justify-content:space-between;align-items:center;background:#ffffff;transition:background 100ms ease">
           <div style="min-width:0;flex:1">
-            <div style="font-weight:800;color:#1e293b">${esc(c.name)} <span class="badge" style="font-size:10px;font-weight:700;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px">${esc(c.category || 'Umum')}</span></div>
-            <div style="font-size:11px;color:#64748b;margin-top:2px">📱 ${esc(c.phone || '-')} ${c.address ? `&bull; 📍 ${esc(c.address)}` : ''}</div>
+            <div style="font-weight:800;color:#1e293b">${esc(c.name)} <span class="badge" style="font-size:10px;font-weight:700;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px">${esc(c.category || "Umum")}</span></div>
+            <div style="font-size:11px;color:#64748b;margin-top:2px">📱 ${esc(c.phone || "-")} ${c.address ? `&bull; 📍 ${esc(c.address)}` : ""}</div>
           </div>
           <div style="text-align:right;flex-shrink:0;margin-left:8px">
-            ${c.totalDebt > 0 ? `<span style="color:#dc2626;font-weight:800;font-size:11px;display:block">Hutang: ${formatRupiah(c.totalDebt)}</span>` : ''}
+            ${c.totalDebt > 0 ? `<span style="color:#dc2626;font-weight:800;font-size:11px;display:block">Hutang: ${formatRupiah(c.totalDebt)}</span>` : ""}
             <span style="font-size:10px;color:#2563eb;font-weight:700">Pilih ➔</span>
           </div>
         </div>
-      `).join('');
-      dropdown.style.display = 'block';
+      `,
+					)
+					.join("");
+				dropdown.style.display = "block";
 
-      dropdown.querySelectorAll('.cust-option').forEach(opt => {
-        opt.addEventListener('mouseenter', () => { opt.style.background = '#f8fafc'; });
-        opt.addEventListener('mouseleave', () => { opt.style.background = '#ffffff'; });
-        opt.addEventListener('click', () => {
-          const custId = opt.dataset.id;
-          const selected = store.state.customers.find(c => String(c.id) === String(custId));
-          if (selected) {
-            store.setSelectedCustomer(selected);
-          }
-          dropdown.style.display = 'none';
-          renderCustomerRow();
-        });
-      });
-    }
-  }, { signal });
+				dropdown.querySelectorAll(".cust-option").forEach((opt) => {
+					opt.addEventListener("mouseenter", () => {
+						opt.style.background = "#f8fafc";
+					});
+					opt.addEventListener("mouseleave", () => {
+						opt.style.background = "#ffffff";
+					});
+					opt.addEventListener("click", () => {
+						const custId = opt.dataset.id;
+						const selected = store.state.customers.find(
+							(c) => String(c.id) === String(custId),
+						);
+						if (selected) {
+							store.setSelectedCustomer(selected);
+						}
+						dropdown.style.display = "none";
+						renderCustomerRow();
+					});
+				});
+			}
+		},
+		{ signal },
+	);
 
-  document.addEventListener('click', (e) => {
-    const dropdown = document.getElementById('cust-autocomplete-dropdown');
-    if (dropdown && !e.target.closest('#customer-row-container')) {
-      dropdown.style.display = 'none';
-    }
-  }, { signal });
+	document.addEventListener(
+		"click",
+		(e) => {
+			const dropdown = document.getElementById("cust-autocomplete-dropdown");
+			if (dropdown && !e.target.closest("#customer-row-container")) {
+				dropdown.style.display = "none";
+			}
+		},
+		{ signal },
+	);
 };
 
 /**
  * Render Customer Selection Bar in Cart
  */
 export const renderCustomerRow = () => {
-  const container = document.getElementById('customer-row-container');
-  if (!container) return;
+	const container = document.getElementById("customer-row-container");
+	if (!container) return;
 
-  const cust = store.state.selectedCustomer;
+	const cust = store.state.selectedCustomer;
 
-  if (cust) {
-    container.innerHTML = `
+	if (cust) {
+		container.innerHTML = `
       <div class="selected-customer-chip" style="display:flex;align-items:center;justify-content:space-between;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:10px;padding:8px 12px;margin:6px 12px;box-shadow:0 1px 3px rgba(0,0,0,0.05)">
         <div style="display:flex;align-items:center;gap:8px;min-width:0">
           <span style="font-size:18px;flex-shrink:0">👤</span>
           <div style="min-width:0">
             <div style="font-weight:800;font-size:13px;color:#1e3a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-              ${esc(cust.name)} <span class="badge" style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:6px;font-weight:700">${esc(cust.category || 'Umum')}</span>
+              ${esc(cust.name)} <span class="badge" style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:6px;font-weight:700">${esc(cust.category || "Umum")}</span>
             </div>
             <div style="font-size:11px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-              📱 ${esc(cust.phone || '-')} ${cust.totalDebt > 0 ? `&bull; <span style="color:#dc2626;font-weight:800">Hutang: ${formatRupiah(cust.totalDebt)}</span>` : ''}
+              📱 ${esc(cust.phone || "-")} ${cust.totalDebt > 0 ? `&bull; <span style="color:#dc2626;font-weight:800">Hutang: ${formatRupiah(cust.totalDebt)}</span>` : ""}
             </div>
           </div>
         </div>
@@ -550,23 +660,29 @@ export const renderCustomerRow = () => {
       </div>
     `;
 
-    container.querySelector('#btn-clear-selected-cust')?.addEventListener('click', () => {
-      store.setSelectedCustomer(null);
-      store.setCustomerName('');
-      renderCustomerRow();
-    });
-  } else {
-    container.innerHTML = `
+		container
+			.querySelector("#btn-clear-selected-cust")
+			?.addEventListener("click", () => {
+				store.setSelectedCustomer(null);
+				store.setCustomerName("");
+				renderCustomerRow();
+			});
+	} else {
+		container.innerHTML = `
       <div style="padding:8px 12px;display:flex;align-items:center;gap:6px;position:relative">
         <span style="font-size:16px;flex-shrink:0">👤</span>
         <div style="position:relative;flex:1;min-width:0">
           <input type="text" class="customer-input" id="customer-name"
             placeholder="Cari nama / HP pelanggan..." maxlength="80" autocomplete="off"
-            value="${esc(store.state.customerName || '')}"
+            value="${esc(store.state.customerName || "")}"
             style="width:100%;padding:6px 24px 6px 8px;font-size:12px;border:1px solid var(--border-default);border-radius:8px">
-          ${store.state.customerName ? `
+          ${
+						store.state.customerName
+							? `
             <button type="button" id="btn-clear-typed-name" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:transparent;color:#94a3b8;cursor:pointer;font-size:12px;padding:2px">✕</button>
-          ` : ''}
+          `
+							: ""
+					}
         </div>
         <button type="button" class="btn btn--sm btn--secondary" id="btn-pick-cust" title="Pilih dari Daftar Pelanggan" style="padding:5px 8px;font-size:11px;font-weight:700;white-space:nowrap;border-radius:6px;display:flex;align-items:center;gap:3px">
           👥 Pilih
@@ -580,38 +696,44 @@ export const renderCustomerRow = () => {
       </div>
     `;
 
-    container.querySelector('#btn-clear-typed-name')?.addEventListener('click', () => {
-      store.setCustomerName('');
-      renderCustomerRow();
-    });
+		container
+			.querySelector("#btn-clear-typed-name")
+			?.addEventListener("click", () => {
+				store.setCustomerName("");
+				renderCustomerRow();
+			});
 
-    container.querySelector('#btn-pick-cust')?.addEventListener('click', () => {
-      showCustomerPickerModal();
-    });
+		container.querySelector("#btn-pick-cust")?.addEventListener("click", () => {
+			showCustomerPickerModal();
+		});
 
-    container.querySelector('#btn-quick-add-cust')?.addEventListener('click', () => {
-      showCustomerModal();
-    });
-  }
+		container
+			.querySelector("#btn-quick-add-cust")
+			?.addEventListener("click", () => {
+				showCustomerModal();
+			});
+	}
 };
 
 /**
  * Modal Pilih Pelanggan (Search & Pick)
  */
 export const showCustomerPickerModal = () => {
-  const customers = store.state.customers || [];
-  let query = '';
+	const customers = store.state.customers || [];
+	let query = "";
 
-  const renderList = (filterText) => {
-    const q = filterText.trim().toLowerCase();
-    const filtered = customers.filter(c =>
-      !q || (c.name || '').toLowerCase().includes(q) ||
-      (c.phone || '').includes(q) ||
-      (c.category || '').toLowerCase().includes(q)
-    );
+	const renderList = (filterText) => {
+		const q = filterText.trim().toLowerCase();
+		const filtered = customers.filter(
+			(c) =>
+				!q ||
+				(c.name || "").toLowerCase().includes(q) ||
+				(c.phone || "").includes(q) ||
+				(c.category || "").toLowerCase().includes(q),
+		);
 
-    if (filtered.length === 0) {
-      return `
+		if (filtered.length === 0) {
+			return `
         <div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">
           Pelanggan tidak ditemukan.<br>
           <button type="button" class="btn btn--primary btn--sm" id="btn-picker-add-new" style="margin-top:10px">
@@ -619,34 +741,38 @@ export const showCustomerPickerModal = () => {
           </button>
         </div>
       `;
-    }
+		}
 
-    return `
+		return `
       <div style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto;padding-right:4px">
-        ${filtered.map(c => `
+        ${filtered
+					.map(
+						(c) => `
           <div class="picker-cust-row" data-id="${c.id}" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;cursor:pointer;transition:all 120ms ease">
             <div style="min-width:0;flex:1">
               <div style="display:flex;align-items:center;gap:6px">
                 <strong style="font-size:13px;color:#1e293b">${esc(c.name)}</strong>
-                <span class="badge" style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px;font-weight:700">${esc(c.category || 'Umum')}</span>
+                <span class="badge" style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px;font-weight:700">${esc(c.category || "Umum")}</span>
               </div>
               <div style="font-size:11px;color:#64748b;margin-top:2px">
-                📱 ${esc(c.phone || '-')} ${c.address ? `&bull; 📍 ${esc(c.address)}` : ''}
+                📱 ${esc(c.phone || "-")} ${c.address ? `&bull; 📍 ${esc(c.address)}` : ""}
               </div>
             </div>
             <div style="text-align:right;flex-shrink:0;margin-left:10px">
-              ${c.totalDebt > 0 ? `<div style="font-size:11px;font-weight:800;color:#dc2626">Hutang: ${formatRupiah(c.totalDebt)}</div>` : ''}
+              ${c.totalDebt > 0 ? `<div style="font-size:11px;font-weight:800;color:#dc2626">Hutang: ${formatRupiah(c.totalDebt)}</div>` : ""}
               <button type="button" class="btn btn--sm btn--primary" style="padding:3px 10px;font-size:11px;font-weight:700;margin-top:2px">
                 Pilih
               </button>
             </div>
           </div>
-        `).join('')}
+        `,
+					)
+					.join("")}
       </div>
     `;
-  };
+	};
 
-  const html = `
+	const html = `
     <div class="modal-header">
       <h3 class="modal-title">👥 Pilih Pelanggan</h3>
       <button class="modal-close" id="modal-picker-close">✕</button>
@@ -657,7 +783,7 @@ export const showCustomerPickerModal = () => {
         <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text-muted)">🔍</span>
       </div>
       <div id="picker-list-container">
-        ${renderList('')}
+        ${renderList("")}
       </div>
     </div>
     <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center">
@@ -666,57 +792,71 @@ export const showCustomerPickerModal = () => {
     </div>
   `;
 
-  openModal(html, 'modal-customer-picker');
+	openModal(html, "modal-customer-picker");
 
-  const listContainer = document.getElementById('picker-list-container');
-  const searchInput = document.getElementById('picker-search');
+	const listContainer = document.getElementById("picker-list-container");
+	const searchInput = document.getElementById("picker-search");
 
-  const bindRows = () => {
-    listContainer?.querySelectorAll('.picker-cust-row').forEach(row => {
-      row.addEventListener('mouseenter', () => { row.style.background = '#f0f7ff'; row.style.borderColor = '#93c5fd'; });
-      row.addEventListener('mouseleave', () => { row.style.background = '#ffffff'; row.style.borderColor = '#e2e8f0'; });
-      row.addEventListener('click', () => {
-        const id = row.dataset.id;
-        const selected = customers.find(c => String(c.id) === String(id));
-        if (selected) {
-          store.setSelectedCustomer(selected);
-          closeModal('modal-customer-picker');
-          renderCustomerRow();
-        }
-      });
-    });
+	const bindRows = () => {
+		listContainer?.querySelectorAll(".picker-cust-row").forEach((row) => {
+			row.addEventListener("mouseenter", () => {
+				row.style.background = "#f0f7ff";
+				row.style.borderColor = "#93c5fd";
+			});
+			row.addEventListener("mouseleave", () => {
+				row.style.background = "#ffffff";
+				row.style.borderColor = "#e2e8f0";
+			});
+			row.addEventListener("click", () => {
+				const id = row.dataset.id;
+				const selected = customers.find((c) => String(c.id) === String(id));
+				if (selected) {
+					store.setSelectedCustomer(selected);
+					closeModal("modal-customer-picker");
+					renderCustomerRow();
+				}
+			});
+		});
 
-    listContainer?.querySelector('#btn-picker-add-new')?.addEventListener('click', () => {
-      closeModal('modal-customer-picker');
-      showCustomerModal({ name: searchInput?.value?.trim() });
-    });
-  };
+		listContainer
+			?.querySelector("#btn-picker-add-new")
+			?.addEventListener("click", () => {
+				closeModal("modal-customer-picker");
+				showCustomerModal({ name: searchInput?.value?.trim() });
+			});
+	};
 
-  bindRows();
+	bindRows();
 
-  searchInput?.addEventListener('input', (e) => {
-    query = e.target.value;
-    if (listContainer) {
-      listContainer.innerHTML = renderList(query);
-      bindRows();
-    }
-  });
+	searchInput?.addEventListener("input", (e) => {
+		query = e.target.value;
+		if (listContainer) {
+			listContainer.innerHTML = renderList(query);
+			bindRows();
+		}
+	});
 
-  document.getElementById('modal-picker-close')?.addEventListener('click', () => closeModal('modal-customer-picker'));
-  document.getElementById('picker-cancel-btn')?.addEventListener('click', () => closeModal('modal-customer-picker'));
-  document.getElementById('picker-create-btn')?.addEventListener('click', () => {
-    closeModal('modal-customer-picker');
-    showCustomerModal();
-  });
+	document
+		.getElementById("modal-picker-close")
+		?.addEventListener("click", () => closeModal("modal-customer-picker"));
+	document
+		.getElementById("picker-cancel-btn")
+		?.addEventListener("click", () => closeModal("modal-customer-picker"));
+	document
+		.getElementById("picker-create-btn")
+		?.addEventListener("click", () => {
+			closeModal("modal-customer-picker");
+			showCustomerModal();
+		});
 };
 
 export const refreshPOS = async () => {
-  const view = document.getElementById('view-pos');
-  if (!view || !view.querySelector('.pos-layout')) {
-    renderPOS();
-  }
-  const products = await getAllProducts();
-  store.setProducts(products);
-  renderProductGrid();
-  renderCategoryPills();
+	const view = document.getElementById("view-pos");
+	if (!view?.querySelector(".pos-layout")) {
+		renderPOS();
+	}
+	const products = await getAllProducts();
+	store.setProducts(products);
+	renderProductGrid();
+	renderCategoryPills();
 };
