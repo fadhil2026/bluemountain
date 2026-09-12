@@ -1,7 +1,7 @@
 {
-  "currentVersion": "1.1.0",
-  "lastCommitHash": "7256c2a",
-  "updatedAt": "2026-09-12T03:46:34.771Z",
+  "currentVersion": "1.4.0",
+  "lastCommitHash": "34b6b65",
+  "updatedAt": "2026-09-12T07:55:16.999Z",
   "milestones": {
     "1.0.0": "Production Ready v1.0.0: Online-First Architecture (Supabase Truth + Cloudflare Pages Edge + Dexie Cache), Zero Concurrency Race-Condition, Anti-Brute-Force Lockout, Personal Proprietary Operations Manual",
     "1.0.1": "Revisi & Hardening: Perbaikan import todayKey di supabase.js, resolusi variabel errEl di login.js, key listener di modals.js, normalisasi string UUID dataset ID, dan otomatisasi SemVer dinamis"

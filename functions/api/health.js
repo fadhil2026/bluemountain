@@ -7,7 +7,7 @@ export async function onRequestGet(_context) {
 		JSON.stringify({
 			status: "ok",
 			app: "Blue Mountain POS",
-			version: "1.1.0",
+			version: "1.4.0",
 			edge: "Cloudflare Pages Functions (Free Tier)",
 			timestamp: new Date().toISOString(),
 		}),
