@@ -1,6 +1,6 @@
 /**
- * views/settings.js — App settings
- * FIX: version from __APP_VERSION__ (injected by Vite define)
+ * views/settings.js — Enterprise POS Settings & Multi-Device Sync Engine
+ * Blue Mountain Refilling Station POS
  */
 import {
 	clearAllData,
@@ -17,11 +17,12 @@ import { printTestReceipt } from "../printer.js";
 import store from "../store.js";
 import {
 	getMasterStoreId,
-	isDeviceIsolated,
+	pushSettingToCloud,
 	setMasterStoreId,
 	setupRealtimeSubscription,
 	syncInitialData,
 } from "../supabase.js";
+import { formatRupiah } from "../utils/currency.js";
 import { esc } from "../utils/sanitize.js";
 import { closeModal, openModal } from "./modals.js";
 
@@ -30,23 +31,24 @@ export const initSettings = async () => {
 	await renderSettings();
 };
 
+const SETTING_KEYS = [
+	"shopName",
+	"shopAddress",
+	"shopPhone",
+	"cashierName",
+	"receiptFooter",
+	"modalAwal",
+	"taxRate",
+	"bankName",
+	"bankNumber",
+	"bankHolder",
+	"qrisNumber",
+	"printerPaper",
+];
+
 const loadSettings = async () => {
-	const keys = [
-		"shopName",
-		"shopAddress",
-		"shopPhone",
-		"cashierName",
-		"printerUrl",
-		"printEnabled",
-		"printerPaper",
-		"taxRate",
-		"bankName",
-		"bankNumber",
-		"bankHolder",
-		"qrisNumber",
-	];
 	const s = {};
-	for (const k of keys) {
+	for (const k of SETTING_KEYS) {
 		const v = await getSetting(k);
 		if (v !== null) s[k] = v;
 	}
@@ -55,11 +57,12 @@ const loadSettings = async () => {
 
 export const renderSettings = async () => {
 	const view = document.getElementById("view-settings");
+	if (!view) return;
 	const s = store.state.settings;
 
-	// Real dynamic version & build metadata injected by Vite build engine
+	// Dynamic version & build metadata injected by Vite build engine
 	const appVersion =
-		typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.0.0";
+		typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.1.0";
 	const gitHash =
 		typeof __GIT_HASH__ !== "undefined" && __GIT_HASH__ ? __GIT_HASH__ : "";
 	const buildTime =
@@ -85,142 +88,199 @@ export const renderSettings = async () => {
 		window.matchMedia("(display-mode: standalone)").matches ||
 		window.navigator.standalone === true;
 
+	const currentUser = store.state.currentUser;
+	const currentStoreId = getMasterStoreId();
+
+	// QRIS string validation indicator
+	const rawQris = (s.qrisNumber || "").trim();
+	const isQrisValid = rawQris.length > 20 && rawQris.startsWith("000201");
+
 	view.innerHTML = `
     <div class="section-header">
-      <h2 class="section-title">Pengaturan</h2>
-      <button class="btn btn--primary" id="btn-save-settings">💾 Simpan Semua</button>
+      <div>
+        <h2 class="section-title">Pengaturan Sistem &amp; Toko</h2>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">
+          Kelola profil toko, struk thermal, metode pembayaran, dan sinkronisasi database cloud
+        </div>
+      </div>
+      <button class="btn btn--primary" id="btn-save-settings">
+        💾 Simpan Semua Pengaturan
+      </button>
     </div>
 
-    <!-- Operator & Sesi Aktif -->
+    <!-- 1. Operator & Sesi Kasir -->
     <div class="settings-section">
-      <div class="settings-section-header">👤 Operator & Sesi Kasir</div>
+      <div class="settings-section-header">👤 Profil &amp; Sesi Kasir Aktif</div>
+      
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">Operator Saat Ini</div>
-          <div class="settings-row__desc">Akun yang mengoperasikan kasir</div>
+          <div class="settings-row__desc">Akun yang memiliki wewenang operasional transaksi di perangkat ini</div>
         </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-weight: 700; font-size: 14px; color: var(--text-primary);">
-            ${esc(store.state.currentUser?.name || "Belum Masuk")}
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-weight:700;font-size:14px;color:var(--text-primary)">
+            ${esc(currentUser?.name || "Belum Masuk")}
           </span>
-          <span style="font-size: 11px; padding: 2px 8px; border-radius: 12px; background: rgba(37, 99, 235, 0.1); color: #2563eb; font-weight: 700; text-transform: uppercase;">
-            ${esc(store.state.currentUser?.role || "-")}
+          <span class="badge badge--blue" style="text-transform:uppercase;font-weight:700">
+            ${esc(currentUser?.role || "-")}
+          </span>
+          <span class="badge badge--green" style="font-size:11px">
+            ID: ${esc(currentUser?.username || "-")}
           </span>
         </div>
       </div>
+
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Kontrol Sesi</div>
-          <div class="settings-row__desc">Ganti kasir atau keluar dari sistem</div>
+          <div class="settings-row__label">Kontrol Sesi Operator</div>
+          <div class="settings-row__desc">Beralih ke akun staf lain dengan PIN cepat atau keluar untuk mengunci kasir</div>
         </div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button type="button" class="btn btn--secondary" id="btn-settings-switch-op" style="font-size: 12px; font-weight: 600;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn--secondary btn--sm" id="btn-settings-switch-op" style="font-weight:700">
             🔄 Beralih Operator
           </button>
-          <button type="button" class="btn" id="btn-settings-logout" style="font-size: 12px; font-weight: 700; background: #fff1f2; border: 1.5px solid #fca5a5; color: #e11d48; cursor: pointer;">
-            🚪 Keluar / Log Out
+          <button type="button" class="btn btn--danger btn--sm" id="btn-settings-logout" style="font-weight:700">
+            🚪 Keluar / Kunci Kasir
           </button>
         </div>
       </div>
     </div>
 
-    <!-- Toko -->
+    <!-- 2. Informasi Toko & Struk -->
     <div class="settings-section">
-      <div class="settings-section-header">🏪 Informasi Toko</div>
+      <div class="settings-section-header">🏪 Profil Usaha &amp; Pengaturan Struk</div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Nama Toko</div>
-          <div class="settings-row__desc">Tampil di struk &amp; header</div>
+          <div class="settings-row__label">Nama Usaha / Toko <span style="color:var(--color-danger)">*</span></div>
+          <div class="settings-row__desc">Nama resmi yang tercetak di header struk thermal &amp; kop invoice PDF</div>
         </div>
-        <input type="text" class="input" id="set-shopName" value="${esc(s.shopName || "")}" maxlength="80" style="max-width:260px">
+        <input type="text" class="input" id="set-shopName" value="${esc(s.shopName || "Blue Mountain Refilling Station")}" maxlength="80" placeholder="Blue Mountain Refilling Station" style="max-width:320px">
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Alamat</div>
+          <div class="settings-row__label">Alamat Lengkap Usaha</div>
+          <div class="settings-row__desc">Alamat fisik outlet yang dicetak pada bagian atas struk</div>
         </div>
-        <input type="text" class="input" id="set-shopAddress" value="${esc(s.shopAddress || "")}" maxlength="120" style="max-width:260px">
+        <input type="text" class="input" id="set-shopAddress" value="${esc(s.shopAddress || "")}" maxlength="140" placeholder="Jl. Garuda No. 42, RT 02/RW 05" style="max-width:320px">
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">No. Telepon</div>
+          <div class="settings-row__label">No. Telepon / WhatsApp</div>
+          <div class="settings-row__desc">Nomor narahubung pemesanan galon / customer care</div>
         </div>
-        <input type="text" class="input" id="set-shopPhone" value="${esc(s.shopPhone || "")}" maxlength="20" style="max-width:200px">
+        <input type="tel" class="input" id="set-shopPhone" value="${esc(s.shopPhone || "")}" maxlength="25" placeholder="0812-3456-7890" style="max-width:240px">
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Nama Kasir</div>
-          <div class="settings-row__desc">Tampil di struk sebagai kasir</div>
+          <div class="settings-row__label">Label Nama Kasir Default</div>
+          <div class="settings-row__desc">Nama kasir fallback yang dicetak di struk bila nama staf tidak terbaca</div>
         </div>
-        <input type="text" class="input" id="set-cashierName" value="${esc(s.cashierName || "Admin")}" maxlength="40" style="max-width:200px">
+        <input type="text" class="input" id="set-cashierName" value="${esc(s.cashierName || "Kasir")}" maxlength="40" placeholder="Kasir" style="max-width:240px">
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Tarif Pajak (%)</div>
-          <div class="settings-row__desc">0 = tidak ada pajak</div>
+          <div class="settings-row__label">Pesan Penutup Struk (Footer)</div>
+          <div class="settings-row__desc">Ucapan penutup atau slogan yang dicetak di bagian paling bawah struk thermal</div>
         </div>
-        <input type="number" class="input" id="set-taxRate" value="${s.taxRate || 0}" min="0" max="100" step="0.5" style="max-width:100px">
+        <input type="text" class="input" id="set-receiptFooter" value="${esc(s.receiptFooter || "Terima kasih sudah berbelanja!")}" maxlength="80" placeholder="Terima kasih sudah berbelanja!" style="max-width:320px">
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__label">Saldo Modal Awal Kas Laci Harian (Rp)</div>
+          <div class="settings-row__desc">Uang kembalian awal di laci kasir untuk menghitung keseimbangan neraca kas harian</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="number" class="input" id="set-modalAwal" value="${s.modalAwal || 0}" min="0" step="5000" style="max-width:180px">
+          <span style="font-size:12px;font-weight:700;color:var(--blue-700)">
+            (${formatRupiah(s.modalAwal || 0)})
+          </span>
+        </div>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__label">Tarif Pajak Penjualan Toko (%)</div>
+          <div class="settings-row__desc">Isi 0 jika toko tidak mengenakan PPN / pajak tambahan</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" class="input" id="set-taxRate" value="${s.taxRate || 0}" min="0" max="100" step="0.5" style="max-width:100px">
+          <span style="font-size:13px;font-weight:700">%</span>
+        </div>
       </div>
     </div>
 
-    <!-- Bank Transfer -->
+    <!-- 3. Pembayaran & Dynamic QRIS -->
     <div class="settings-section">
-      <div class="settings-section-header">🏦 Info Transfer Bank</div>
+      <div class="settings-section-header">🏦 Saluran Pembayaran (Transfer Bank &amp; Dynamic QRIS)</div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Nama Bank</div>
+          <div class="settings-row__label">Nama Bank Rekening Toko</div>
+          <div class="settings-row__desc">Bank penerima transfer pembayaran kasir (misal: BCA, Mandiri, BRI, BSI)</div>
         </div>
-        <input type="text" class="input" id="set-bankName" value="${esc(s.bankName || "BCA")}" maxlength="30" style="max-width:200px">
+        <input type="text" class="input" id="set-bankName" value="${esc(s.bankName || "BCA")}" maxlength="30" placeholder="BCA / Mandiri / BRI" style="max-width:240px">
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">Nomor Rekening</div>
+          <div class="settings-row__desc">Nomor rekening tujuan transfer yang tampil di modal bayar &amp; struk</div>
         </div>
-        <input type="text" class="input" id="set-bankNumber" value="${esc(s.bankNumber || "")}" maxlength="30" style="max-width:220px" placeholder="1234567890">
+        <input type="text" class="input" id="set-bankNumber" value="${esc(s.bankNumber || "")}" maxlength="35" placeholder="Contoh: 123-456-7890" style="max-width:240px">
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Atas Nama</div>
+          <div class="settings-row__label">Nama Pemilik Rekening (Atas Nama)</div>
+          <div class="settings-row__desc">Nama pemilik sah rekening untuk verifikasi pembeli</div>
         </div>
-        <input type="text" class="input" id="set-bankHolder" value="${esc(s.bankHolder || "")}" maxlength="60" style="max-width:240px">
+        <input type="text" class="input" id="set-bankHolder" value="${esc(s.bankHolder || "")}" maxlength="60" placeholder="Contoh: Fadhilah Ramadhan" style="max-width:260px">
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">Kode String QRIS Toko (Statis)</div>
-          <div class="settings-row__desc">Salin string QRIS dari BCA/Mandiri/Shopee/GoPay untuk diubah jadi Dynamic QRIS otomatis ber-nominal</div>
+          <div class="settings-row__desc">
+            String EMVCo QRIS resmi toko Anda. Sistem otomatis menginjeksi nominal belanja (Tag 54) secara dinamis dengan nol komisi pihak ketiga.
+            ${
+							rawQris
+								? isQrisValid
+									? `<span class="badge badge--green" style="margin-left:6px">✅ Format QRIS Valid</span>`
+									: `<span class="badge badge--yellow" style="margin-left:6px">⚠️ Format belum standar EMVCo</span>`
+								: ""
+						}
+          </div>
         </div>
-        <textarea class="input" id="set-qrisNumber" rows="2" style="max-width:280px;font-size:11px" placeholder="0002010102112659...">${esc(s.qrisNumber || "")}</textarea>
+        <textarea class="input" id="set-qrisNumber" rows="2" style="max-width:320px;font-size:11px;font-family:monospace;line-height:1.4" placeholder="0002010102122659...">${esc(s.qrisNumber || "")}</textarea>
       </div>
     </div>
 
-    <!-- Printer -->
+    <!-- 4. Thermal Printer Universal -->
     <div class="settings-section">
-      <div class="settings-section-header">🖨️ Thermal Printer Universal (48mm / 58mm / 80mm)</div>
+      <div class="settings-section-header">🖨️ Hardware &amp; Printer Thermal (48mm / 58mm / 80mm)</div>
 
       <div class="settings-row">
         <div class="settings-row__info">
           <div class="settings-row__label">Ukuran Kertas Roll Thermal</div>
-          <div class="settings-row__desc">Pilih ukuran roll kertas sesuai hardware printer kasir Anda</div>
+          <div class="settings-row__desc">Pilih ukuran roll kertas printer yang terhubung ke terminal kasir</div>
         </div>
-        <select class="input" id="set-printerPaper" style="max-width:260px">
+        <select class="input" id="set-printerPaper" style="max-width:280px">
           <option value="48mm" ${s.printerPaper === "48mm" ? "selected" : ""}>48mm (EDC / Mini Portable Bluetooth)</option>
           <option value="58mm" ${!s.printerPaper || s.printerPaper === "58mm" ? "selected" : ""}>58mm (Standar Mini POS Bluetooth)</option>
-          <option value="80mm" ${s.printerPaper === "80mm" ? "selected" : ""}>80mm (Thermal Besar / Kasir Desktop / Resto)</option>
+          <option value="80mm" ${s.printerPaper === "80mm" ? "selected" : ""}>80mm (Thermal Besar / Desktop / Kasir Luas)</option>
         </select>
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Uji Coba Cetak (Test Print Sesuai Ukuran)</div>
-          <div class="settings-row__desc">Cetak struk sample untuk validasi kerapian format dan font margin</div>
+          <div class="settings-row__label">Uji Cetak Struk (Test Print)</div>
+          <div class="settings-row__desc">Cetak struk sample untuk validasi margin 0mm, kejelasan font, dan logo thermal</div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn btn--secondary btn--sm" id="btn-test-48" style="font-weight:700">🧪 Test 48mm</button>
@@ -231,36 +291,64 @@ export const renderSettings = async () => {
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Panduan Koneksi Hardware</div>
-          <div class="settings-row__desc">Petunjuk setup Bluetooth (BLE), Kabel USB (OTG), dan WiFi/LAN</div>
+          <div class="settings-row__label">Panduan Koneksi Hardware Printer</div>
+          <div class="settings-row__desc">Petunjuk integrasi Web Bluetooth (BLE), Kabel USB (OTG), dan Background App Android</div>
         </div>
-        <button class="btn btn--secondary btn--sm" id="btn-printer-guide">📖 Lihat Panduan Hardware</button>
+        <button class="btn btn--secondary btn--sm" id="btn-printer-guide" style="font-weight:700">📖 Panduan Hardware</button>
       </div>
     </div>
 
-    <!-- PWA -->
+    <!-- 5. Cloud Database & Sinkronisasi -->
     <div class="settings-section">
-      <div class="settings-section-header">📱 Aplikasi PWA</div>
+      <div class="settings-section-header">☁️ Database Cloud &amp; Multi-Terminal Realtime</div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Install sebagai App</div>
-          <div class="settings-row__desc">Tambahkan ke layar utama perangkat</div>
+          <div class="settings-row__label">Status Koneksi Supabase Cloud</div>
+          <div class="settings-row__desc">Database utama PostgreSQL terenkripsi (Single Source of Truth)</div>
         </div>
-        ${
-					isStandalone
-						? `<span class="badge badge--green">✅ App Terinstall</span>`
-						: `<button class="btn btn--primary btn--sm" id="btn-install-pwa">📲 Install</button>`
-				}
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="badge badge--green" style="font-size:12px;padding:5px 10px;font-weight:700">
+            🟢 Terhubung ke Cloud Realtime
+          </span>
+        </div>
       </div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Standar Versi Aplikasi (SemVer 3-Digit)</div>
-          <div class="settings-row__desc">Format: <strong>Major</strong> (Arsitektur) . <strong>Minor</strong> (Fitur Sedang) . <strong>Patch</strong> (Revisi Ringan)</div>
+          <div class="settings-row__label">ID Partisi Master Toko (Tenant ID)</div>
+          <div class="settings-row__desc">Kunci keamanan partisi: memastikan data seluruh terminal toko Anda saling terhubung</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="badge badge--blue" style="font-size:12px;padding:5px 10px;font-weight:800;letter-spacing:0.02em">
+            ${esc(currentStoreId)}
+          </span>
+          <button class="btn btn--secondary btn--sm" id="btn-copy-master-key" title="Salin Master ID">
+            📋 Salin ID
+          </button>
+          <button class="btn btn--secondary btn--sm" id="btn-set-master-key" title="Ganti Master ID">
+            🔑 Ubah ID
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__label">Sinkronisasi Cloud Sekarang (Dual-Bridge)</div>
+          <div class="settings-row__desc">Perbarui katalog produk, transaksi, saldo kas, dan akun operator secara realtime</div>
+        </div>
+        <button class="btn btn--primary btn--sm" id="btn-sync-cloud-now" style="font-weight:700;white-space:nowrap">
+          ⚡ Sinkronkan Sekarang
+        </button>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__label">Versi Sistem &amp; Arsitektur</div>
+          <div class="settings-row__desc">Rilis terverifikasi, riwayat komit Git, dan status aplikasi PWA</div>
         </div>
         <div style="text-align:right">
-          <span class="badge badge--blue" style="font-size:12px;padding:6px 12px;font-weight:800;letter-spacing:0.02em">
+          <span class="badge badge--blue" style="font-size:12px;padding:5px 10px;font-weight:800">
             v${esc(appVersion)}${gitHash ? ` (${esc(gitHash)})` : ""}
           </span>
           <div style="font-size:10px;color:var(--text-muted);margin-top:4px">
@@ -268,107 +356,69 @@ export const renderSettings = async () => {
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- 6. Pencadangan & Pemeliharaan Sistem -->
+    <div class="settings-section">
+      <div class="settings-section-header">💾 Pencadangan &amp; Pemeliharaan Data</div>
 
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">Hapus Cache</div>
-          <div class="settings-row__desc">Reset service worker cache &amp; reload</div>
+          <div class="settings-row__label">📥 Unduh Cadangan Penuh (Backup JSON)</div>
+          <div class="settings-row__desc">Unduh seluruh produk, transaksi, pelanggan, beban, dan pengaturan ke file arsip JSON mandiri</div>
+        </div>
+        <button class="btn btn--primary btn--sm" id="btn-export-backup" style="font-weight:700;white-space:nowrap">
+          📥 Unduh Cadangan JSON
+        </button>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__label">📤 Pulihkan dari Cadangan (Restore JSON)</div>
+          <div class="settings-row__desc">Pulihkan database lokal dari file cadangan JSON yang diunduh sebelumnya</div>
+        </div>
+        <div>
+          <input type="file" id="input-import-backup" accept=".json,application/json" style="display:none">
+          <button class="btn btn--secondary btn--sm" id="btn-trigger-import" style="font-weight:700;white-space:nowrap">
+            📤 Pilih File Cadangan
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__label">Pemasangan Aplikasi (PWA)</div>
+          <div class="settings-row__desc">Install aplikasi POS ke layar utama desktop atau smartphone Anda</div>
+        </div>
+        ${
+					isStandalone
+						? `<span class="badge badge--green">✅ Terinstall di Perangkat</span>`
+						: `<button class="btn btn--secondary btn--sm" id="btn-install-pwa" style="font-weight:700">📲 Install Aplikasi</button>`
+				}
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__label">Bersihkan Cache Browser</div>
+          <div class="settings-row__desc">Reset service worker dan unduh bundel versi terbaru dari server</div>
         </div>
         <button class="btn btn--secondary btn--sm" id="btn-clear-cache">🗑️ Clear Cache</button>
       </div>
     </div>
 
-    <!-- Supabase Cloud Multi-Device Sync & Master Store ID -->
+    <!-- 7. Zona Berbahaya -->
     <div class="settings-section">
-      <div class="settings-section-header">🛡️ Keamanan &amp; Kunci Master Database Cloud (Multi-Tenant)</div>
-
+      <div class="settings-section-header" style="color:#ef4444">⚠️ Zona Berbahaya</div>
       <div class="settings-row">
         <div class="settings-row__info">
-          <div class="settings-row__label">ID Database Master Toko (Tenant ID)</div>
-          <div class="settings-row__desc">Kunci partisi database utama: mengikat produk, pelanggan, transaksi &amp; akun operator</div>
-        </div>
-        <div style="text-align:right">
-          <span class="badge ${isDeviceIsolated() ? "badge--red" : "badge--blue"}" style="font-size:12px;padding:6px 12px;font-weight:800;letter-spacing:0.02em">
-            ${isDeviceIsolated() ? "🔒 Sandbox Terisolasi (Offline)" : esc(getMasterStoreId())}
-          </span>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">
-            ${isDeviceIsolated() ? "Perangkat terputus dari database utama" : "Database resmi terenkripsi (fadhil2026)"}
+          <div class="settings-row__label" style="color:#ef4444;font-weight:700">Reset Seluruh Cache Data Lokal</div>
+          <div class="settings-row__desc" style="color:var(--color-danger)">
+            Menghapus cache lokal di browser ini. Data cloud utama Supabase tetap aman dan dapat disinkronkan kembali.
           </div>
         </div>
-      </div>
-
-      <div class="settings-row">
-        <div class="settings-row__info">
-          <div class="settings-row__label">Aktivasi Kunci Master Terminal</div>
-          <div class="settings-row__desc">Salin kunci master untuk mengaktifkan HP/Tablet kasir baru, atau ubah kunci terminal ini</div>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn--secondary btn--sm" id="btn-copy-master-key" style="font-weight:700">📋 Salin Kunci Master</button>
-          <button class="btn btn--secondary btn--sm" id="btn-set-master-key" style="font-weight:700">🔑 Masukkan Kunci</button>
-          <button class="btn btn--danger btn--sm" id="btn-toggle-isolate-device" style="font-weight:700">
-            ${isDeviceIsolated() ? "🔌 Hubungkan Kembali" : "🔒 Putuskan / Isolasi"}
-          </button>
-        </div>
-      </div>
-
-      <div class="settings-row">
-        <div class="settings-row__info">
-          <div class="settings-row__label">Skema Database Cloud (SQL Master Tenant)</div>
-          <div class="settings-row__desc">Salin skema SQL lengkap partisi store_id &amp; dual-bridge realtime untuk Supabase SQL Editor</div>
-        </div>
-        <button class="btn btn--secondary btn--sm" id="btn-show-cloud-sql" style="white-space:nowrap">
-          📋 Salin Skema SQL Cloud
+        <button class="btn btn--danger btn--sm" id="btn-reset-all" style="font-weight:700">
+          🗑️ Reset Cache Lokal
         </button>
-      </div>
-
-      <div class="settings-row">
-        <div class="settings-row__info">
-          <div class="settings-row__label">Sinkronkan Semua Data &amp; Akun Sekarang</div>
-          <div class="settings-row__desc">Dual-Bridge Sync: Menjamin transaksi, pelanggan, omzet &amp; akun operator di HP dan Laptop 100% identik</div>
-        </div>
-        <button class="btn btn--primary btn--sm" id="btn-sync-cloud-now" style="white-space:nowrap">
-          ⚡ Sinkronkan Sekarang
-        </button>
-      </div>
-    </div>
-
-    <!-- Backup & Restore Data (Sinkronisasi Antar Device) -->
-    <div class="settings-section">
-      <div class="settings-section-header">💾 Ekspor &amp; Impor Data (Sinkronisasi Antar Device)</div>
-
-      <div class="settings-row">
-        <div class="settings-row__info">
-          <div class="settings-row__label">📥 Ekspor Backup Lengkap (JSON)</div>
-          <div class="settings-row__desc">Unduh seluruh produk, transaksi, cicilan, pengeluaran &amp; pengaturan ke file JSON. Kirim file ini ke device lain untuk sinkronisasi.</div>
-        </div>
-        <button class="btn btn--primary btn--sm" id="btn-export-backup" style="background:#2563eb;white-space:nowrap">
-          📥 Unduh Backup JSON
-        </button>
-      </div>
-
-      <div class="settings-row">
-        <div class="settings-row__info">
-          <div class="settings-row__label">📤 Impor / Pulihkan Data (JSON)</div>
-          <div class="settings-row__desc">Pulihkan atau sinkronkan database dari file backup JSON perangkat lain.</div>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input type="file" id="input-import-backup" accept=".json,application/json" style="display:none">
-          <button class="btn btn--secondary btn--sm" id="btn-trigger-import" style="white-space:nowrap">
-            📤 Pilih File Backup
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Danger Zone -->
-    <div class="settings-section">
-      <div class="settings-section-header" style="color:#fca5a5">⚠️ Zona Berbahaya</div>
-      <div class="settings-row">
-        <div class="settings-row__info">
-          <div class="settings-row__label">Reset Semua Data</div>
-          <div class="settings-row__desc" style="color:var(--color-danger)">Hapus semua transaksi, pengeluaran, dan produk. Tidak bisa dibatalkan!</div>
-        </div>
-        <button class="btn btn--danger btn--sm" id="btn-reset-all">🗑️ Reset</button>
       </div>
     </div>
   `;
@@ -377,150 +427,165 @@ export const renderSettings = async () => {
 };
 
 const bindSettingsEvents = () => {
-	// Show Supabase SQL Schema Modal
+	// Save All Settings
 	document
-		.getElementById("btn-show-cloud-sql")
-		?.addEventListener("click", () => {
-			const sqlCode = `-- Jalankan perintah ini di Supabase SQL Editor (https://supabase.com/dashboard/project/wiapnhpdgjbtkblowfig/sql):
--- 1. Tambah Partisi store_id ke Semua Tabel
-ALTER TABLE IF EXISTS public.products ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8';
-ALTER TABLE IF EXISTS public.customers ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8';
-ALTER TABLE IF EXISTS public.transactions ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8';
-ALTER TABLE IF EXISTS public.expenses ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8';
-ALTER TABLE IF EXISTS public.settings ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8';
+		.getElementById("btn-save-settings")
+		?.addEventListener("click", async () => {
+			const shopName = document.getElementById("set-shopName")?.value.trim();
+			if (!shopName) {
+				window.showToast?.("Nama toko tidak boleh kosong!", "warning");
+				document.getElementById("set-shopName")?.focus();
+				return;
+			}
 
--- 2. Buat Tabel Pengguna Aplikasi (app_users)
-CREATE TABLE IF NOT EXISTS public.app_users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8',
-    username TEXT NOT NULL,
-    name TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'cashier' CHECK (role IN ('owner', 'supervisor', 'cashier')),
-    pin_hash TEXT NOT NULL,
-    pin_salt TEXT NOT NULL,
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
-    CONSTRAINT uq_store_username UNIQUE (store_id, username)
-);
-ALTER TABLE IF EXISTS public.app_users ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'STORE-BM-856CFAC8';
+			const shopAddress = document
+				.getElementById("set-shopAddress")
+				?.value.trim();
+			const shopPhone = document.getElementById("set-shopPhone")?.value.trim();
+			const cashierName = document
+				.getElementById("set-cashierName")
+				?.value.trim();
+			const receiptFooter = document
+				.getElementById("set-receiptFooter")
+				?.value.trim();
 
--- 3. RLS Policies Multi-Tenant
-ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
+			const modalAwalInput = document.getElementById("set-modalAwal")?.value;
+			const modalAwal = Math.max(0, parseInt(modalAwalInput, 10) || 0);
 
-DROP POLICY IF EXISTS "tenant_users_policy" ON public.app_users;
-CREATE POLICY "tenant_users_policy" ON public.app_users FOR ALL TO anon, authenticated
-    USING (store_id = 'STORE-BM-856CFAC8') WITH CHECK (store_id = 'STORE-BM-856CFAC8');
+			const taxRateInput = document.getElementById("set-taxRate")?.value;
+			let taxRate = parseFloat(taxRateInput) || 0;
+			if (taxRate < 0) taxRate = 0;
+			if (taxRate > 100) taxRate = 100;
 
--- 4. Realtime Broadcast
-DO $$ BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'app_users') THEN
-        ALTER PUBLICATION supabase_realtime ADD TABLE public.app_users;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'settings') THEN
-        ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
-    END IF;
-END $$;`;
+			const bankName = document.getElementById("set-bankName")?.value.trim();
+			const bankNumber = document
+				.getElementById("set-bankNumber")
+				?.value.trim();
+			const bankHolder = document
+				.getElementById("set-bankHolder")
+				?.value.trim();
+			const qrisNumber = document
+				.getElementById("set-qrisNumber")
+				?.value.trim();
+			const printerPaper =
+				document.getElementById("set-printerPaper")?.value || "58mm";
 
-			const html = `
-      <div class="modal-header">
-        <h3 class="modal-title">🛡️ Skema SQL Master Tenant &amp; Akun (Supabase)</h3>
-        <button class="modal-close" id="sql-modal-close" type="button">✕</button>
-      </div>
-      <div class="modal-body">
-        <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px">
-          Jalankan perintah SQL ini di menu <strong>SQL Editor</strong> dashboard Supabase Anda agar semua data dan akun operator terkunci pada Master Store ID <code>STORE-BM-856CFAC8</code>:
-        </p>
-        <textarea id="sql-code-area" readonly style="width:100%;height:220px;font-family:monospace;font-size:11px;padding:8px;border-radius:8px;border:1px solid var(--border-default);background:rgba(0,0,0,0.02);line-height:1.4">${sqlCode}</textarea>
-      </div>
-      <div class="modal-footer" style="display:flex;justify-content:space-between;gap:8px">
-        <button class="btn btn--primary btn--sm" id="btn-copy-sql">📋 Salin Perintah SQL</button>
-        <button class="btn btn--secondary btn--sm" id="btn-close-sql">Tutup</button>
-      </div>
-    `;
-			openModal(html, "modal-sql");
-			document
-				.getElementById("sql-modal-close")
-				?.addEventListener("click", () => closeModal("modal-sql"));
-			document
-				.getElementById("btn-close-sql")
-				?.addEventListener("click", () => closeModal("modal-sql"));
-			document.getElementById("btn-copy-sql")?.addEventListener("click", () => {
-				navigator.clipboard?.writeText(sqlCode).then(() => {
-					window.showToast?.(
-						"✅ Perintah SQL berhasil disalin ke clipboard!",
-						"success",
-					);
-				});
-			});
+			const updates = {
+				shopName,
+				shopAddress,
+				shopPhone,
+				cashierName,
+				receiptFooter,
+				modalAwal,
+				taxRate,
+				bankName,
+				bankNumber,
+				bankHolder,
+				qrisNumber,
+				printerPaper,
+			};
+
+			const saveBtn = document.getElementById("btn-save-settings");
+			if (saveBtn) {
+				saveBtn.textContent = "⏳ Menyimpan...";
+				saveBtn.disabled = true;
+			}
+
+			try {
+				// 1. Save to local Dexie database & push to Supabase Cloud
+				for (const [key, val] of Object.entries(updates)) {
+					await setSetting(key, val);
+					pushSettingToCloud(key, val).catch(() => {});
+				}
+
+				// 2. Update reactive application state
+				store.updateSettings(updates);
+
+				window.showToast?.(
+					"✅ Pengaturan toko berhasil disimpan & disinkronkan ke cloud!",
+					"success",
+				);
+				setTimeout(() => renderSettings(), 500);
+			} catch (err) {
+				console.error("[settings-save]", err);
+				window.showToast?.(
+					`Gagal menyimpan pengaturan: ${err.message || "Error"}`,
+					"error",
+				);
+			} finally {
+				if (saveBtn) {
+					saveBtn.textContent = "💾 Simpan Semua Pengaturan";
+					saveBtn.disabled = false;
+				}
+			}
 		});
 
-	// Copy Master Store Key
+	// Switch Operator
+	document
+		.getElementById("btn-settings-switch-op")
+		?.addEventListener("click", () => {
+			window.dispatchEvent(new CustomEvent("request-operator-switch"));
+		});
+
+	// Logout
+	document
+		.getElementById("btn-settings-logout")
+		?.addEventListener("click", () => {
+			if (confirm("Kunci kasir dan keluar dari sesi operator saat ini?")) {
+				window.dispatchEvent(new CustomEvent("request-logout"));
+			}
+		});
+
+	// Test Thermal Prints
+	document.getElementById("btn-test-48")?.addEventListener("click", () => {
+		printTestReceipt("48mm");
+	});
+	document.getElementById("btn-test-58")?.addEventListener("click", () => {
+		printTestReceipt("58mm");
+	});
+	document.getElementById("btn-test-80")?.addEventListener("click", () => {
+		printTestReceipt("80mm");
+	});
+
+	// Hardware Guide Modal
+	document
+		.getElementById("btn-printer-guide")
+		?.addEventListener("click", () => {
+			showPrinterGuide();
+		});
+
+	// Copy Master Store ID
 	document
 		.getElementById("btn-copy-master-key")
 		?.addEventListener("click", () => {
 			const key = getMasterStoreId();
 			navigator.clipboard?.writeText(key).then(() => {
 				window.showToast?.(
-					`✅ Kunci Master (${key}) berhasil disalin!`,
+					`✅ Master Store ID (${key}) berhasil disalin!`,
 					"success",
 				);
 			});
 		});
 
-	// Set / Change Master Store Key
+	// Set / Change Master Store ID
 	document
 		.getElementById("btn-set-master-key")
 		?.addEventListener("click", async () => {
 			const current = getMasterStoreId();
 			const input = prompt(
-				"Masukkan Kunci Master Database Toko (Master Store ID):",
-				current === "ISOLATED_SANDBOX" ? "STORE-BM-856CFAC8" : current,
+				"Masukkan Master Store ID Partisi Toko Anda:",
+				current,
 			);
-			if (input?.trim()) {
+			if (input?.trim() && input.trim() !== current) {
 				setMasterStoreId(input.trim());
 				setupRealtimeSubscription();
 				await syncInitialData();
 				window.showToast?.(
-					`✅ Terminal terhubung ke Master ID: ${input.trim()}`,
+					`✅ Terminal dihubungkan ke Store ID: ${input.trim()}`,
 					"success",
 				);
 				renderSettings();
 			}
-		});
-
-	// Toggle Isolate Device
-	document
-		.getElementById("btn-toggle-isolate-device")
-		?.addEventListener("click", async () => {
-			if (isDeviceIsolated()) {
-				setMasterStoreId("STORE-BM-856CFAC8");
-				setupRealtimeSubscription();
-				await syncInitialData();
-				window.showToast?.(
-					"✅ Perangkat dihubungkan kembali ke Database Utama Toko!",
-					"success",
-				);
-			} else {
-				if (
-					confirm(
-						"Isolasi perangkat ini? Perangkat akan beralih ke Mode Sandbox Demo Offline dan terputus dari database cloud toko.",
-					)
-				) {
-					setMasterStoreId("ISOLATED_SANDBOX");
-					setupRealtimeSubscription();
-					window.showToast?.(
-						"🔒 Perangkat kini dalam Mode Sandbox Terisolasi.",
-						"info",
-					);
-				}
-			}
-			renderSettings();
 		});
 
 	// Manual Supabase Cloud Sync
@@ -534,13 +599,13 @@ END $$;`;
 			}
 			try {
 				await syncInitialData();
-				window.showToast(
-					"✅ Semua data & akun berhasil disinkronkan!",
+				window.showToast?.(
+					"✅ Semua data, transaksi & akun berhasil disinkronkan!",
 					"success",
 				);
 				setTimeout(() => renderSettings(), 600);
 			} catch (err) {
-				window.showToast(
+				window.showToast?.(
 					`Gagal sinkron cloud: ${err.message || "Error"}`,
 					"error",
 				);
@@ -586,29 +651,29 @@ END $$;`;
 				document.body.removeChild(a);
 				setTimeout(() => URL.revokeObjectURL(url), 5000);
 
-				window.showToast("✅ File backup berhasil diunduh!", "success");
+				window.showToast?.("✅ File cadangan berhasil diunduh!", "success");
 			} catch (err) {
 				console.error("[export-backup]", err);
-				window.showToast(
-					`Gagal ekspor backup: ${err.message || "Error"}`,
+				window.showToast?.(
+					`Gagal ekspor cadangan: ${err.message || "Error"}`,
 					"error",
 				);
 			} finally {
 				if (btn) {
-					btn.textContent = "📥 Unduh Backup JSON";
+					btn.textContent = "📥 Unduh Cadangan JSON";
 					btn.disabled = false;
 				}
 			}
 		});
 
-	// Import Backup JSON Trigger
+	// Trigger Import Backup
 	document
 		.getElementById("btn-trigger-import")
 		?.addEventListener("click", () => {
 			document.getElementById("input-import-backup")?.click();
 		});
 
-	// Import Backup File Change
+	// Process Imported Backup File
 	document
 		.getElementById("input-import-backup")
 		?.addEventListener("change", (e) => {
@@ -624,7 +689,7 @@ END $$;`;
 						!parsed.data ||
 						(!parsed.data.products && !parsed.data.transactions)
 					) {
-						window.showToast("Format file backup tidak valid!", "error");
+						window.showToast?.("Format file cadangan tidak dikenali!", "error");
 						return;
 					}
 
@@ -644,12 +709,12 @@ END $$;`;
 
 					const modalHtml = `
           <div class="modal-header">
-            <span class="modal-title">📤 Konfirmasi Impor Data</span>
+            <span class="modal-title">📤 Konfirmasi Pemulihan Cadangan Data</span>
             <button class="modal-close" id="imp-x">✕</button>
           </div>
           <div class="modal-body">
             <div style="padding:12px;background:#dbeafe;border-radius:10px;font-size:12px;color:#1e40af;margin-bottom:12px">
-              ℹ️ <strong>File Backup Terdeteksi:</strong><br>
+              ℹ️ <strong>Arsip Cadangan Terverifikasi:</strong><br>
               Toko: <strong>${esc(parsed.shopName || "Blue Mountain")}</strong><br>
               Waktu Ekspor: ${expDate}
             </div>
@@ -678,22 +743,22 @@ END $$;`;
               <label style="display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--bg-elevated);border-radius:8px;border:1.5px solid var(--border-subtle);cursor:pointer">
                 <input type="radio" name="import-mode" value="replace" checked style="margin-top:2px">
                 <div style="font-size:12px">
-                  <strong>🔄 Timpa / Restore Penuh (Rekomendasi untuk Pindah HP)</strong>
-                  <div style="font-size:11px;color:var(--text-muted)">Ganti seluruh database di device ini sama persis dengan file backup.</div>
+                  <strong>🔄 Timpa / Pemulihan Penuh (Rekomendasi)</strong>
+                  <div style="font-size:11px;color:var(--text-muted)">Ganti seluruh database di perangkat ini sama persis dengan file cadangan.</div>
                 </div>
               </label>
               <label style="display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--bg-elevated);border-radius:8px;border:1.5px solid var(--border-subtle);cursor:pointer">
                 <input type="radio" name="import-mode" value="merge" style="margin-top:2px">
                 <div style="font-size:12px">
                   <strong>➕ Gabung Data (Merge)</strong>
-                  <div style="font-size:11px;color:var(--text-muted)">Tambahkan data dari file backup tanpa menghapus data lokal yang sudah ada.</div>
+                  <div style="font-size:11px;color:var(--text-muted)">Tambahkan data baru tanpa menghapus data lokal yang sudah ada.</div>
                 </div>
               </label>
             </div>
           </div>
           <div class="modal-footer">
             <button class="btn btn--secondary" id="imp-cancel">Batal</button>
-            <button class="btn btn--success" id="imp-confirm">🚀 Pulihkan &amp; Sinkronkan</button>
+            <button class="btn btn--success" id="imp-confirm">🚀 Pulihkan Data</button>
           </div>
         `;
 
@@ -724,7 +789,6 @@ END $$;`;
 
 								try {
 									await importFullBackup(parsed, mode);
-									// Reload fresh data into store
 									const [newProds, newCusts, newTxs, newExps] =
 										await Promise.all([
 											getAllProducts(),
@@ -732,20 +796,17 @@ END $$;`;
 											getAllTransactions(),
 											getAllExpenses(),
 										]);
-									store.setProducts(newProds);
-									store.setCustomers(newCusts);
-									store.setTransactions(newTxs);
-									store.setExpenses(newExps);
+									store.setProducts?.(newProds);
+									store.setCustomers?.(newCusts);
+									store.setTransactions?.(newTxs);
+									store.setExpenses?.(newExps);
 
 									closeModal("import-confirm-modal");
-									window.showToast(
-										"🎉 Data berhasil dipulihkan & sinkron!",
-										"success",
-									);
+									window.showToast?.("🎉 Data berhasil dipulihkan!", "success");
 									setTimeout(() => renderSettings(), 600);
 								} catch (err) {
 									console.error("[import-backup]", err);
-									window.showToast(
+									window.showToast?.(
 										`Gagal memulihkan data: ${err.message}`,
 										"error",
 									);
@@ -754,85 +815,29 @@ END $$;`;
 					}, 0);
 				} catch (err) {
 					console.error("[parse-backup]", err);
-					window.showToast("File JSON rusak atau tidak terbaca!", "error");
+					window.showToast?.(
+						"File JSON cadangan rusak atau tidak terbaca!",
+						"error",
+					);
 				}
 			};
 			reader.readAsText(file);
-			e.target.value = ""; // reset
-		});
-	document
-		.getElementById("btn-save-settings")
-		?.addEventListener("click", async () => {
-			const fields = [
-				"shopName",
-				"shopAddress",
-				"shopPhone",
-				"cashierName",
-				"taxRate",
-				"bankName",
-				"bankNumber",
-				"bankHolder",
-				"printerUrl",
-				"printerPaper",
-				"qrisNumber",
-			];
-			const updates = {};
-			for (const f of fields) {
-				const el = document.getElementById(`set-${f}`);
-				if (el) {
-					updates[f] =
-						f === "taxRate" ? parseFloat(el.value) || 0 : el.value.trim();
-					await setSetting(f, updates[f]);
-				}
-			}
-
-			store.updateSettings(updates);
-			window.showToast("Pengaturan berhasil disimpan", "success");
+			e.target.value = "";
 		});
 
-	document
-		.getElementById("btn-settings-switch-op")
-		?.addEventListener("click", () => {
-			window.dispatchEvent(new CustomEvent("request-operator-switch"));
-		});
-
-	document
-		.getElementById("btn-settings-logout")
-		?.addEventListener("click", () => {
-			if (confirm("Keluar dari sesi operator kasir?")) {
-				window.dispatchEvent(new CustomEvent("request-logout"));
-			}
-		});
-
-	document.getElementById("btn-test-48")?.addEventListener("click", () => {
-		printTestReceipt("48mm");
-	});
-
-	document.getElementById("btn-test-58")?.addEventListener("click", () => {
-		printTestReceipt("58mm");
-	});
-
-	document.getElementById("btn-test-80")?.addEventListener("click", () => {
-		printTestReceipt("80mm");
-	});
-
-	document
-		.getElementById("btn-printer-guide")
-		?.addEventListener("click", () => {
-			showPrinterGuide();
-		});
-
+	// Install PWA
 	document.getElementById("btn-install-pwa")?.addEventListener("click", () => {
 		if (window._pwaPrompt) {
 			window._pwaPrompt.prompt();
 		} else {
-			window.showToast(
+			window.showToast?.(
 				"Buka di Chrome / Edge untuk meng-install aplikasi ini",
 				"info",
 			);
 		}
 	});
 
+	// Clear Cache
 	document
 		.getElementById("btn-clear-cache")
 		?.addEventListener("click", async () => {
@@ -848,35 +853,39 @@ END $$;`;
 						await reg.unregister();
 					}
 				}
-				window.showToast("Cache dihapus. Memperbarui...", "success");
+				window.showToast?.(
+					"Cache browser dibersihkan. Memperbarui...",
+					"success",
+				);
 				setTimeout(() => window.location.reload(), 1000);
 			} catch (err) {
 				console.error("[cache]", err);
-				window.showToast("Gagal hapus cache", "error");
+				window.showToast?.("Gagal membersihkan cache", "error");
 			}
 		});
 
+	// Reset Local Cache Only (Danger Zone)
 	document
 		.getElementById("btn-reset-all")
 		?.addEventListener("click", async () => {
 			const keyword = prompt(
-				'⚠️ KONFIRMASI PENGHAPUSAN PERMANEN\n\nTindakan ini akan menghapus SELURUH data lokal (transaksi, pelanggan, pengeluaran, dan produk).\n\nKetik kata "HAPUS" dengan huruf besar untuk melanjutkan:',
+				'⚠️ PERINGATAN: PEMBERSIHAN CACHE DATA LOKAL\n\nTindakan ini mengosongkan salinan data offline di browser ini (produk, transaksi, pelanggan, beban).\n\nKetik kata "HAPUS" dengan huruf besar untuk melanjutkan:',
 			);
 			if (keyword === "HAPUS") {
 				try {
 					await clearAllData();
-					window.showToast(
-						"Semua data lokal berhasil dihapus. Memuat ulang...",
-						"error",
+					window.showToast?.(
+						"Data lokal dibersihkan. Memuat ulang dari cloud...",
+						"info",
 					);
 					setTimeout(() => window.location.reload(), 1500);
 				} catch (err) {
 					console.error("[reset]", err);
-					window.showToast("Gagal menghapus data", "error");
+					window.showToast?.("Gagal mengosongkan data lokal", "error");
 				}
 			} else if (keyword !== null) {
-				window.showToast(
-					"Penghapusan dibatalkan (kata sandi konfirmasi salah)",
+				window.showToast?.(
+					"Tindakan dibatalkan (konfirmasi tidak sesuai)",
 					"info",
 				);
 			}
@@ -886,25 +895,25 @@ END $$;`;
 const showPrinterGuide = () => {
 	const html = `
     <div class="modal-header">
-      <span class="modal-title">🖨️ Panduan Lengkap Koneksi Printer Thermal (48/58/80mm)</span>
+      <span class="modal-title">🖨️ Panduan Lengkap Koneksi Printer Thermal (48 / 58 / 80mm)</span>
       <button class="modal-close" id="pg-close">✕</button>
     </div>
     <div class="modal-body" style="font-size:13px;line-height:1.7;color:var(--text-secondary)">
       <div style="padding:12px;background:#dbeafe;border-radius:10px;font-size:12px;color:#1e40af;margin-bottom:14px">
-        💡 <strong>Sistem Mendukung 4 Jalur Koneksi Hardware Sekaligus:</strong>
+        💡 <strong>Sistem POS Mendukung 4 Jalur Koneksi Hardware Sekaligus:</strong>
       </div>
 
-      <h4 style="color:var(--text-primary);margin-bottom:6px">1. 🖨️ Universal Direct Print (Driver OS / Kabel USB / Spooler / AirPrint)</h4>
-      <p style="font-size:12px;margin-bottom:6px">Metode paling universal untuk Windows, macOS, Android &amp; iOS. Otomatis menyesuaikan margin 0mm dan lebar roll (48mm/58mm/80mm).</p>
+      <h4 style="color:var(--text-primary);margin-bottom:4px">1. 🖨️ Universal Direct Print (Driver OS / USB / Dialog Print)</h4>
+      <p style="font-size:12px;margin-bottom:8px">Metode paling universal untuk Windows, macOS, Android &amp; iOS. Otomatis memotong margin 0mm dan menyesuaikan lebar roll (48mm/58mm/80mm).</p>
 
-      <h4 style="color:var(--text-primary);margin-top:12px;margin-bottom:6px">2. 📲 Web Bluetooth (BLE Direct ESC/POS Tanpa Aplikasi)</h4>
-      <p style="font-size:12px;margin-bottom:6px">Langsung mengirim binary ESC/POS ke printer Bluetooth dari browser Chrome / Edge di Android &amp; Laptop.</p>
+      <h4 style="color:var(--text-primary);margin-top:10px;margin-bottom:4px">2. 📲 Web Bluetooth (BLE Direct ESC/POS Tanpa Aplikasi)</h4>
+      <p style="font-size:12px;margin-bottom:8px">Langsung mengirim binary ESC/POS ke printer Bluetooth dari browser Chrome / Edge di Android &amp; Laptop tanpa instal software perantara.</p>
 
-      <h4 style="color:var(--text-primary);margin-top:12px;margin-bottom:6px">3. 🔌 WebUSB (Kabel USB OTG Direct)</h4>
-      <p style="font-size:12px;margin-bottom:6px">Hubungkan kabel printer USB ke laptop atau HP via konverter OTG untuk cetak super cepat tanpa dialog spooler.</p>
+      <h4 style="color:var(--text-primary);margin-top:10px;margin-bottom:4px">3. 🔌 WebUSB (Kabel USB OTG Direct)</h4>
+      <p style="font-size:12px;margin-bottom:8px">Hubungkan kabel printer USB ke laptop atau HP via konverter OTG untuk cetak instan berkecepatan tinggi tanpa popup dialog printer.</p>
 
-      <h4 style="color:var(--text-primary);margin-top:12px;margin-bottom:6px">4. 🌐 Background Intent (RawBT &amp; Bluetooth Print App)</h4>
-      <p style="font-size:12px;margin-bottom:6px">Khusus Android, struk dapat dilempar otomatis ke aplikasi background <strong>RawBT</strong> atau <strong>Bluetooth Print App</strong> untuk auto-cut dan cetak senyap.</p>
+      <h4 style="color:var(--text-primary);margin-top:10px;margin-bottom:4px">4. 🌐 Background Intent Android (RawBT &amp; Bluetooth Print App)</h4>
+      <p style="font-size:12px;margin-bottom:8px">Khusus Android, struk dapat dilempar otomatis ke aplikasi background <strong>RawBT</strong> atau <strong>Bluetooth Print App</strong> untuk auto-cut kertas dan cetak senyap.</p>
     </div>
     <div class="modal-footer">
       <button class="btn btn--primary" id="pg-close2">Mengerti 👍</button>

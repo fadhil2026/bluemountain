@@ -100,7 +100,7 @@ export const buildReceiptJSON = (txData, settings = {}) => {
 
 	separator();
 	empty();
-	text("Terima kasih sudah berbelanja!", 1, 1, 0);
+	text(settings.receiptFooter || "Terima kasih sudah berbelanja!", 1, 1, 0);
 	text("BLUE MOUNTAIN REFILLING STATION", 1, 1, 0);
 	empty();
 	empty();
