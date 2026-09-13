@@ -170,18 +170,23 @@ export const saveTransaction = async (tx) => {
 	const transaction = {
 		...tx,
 		id: tx.id ? String(tx.id) : generateUUID("tx"),
-		syncStatus: online ? "synced" : "staged_offline",
+		syncStatus: "staged_offline",
 		deleted_at: null,
 		updated_at: new Date().toISOString(),
 	};
 	await db.transactions.put(transaction);
 	if (online) {
-		pushTransactionToCloud(transaction).catch(() => {});
-	} else {
 		try {
-			checkStagedOfflineTransactions?.();
+			const res = await pushTransactionToCloud(transaction);
+			if (res?.success) {
+				transaction.syncStatus = "synced";
+				await db.transactions.put(transaction);
+			}
 		} catch (_) {}
 	}
+	try {
+		checkStagedOfflineTransactions?.();
+	} catch (_) {}
 	return transaction.id;
 };
 export const getAllTransactions = async () => {
@@ -219,13 +224,19 @@ export const saveExpense = async (exp) => {
 	const expense = {
 		...exp,
 		id: exp.id ? String(exp.id) : generateUUID("exp"),
-		syncStatus: online ? "synced" : "staged_offline",
+		syncStatus: "staged_offline",
 		deleted_at: null,
 		updated_at: new Date().toISOString(),
 	};
 	await db.expenses.put(expense);
 	if (online) {
-		pushExpenseToCloud(expense).catch(() => {});
+		try {
+			const res = await pushExpenseToCloud(expense);
+			if (res?.success) {
+				expense.syncStatus = "synced";
+				await db.expenses.put(expense);
+			}
+		} catch (_) {}
 	}
 	return expense.id;
 };
@@ -267,14 +278,14 @@ export const seedDefaultProducts = async () => {
 export const seedDefaultUsers = async () => {
 	const count = await db.users.count();
 	if (count > 0) return;
-	// PIN default: 123456 (6 digit) — hash di-generate dari cloud reset script
+	// PIN default: 123456 (6 digit) matching authoritative cloud roster
 	await db.users.put({
 		id: "usr_admin",
 		username: "admin",
 		name: "Fadhilah Ramadhan",
 		role: "owner",
-		pinHash: "c3b558e7f7bd99bf1a0e50aa083c1ba8811e840dab3bf07bc020c724ce771e83",
-		pinSalt: "9bc6c2b0806a1040516484af5df10112",
+		pinHash: "d6d80d026dadedb6b7c9c15ee0f3653761b1c2a1ac6e03abf9edd86bb8e911f1",
+		pinSalt: "c40d7da58df489a2718e1c52d445e45a",
 		isActive: true,
 		createdAt: new Date().toISOString(),
 		updatedAt: new Date().toISOString(),

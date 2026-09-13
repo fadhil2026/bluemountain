@@ -59,17 +59,19 @@ export async function onRequestPost(context) {
 		// 2. Fetch authoritative user from Supabase via Edge
 		const supabaseUrl =
 			env.SUPABASE_URL || "https://wiapnhpdgjbtkblowfig.supabase.co";
-		const supabaseAnonKey =
+		const supabaseKey =
+			env.SUPABASE_SECRET_KEY ||
 			env.SUPABASE_PUBLISHABLE_KEY ||
 			"sb_publishable_BBEJNs18ooZ-IHRPxJtDUA_KiKLcQ-g";
 
+		const storeId = body.storeId || "STORE-BM-856CFAC8";
 		// Query settings for users_roster or app_users
 		const rosterRes = await fetch(
-			`${supabaseUrl}/rest/v1/settings?key=eq.users_roster_STORE-BM-856CFAC8&select=value`,
+			`${supabaseUrl}/rest/v1/settings?key=eq.users_roster_${storeId}&select=value`,
 			{
 				headers: {
-					apikey: supabaseAnonKey,
-					Authorization: `Bearer ${supabaseAnonKey}`,
+					apikey: supabaseKey,
+					Authorization: `Bearer ${supabaseKey}`,
 				},
 			},
 		);
@@ -88,7 +90,7 @@ export async function onRequestPost(context) {
 			}
 		}
 
-		// Default owner fallback if initial
+		// Default owner fallback if initial (PIN 123456)
 		if (!foundUser && cleanUser === "admin") {
 			foundUser = {
 				id: "usr_admin",
@@ -96,8 +98,8 @@ export async function onRequestPost(context) {
 				name: "Fadhilah Ramadhan (Owner)",
 				role: "owner",
 				pin_hash:
-					"c3b558e7f7bd99bf1a0e50aa083c1ba8811e840dab3bf07bc020c724ce771e83",
-				pin_salt: "9bc6c2b0806a1040516484af5df10112",
+					"d6d80d026dadedb6b7c9c15ee0f3653761b1c2a1ac6e03abf9edd86bb8e911f1",
+				pin_salt: "c40d7da58df489a2718e1c52d445e45a",
 				is_active: true,
 			};
 		}

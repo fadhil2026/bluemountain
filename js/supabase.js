@@ -909,11 +909,18 @@ export const deleteCustomerFromCloud = async (id) => {
 };
 
 export const pushTransactionToCloud = async (tx) => {
-	if (isDeviceIsolated() || !navigator.onLine) return;
+	if (isDeviceIsolated() || !navigator.onLine)
+		return { success: false, offline: true };
 	try {
 		const supabase = getSupabase();
-		await supabase.from("transactions").upsert(formatTransactionForCloud(tx));
-	} catch (_) {}
+		const { error } = await supabase
+			.from("transactions")
+			.upsert(formatTransactionForCloud(tx));
+		if (error) throw error;
+		return { success: true };
+	} catch (err) {
+		return { success: false, error: err.message };
+	}
 };
 
 export const deleteTransactionFromCloud = async (id) => {
@@ -925,11 +932,18 @@ export const deleteTransactionFromCloud = async (id) => {
 };
 
 export const pushExpenseToCloud = async (exp) => {
-	if (isDeviceIsolated() || !navigator.onLine) return;
+	if (isDeviceIsolated() || !navigator.onLine)
+		return { success: false, offline: true };
 	try {
 		const supabase = getSupabase();
-		await supabase.from("expenses").upsert(formatExpenseForCloud(exp));
-	} catch (_) {}
+		const { error } = await supabase
+			.from("expenses")
+			.upsert(formatExpenseForCloud(exp));
+		if (error) throw error;
+		return { success: true };
+	} catch (err) {
+		return { success: false, error: err.message };
+	}
 };
 
 export const deleteExpenseFromCloud = async (id) => {
@@ -955,14 +969,31 @@ export const pushSettingToCloud = async (key, value) => {
 
 /**
  * Fetch Server-Authoritative User Roster from Cloud (DB Master Single Source of Truth)
- * Direct fast query to settings table with 2500ms timeout
+ * Prioritizes sanitized Edge endpoint /api/auth/users (never leaks PIN hash/salt)
  * @returns {Promise<Array|null>} Array of user objects or null
  */
 export const fetchAuthoritativeRoster = async () => {
 	if (isDeviceIsolated() || !navigator.onLine) return null;
+
+	// 1. Prioritize sanitized Edge endpoint
+	try {
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), 2000);
+		const edgeRes = await fetch("/api/auth/users", {
+			signal: controller.signal,
+		});
+		clearTimeout(timer);
+		if (edgeRes.ok) {
+			const json = await edgeRes.json();
+			if (json.success && Array.isArray(json.users) && json.users.length > 0) {
+				return json.users;
+			}
+		}
+	} catch (_) {}
+
+	// 2. Direct Supabase Cloud query fallback
 	const storeId = getMasterStoreId();
 	const supabase = getSupabase();
-
 	const rosterKey = `users_roster_${storeId}`;
 	try {
 		const controller = new AbortController();
@@ -1021,8 +1052,8 @@ export const syncAuthoritativeRosterToCache = async () => {
 			username: usernameClean,
 			name: cu.name,
 			role: cu.role,
-			pinHash: cu.pin_hash || cu.pinHash,
-			pinSalt: cu.pin_salt || cu.pinSalt,
+			pinHash: cu.pin_hash || cu.pinHash || existing?.pinHash || "",
+			pinSalt: cu.pin_salt || cu.pinSalt || existing?.pinSalt || "",
 			isActive:
 				cu.is_active !== undefined
 					? Boolean(cu.is_active)
@@ -1044,15 +1075,62 @@ export const syncAuthoritativeRosterToCache = async () => {
 
 /**
  * Authenticate Operator with Server-Authoritative verification
- * Returns HMAC-SHA256 JWT Token + Official Account Profile
+ * Priority 1: Edge Function /api/auth/login with server rate-limiting & signed JWT
+ * Priority 2: Direct Supabase Cloud verification
+ * Priority 3: Pure Offline Dexie fallback
  */
 export const authenticateWithServer = async (usernameOrId, pin) => {
 	const storeId = getMasterStoreId();
 	const secretKey = getJwtSecret();
 	const searchKey = String(usernameOrId).toLowerCase().trim();
+	const cleanPin = String(pin || "").trim();
 
-	// 1. Online First: Server-Authoritative verification against Cloud DB Master
+	// 1. Online Priority: Cloudflare Pages Edge Function (/api/auth/login)
 	if (navigator.onLine && !isDeviceIsolated()) {
+		try {
+			const controller = new AbortController();
+			const timeout = setTimeout(() => controller.abort(), 4000);
+			const edgeRes = await fetch("/api/auth/login", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ username: searchKey, pin: cleanPin, storeId }),
+				signal: controller.signal,
+			});
+			clearTimeout(timeout);
+
+			if (edgeRes.ok) {
+				const json = await edgeRes.json();
+				if (json.success && json.user) {
+					if (json.token) {
+						try {
+							localStorage.setItem(JWT_SESSION_STORAGE_KEY, json.token);
+						} catch (_) {}
+					}
+					syncAuthoritativeRosterToCache().catch(() => {});
+					return {
+						success: true,
+						user: json.user,
+						token: json.token,
+						isServerValidated: true,
+					};
+				}
+			} else if (
+				edgeRes.status === 401 ||
+				edgeRes.status === 429 ||
+				edgeRes.status === 400
+			) {
+				const errJson = await edgeRes.json().catch(() => ({}));
+				return {
+					success: false,
+					error: errJson.error || "PIN atau username salah.",
+					lockedUntil: errJson.lockedUntil || 0,
+				};
+			}
+		} catch (_) {
+			// Edge function unreachable (e.g. running in local Vite dev), proceed to direct cloud fallback
+		}
+
+		// 2. Direct Supabase Cloud fallback if Edge function unavailable
 		try {
 			const cloudUsers = await fetchAuthoritativeRoster();
 			if (cloudUsers && cloudUsers.length > 0) {
@@ -1062,69 +1140,58 @@ export const authenticateWithServer = async (usernameOrId, pin) => {
 						String(u.id) === searchKey,
 				);
 
-				if (!targetUser) {
-					return {
-						success: false,
-						error: "Akun operator tidak terdaftar di server master.",
-					};
+				if (targetUser) {
+					if (targetUser.isActive === false || targetUser.is_active === false) {
+						return {
+							success: false,
+							error: "Akun operator ini telah dinonaktifkan oleh Owner.",
+						};
+					}
+
+					const pinSalt = targetUser.pin_salt || targetUser.pinSalt;
+					const pinHash = targetUser.pin_hash || targetUser.pinHash;
+					if (pinSalt && pinHash) {
+						const isMatch = await verifyPin(cleanPin, pinSalt, pinHash);
+						if (!isMatch) {
+							return {
+								success: false,
+								error: "PIN salah! Silakan periksa kembali.",
+							};
+						}
+
+						syncAuthoritativeRosterToCache().catch(() => {});
+						const payload = {
+							sub: targetUser.id || targetUser.username,
+							username: targetUser.username,
+							name: targetUser.name,
+							role: targetUser.role,
+							storeId,
+						};
+						const token = await createSessionJWT(payload, secretKey, 86400 * 7);
+						try {
+							localStorage.setItem(JWT_SESSION_STORAGE_KEY, token);
+						} catch (_) {}
+
+						return {
+							success: true,
+							user: {
+								id: targetUser.id || targetUser.username,
+								username: targetUser.username,
+								name: targetUser.name,
+								role: targetUser.role,
+							},
+							token,
+							isServerValidated: true,
+						};
+					}
 				}
-
-				if (targetUser.isActive === false || targetUser.is_active === false) {
-					return {
-						success: false,
-						error: "Akun operator ini telah dinonaktifkan oleh Owner.",
-					};
-				}
-
-				const pinSalt = targetUser.pin_salt || targetUser.pinSalt;
-				const pinHash = targetUser.pin_hash || targetUser.pinHash;
-				const isMatch = await verifyPin(pin, pinSalt, pinHash);
-
-				if (!isMatch) {
-					return {
-						success: false,
-						error: "PIN salah! Silakan periksa kembali.",
-					};
-				}
-
-				// Ephemeral cache sync in background (non-blocking)
-				syncAuthoritativeRosterToCache().catch(() => {});
-
-				// Issue Signed HMAC-SHA256 JWT Session Token
-				const payload = {
-					sub: targetUser.id || targetUser.username,
-					username: targetUser.username,
-					name: targetUser.name,
-					role: targetUser.role,
-					storeId,
-				};
-
-				const token = await createSessionJWT(payload, secretKey, 86400 * 7);
-				try {
-					localStorage.setItem(JWT_SESSION_STORAGE_KEY, token);
-				} catch (_) {}
-
-				return {
-					success: true,
-					user: {
-						id: targetUser.id || targetUser.username,
-						username: targetUser.username,
-						name: targetUser.name,
-						role: targetUser.role,
-					},
-					token,
-					isServerValidated: true,
-				};
 			}
 		} catch (err) {
-			console.warn(
-				"[Auth] Server authentication error, checking local ephemeral cache:",
-				err,
-			);
+			console.warn("[Auth] Direct cloud fallback error:", err);
 		}
 	}
 
-	// 2. Offline Pure Fallback: Fast-read cache in Dexie
+	// 3. Offline Pure Fallback: Fast-read cache in Dexie
 	try {
 		const localUsers = await db.users.toArray();
 		const targetUser = localUsers.find(
@@ -1145,7 +1212,7 @@ export const authenticateWithServer = async (usernameOrId, pin) => {
 		}
 
 		const isMatch = await verifyPin(
-			pin,
+			cleanPin,
 			targetUser.pinSalt,
 			targetUser.pinHash,
 		);
@@ -1320,25 +1387,35 @@ export const atomicCheckoutAndDecrement = async (items, txData) => {
 			}
 		} catch (_) {}
 
-		// 2. Direct Supabase Cloud update if running on dev server
+		// 2. Direct Supabase Cloud update if running on dev server (OCC CAS Guard)
 		try {
 			const supabase = getSupabase();
 			for (const it of items || []) {
 				const prodId = it.product?.id || it.id;
 				const qty = Number(it.qty) || 1;
-				if (prodId) {
-					const { data: prods } = await supabase
+				if (!prodId) continue;
+
+				for (let attempt = 0; attempt < 3; attempt++) {
+					const { data: prods, error: fetchErr } = await supabase
 						.from("products")
 						.select("id, stock")
 						.eq("id", String(prodId))
 						.limit(1);
-					if (prods && prods.length > 0) {
-						const currentStock = Number(prods[0].stock) || 0;
-						const newStock = Math.max(0, currentStock - qty);
-						await supabase
-							.from("products")
-							.update({ stock: newStock, updated_at: new Date().toISOString() })
-							.eq("id", String(prodId));
+
+					if (fetchErr || !prods || prods.length === 0) break;
+
+					const currentStock = Number(prods[0].stock) || 0;
+					const newStock = Math.max(0, currentStock - qty);
+
+					const { data: updated, error: updateErr } = await supabase
+						.from("products")
+						.update({ stock: newStock, updated_at: new Date().toISOString() })
+						.eq("id", String(prodId))
+						.eq("stock", currentStock)
+						.select("id");
+
+					if (!updateErr && updated && updated.length > 0) {
+						break;
 					}
 				}
 			}
