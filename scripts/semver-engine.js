@@ -96,10 +96,11 @@ export const analyzeChanges = () => {
 	let sPatch = 0;
 	const reasons = [];
 
-	// Filter berkas sumber bermakna (abaikan dist/ dan metadata SemVer)
+	// Filter berkas sumber bermakna (abaikan dist/, docs/, dan metadata SemVer)
 	const meaningfulFiles = changedFiles.filter(
 		(f) =>
 			!f.startsWith("dist/") &&
+			!f.startsWith("docs/") &&
 			!f.endsWith(".state.json") &&
 			f !== "package.json" &&
 			f !== "functions/api/health.js" &&
@@ -120,7 +121,7 @@ export const analyzeChanges = () => {
 		};
 	}
 
-	const textToScan = `${changedFiles.join("\n")}\n${diffOutput.slice(0, 10000)}`;
+	const textToScan = `${meaningfulFiles.join("\n")}\n${diffOutput.slice(0, 10000)}`;
 
 	// 1. Evaluasi MAJOR (Breaking Change)
 	if (
@@ -138,10 +139,10 @@ export const analyzeChanges = () => {
 
 	// 2. Evaluasi MINOR (Fitur / Modul Baru)
 	if (
-		changedFiles.some(
+		meaningfulFiles.some(
 			(f) => f.startsWith("js/views/") && statusIncludesNew(f),
 		) ||
-		changedFiles.some(
+		meaningfulFiles.some(
 			(f) =>
 				(f.includes("09_MASTER_TENANT_ISOLATION") ||
 					f.includes("semver-engine")) &&
@@ -155,11 +156,7 @@ export const analyzeChanges = () => {
 	}
 
 	// 3. Evaluasi PATCH (Bug Fix / Style / Docs / Refactor)
-	if (
-		changedFiles.some(
-			(f) => f.endsWith(".css") || f.endsWith(".md") || f.endsWith(".js"),
-		)
-	) {
+	if (meaningfulFiles.some((f) => f.endsWith(".css") || f.endsWith(".js"))) {
 		sPatch += 15;
 		reasons.push(
 			"Terdeteksi perbaikan, styling CSS, atau pembaruan kode sumber",
