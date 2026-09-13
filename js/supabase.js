@@ -42,7 +42,9 @@ export const getJwtSecret = () => {
 	// Generate crypto-random 256-bit secret on first use per device
 	const arr = new Uint8Array(32);
 	(globalThis.crypto || window.crypto).getRandomValues(arr);
-	const secret = Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
+	const secret = Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join(
+		"",
+	);
 	try {
 		localStorage.setItem(JWT_SECRET_STORAGE_KEY, secret);
 	} catch (_) {}

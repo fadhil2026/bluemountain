@@ -6,8 +6,8 @@
 
 import { addProduct, getAllCustomers, getAllProducts } from "../db.js";
 import store from "../store.js";
-import { formatRupiah } from "../utils/currency.js";
 import { generateUUID } from "../utils/crypto.js";
+import { formatRupiah } from "../utils/currency.js";
 import { esc } from "../utils/sanitize.js";
 import { showCustomerModal } from "./customers.js";
 import { closeModal, openModal, showPaymentModal } from "./modals.js";
