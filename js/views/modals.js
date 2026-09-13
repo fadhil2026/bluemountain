@@ -723,7 +723,7 @@ const showSuccessOverlay = (txData) => {
 
 	setTimeout(() => {
 		if (overlay.parentNode) closeOverlay();
-	}, 20000);
+	}, 120000);
 };
 
 /* ─────────────────────────────────────────

@@ -33,8 +33,21 @@ export const SUPABASE_ANON_KEY =
 export const DEFAULT_MASTER_STORE_ID = "STORE-BM-856CFAC8";
 export const MASTER_STORE_KEY_STORAGE = "bm_master_store_key";
 export const JWT_SESSION_STORAGE_KEY = "bm_jwt_token";
-export const getJwtSecret = () =>
-	`BM_SECRET_${getMasterStoreId()}_2026_AUTHORITATIVE`;
+const JWT_SECRET_STORAGE_KEY = "bm_jwt_signing_secret";
+export const getJwtSecret = () => {
+	try {
+		const existing = localStorage.getItem(JWT_SECRET_STORAGE_KEY);
+		if (existing?.length >= 32) return existing;
+	} catch (_) {}
+	// Generate crypto-random 256-bit secret on first use per device
+	const arr = new Uint8Array(32);
+	(globalThis.crypto || window.crypto).getRandomValues(arr);
+	const secret = Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
+	try {
+		localStorage.setItem(JWT_SECRET_STORAGE_KEY, secret);
+	} catch (_) {}
+	return secret;
+};
 
 export const getMasterStoreId = () => {
 	try {

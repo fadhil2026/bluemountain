@@ -21,8 +21,8 @@ const store = {
 		selectedCustomer: null,
 		settings: {
 			shopName: "Blue Mountain Refilling Station",
-			shopAddress: "Jl. Contoh No. 1, Kota",
-			shopPhone: "0812-3456-7890",
+			shopAddress: "",
+			shopPhone: "",
 			cashierName: "Admin",
 			printerUrl: "",
 			printEnabled: false,

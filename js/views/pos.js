@@ -7,6 +7,7 @@
 import { addProduct, getAllCustomers, getAllProducts } from "../db.js";
 import store from "../store.js";
 import { formatRupiah } from "../utils/currency.js";
+import { generateUUID } from "../utils/crypto.js";
 import { esc } from "../utils/sanitize.js";
 import { showCustomerModal } from "./customers.js";
 import { closeModal, openModal, showPaymentModal } from "./modals.js";
@@ -456,11 +457,7 @@ const showManualItemModal = () => {
 					);
 				} else {
 					const manualProduct = {
-						id:
-							"manual_" +
-							Date.now() +
-							"_" +
-							Math.random().toString(36).slice(2, 6),
+						id: generateUUID("manual"),
 						name,
 						price,
 						unit,
