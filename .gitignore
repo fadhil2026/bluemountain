@@ -32,3 +32,5 @@ _backup_*.zip
 .env.*
 !.env.example
 backups/
+.wrangler/
+
