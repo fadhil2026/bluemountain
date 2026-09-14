@@ -38,6 +38,7 @@ const getJsFiles = (dir) => {
 const jsFiles = [
 	...getJsFiles("./js"),
 	...getJsFiles("./scripts"),
+	...getJsFiles("./functions"),
 	"./vite.config.js",
 ];
 let hasError = false;

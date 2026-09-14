@@ -8,6 +8,7 @@
  * - Isolated Sandbox Mode protection for unauthorized/guest devices
  */
 import { createClient } from "@supabase/supabase-js";
+import apiClient from "./api.js";
 import {
 	db,
 	getAllCustomers,
@@ -874,97 +875,142 @@ export const setupRealtimeSubscription = () => {
 };
 
 /**
- * Background Push Helpers (Safe, Non-blocking)
+ * Background Push Helpers (Pure Full-Stack Edge Hono Backend)
  */
 export const pushProductToCloud = async (product) => {
 	if (isDeviceIsolated() || !navigator.onLine) return;
 	try {
-		const supabase = getSupabase();
-		await supabase.from("products").upsert(formatProductForCloud(product));
-	} catch (_) {}
+		await apiClient.post("/products", formatProductForCloud(product));
+	} catch (_) {
+		try {
+			const supabase = getSupabase();
+			await supabase.from("products").upsert(formatProductForCloud(product));
+		} catch (_) {}
+	}
 };
 
 export const deleteProductFromCloud = async (id) => {
 	if (isDeviceIsolated() || !navigator.onLine) return;
 	try {
-		const supabase = getSupabase();
-		await supabase.from("products").delete().eq("id", String(id));
-	} catch (_) {}
+		await apiClient.delete(`/products/${id}`);
+	} catch (_) {
+		try {
+			const supabase = getSupabase();
+			await supabase.from("products").delete().eq("id", String(id));
+		} catch (_) {}
+	}
 };
 
 export const pushCustomerToCloud = async (customer) => {
 	if (isDeviceIsolated() || !navigator.onLine) return;
 	try {
-		const supabase = getSupabase();
-		await supabase.from("customers").upsert(formatCustomerForCloud(customer));
-	} catch (_) {}
+		await apiClient.post("/customers", formatCustomerForCloud(customer));
+	} catch (_) {
+		try {
+			const supabase = getSupabase();
+			await supabase.from("customers").upsert(formatCustomerForCloud(customer));
+		} catch (_) {}
+	}
 };
 
 export const deleteCustomerFromCloud = async (id) => {
 	if (isDeviceIsolated() || !navigator.onLine) return;
 	try {
-		const supabase = getSupabase();
-		await supabase.from("customers").delete().eq("id", String(id));
-	} catch (_) {}
+		await apiClient.delete(`/customers/${id}`);
+	} catch (_) {
+		try {
+			const supabase = getSupabase();
+			await supabase.from("customers").delete().eq("id", String(id));
+		} catch (_) {}
+	}
 };
 
 export const pushTransactionToCloud = async (tx) => {
 	if (isDeviceIsolated() || !navigator.onLine)
 		return { success: false, offline: true };
 	try {
-		const supabase = getSupabase();
-		const { error } = await supabase
-			.from("transactions")
-			.upsert(formatTransactionForCloud(tx));
-		if (error) throw error;
+		await apiClient.post("/transactions", formatTransactionForCloud(tx));
 		return { success: true };
-	} catch (err) {
-		return { success: false, error: err.message };
+	} catch (_err) {
+		try {
+			const supabase = getSupabase();
+			const { error } = await supabase
+				.from("transactions")
+				.upsert(formatTransactionForCloud(tx));
+			if (error) throw error;
+			return { success: true };
+		} catch (fallbackErr) {
+			return { success: false, error: fallbackErr.message };
+		}
 	}
 };
 
 export const deleteTransactionFromCloud = async (id) => {
 	if (isDeviceIsolated() || !navigator.onLine) return;
 	try {
-		const supabase = getSupabase();
-		await supabase.from("transactions").delete().eq("id", String(id));
-	} catch (_) {}
+		await apiClient.delete(`/transactions/${id}`);
+	} catch (_) {
+		try {
+			const supabase = getSupabase();
+			await supabase.from("transactions").delete().eq("id", String(id));
+		} catch (_) {}
+	}
 };
 
 export const pushExpenseToCloud = async (exp) => {
 	if (isDeviceIsolated() || !navigator.onLine)
 		return { success: false, offline: true };
 	try {
-		const supabase = getSupabase();
-		const { error } = await supabase
-			.from("expenses")
-			.upsert(formatExpenseForCloud(exp));
-		if (error) throw error;
+		await apiClient.post("/expenses", formatExpenseForCloud(exp));
 		return { success: true };
-	} catch (err) {
-		return { success: false, error: err.message };
+	} catch (_err) {
+		try {
+			const supabase = getSupabase();
+			const { error } = await supabase
+				.from("expenses")
+				.upsert(formatExpenseForCloud(exp));
+			if (error) throw error;
+			return { success: true };
+		} catch (fallbackErr) {
+			return { success: false, error: fallbackErr.message };
+		}
 	}
 };
 
 export const deleteExpenseFromCloud = async (id) => {
 	if (isDeviceIsolated() || !navigator.onLine) return;
 	try {
-		const supabase = getSupabase();
-		await supabase.from("expenses").delete().eq("id", String(id));
-	} catch (_) {}
+		await apiClient.delete(`/expenses/${id}`);
+	} catch (_) {
+		try {
+			const supabase = getSupabase();
+			await supabase.from("expenses").delete().eq("id", String(id));
+		} catch (_) {}
+	}
 };
 
 export const pushSettingToCloud = async (key, value) => {
 	if (isDeviceIsolated() || !navigator.onLine) return;
 	try {
-		const supabase = getSupabase();
-		await supabase.from("settings").upsert({
+		await apiClient.post("/settings", {
 			key: String(key),
 			value:
 				typeof value === "object" ? JSON.stringify(value) : String(value ?? ""),
 			updated_at: new Date().toISOString(),
 		});
-	} catch (_) {}
+	} catch (_) {
+		try {
+			const supabase = getSupabase();
+			await supabase.from("settings").upsert({
+				key: String(key),
+				value:
+					typeof value === "object"
+						? JSON.stringify(value)
+						: String(value ?? ""),
+				updated_at: new Date().toISOString(),
+			});
+		} catch (_) {}
+	}
 };
 
 /**
@@ -1284,106 +1330,104 @@ export const checkServerSession = async () => {
 };
 
 /**
- * Push user modification to cloud (Non-destructive merge on settings roster)
+ * Push user modification to cloud (Hono Edge Backend + Settings Roster)
  */
 export const pushUserToCloud = async (user) => {
 	if (isDeviceIsolated() || !navigator.onLine) return;
-	const storeId = getMasterStoreId();
-	const supabase = getSupabase();
-
 	try {
-		const rosterKey = `users_roster_${storeId}`;
-		const { data, error } = await supabase
-			.from("settings")
-			.select("value")
-			.eq("key", rosterKey)
-			.maybeSingle();
+		await apiClient.post("/auth/users", formatUserForCloud(user));
+	} catch (_err) {
+		const storeId = getMasterStoreId();
+		const supabase = getSupabase();
+		try {
+			const rosterKey = `users_roster_${storeId}`;
+			const { data, error } = await supabase
+				.from("settings")
+				.select("value")
+				.eq("key", rosterKey)
+				.maybeSingle();
 
-		let existingRoster = [];
-		if (!error && data?.value) {
-			try {
-				const parsed = JSON.parse(data.value);
-				if (Array.isArray(parsed)) existingRoster = parsed;
-			} catch (_) {}
+			let existingRoster = [];
+			if (!error && data?.value) {
+				try {
+					const parsed = JSON.parse(data.value);
+					if (Array.isArray(parsed)) existingRoster = parsed;
+				} catch (_) {}
+			}
+
+			const cleanUsername = String(user.username).toLowerCase().trim();
+			const formattedUser = formatUserForCloud(user);
+
+			const idx = existingRoster.findIndex(
+				(u) => String(u.username).toLowerCase().trim() === cleanUsername,
+			);
+			if (idx >= 0) {
+				existingRoster[idx] = { ...existingRoster[idx], ...formattedUser };
+			} else {
+				existingRoster.push(formattedUser);
+			}
+
+			await supabase.from("settings").upsert({
+				key: rosterKey,
+				value: JSON.stringify(existingRoster),
+				updated_at: new Date().toISOString(),
+			});
+		} catch (fallbackErr) {
+			console.warn("[Sync] Failed to push user to cloud:", fallbackErr);
 		}
-
-		const cleanUsername = String(user.username).toLowerCase().trim();
-		const formattedUser = formatUserForCloud(user);
-
-		const idx = existingRoster.findIndex(
-			(u) => String(u.username).toLowerCase().trim() === cleanUsername,
-		);
-		if (idx >= 0) {
-			existingRoster[idx] = { ...existingRoster[idx], ...formattedUser };
-		} else {
-			existingRoster.push(formattedUser);
-		}
-
-		await supabase.from("settings").upsert({
-			key: rosterKey,
-			value: JSON.stringify(existingRoster),
-			updated_at: new Date().toISOString(),
-		});
-	} catch (err) {
-		console.warn("[Sync] Failed to push user to cloud:", err);
 	}
 };
 
 /**
- * Delete user from cloud roster (Non-destructive filter on settings roster)
+ * Delete user from cloud roster (Hono Edge Backend)
  */
 export const deleteUserFromCloud = async (username) => {
 	if (isDeviceIsolated() || !navigator.onLine) return;
-	const storeId = getMasterStoreId();
-	const supabase = getSupabase();
 	const cleanUsername = String(username).toLowerCase().trim();
-
 	try {
-		const rosterKey = `users_roster_${storeId}`;
-		const { data, error } = await supabase
-			.from("settings")
-			.select("value")
-			.eq("key", rosterKey)
-			.maybeSingle();
+		await apiClient.delete(`/auth/users/${encodeURIComponent(cleanUsername)}`);
+	} catch (_) {
+		const storeId = getMasterStoreId();
+		const supabase = getSupabase();
+		try {
+			const rosterKey = `users_roster_${storeId}`;
+			const { data, error } = await supabase
+				.from("settings")
+				.select("value")
+				.eq("key", rosterKey)
+				.maybeSingle();
 
-		if (!error && data?.value) {
-			let existingRoster = JSON.parse(data.value);
-			if (Array.isArray(existingRoster)) {
-				existingRoster = existingRoster.filter(
-					(u) => String(u.username).toLowerCase().trim() !== cleanUsername,
-				);
-				await supabase.from("settings").upsert({
-					key: rosterKey,
-					value: JSON.stringify(existingRoster),
-					updated_at: new Date().toISOString(),
-				});
+			if (!error && data?.value) {
+				let existingRoster = JSON.parse(data.value);
+				if (Array.isArray(existingRoster)) {
+					existingRoster = existingRoster.filter(
+						(u) => String(u.username).toLowerCase().trim() !== cleanUsername,
+					);
+					await supabase.from("settings").upsert({
+						key: rosterKey,
+						value: JSON.stringify(existingRoster),
+						updated_at: new Date().toISOString(),
+					});
+				}
 			}
-		}
-	} catch (err) {
-		console.warn("[Sync] Failed to delete user from cloud:", err);
+		} catch (_) {}
 	}
 };
 
 /**
  * Atomic Checkout & Stock Decrement (Anti Race-Condition)
- * Routes via Cloudflare Pages Function edge proxy, falling back to direct Supabase PATCH.
+ * Routes via Hono Pure Edge Controller, falling back to direct Supabase PATCH.
  */
 export const atomicCheckoutAndDecrement = async (items, txData) => {
 	if (navigator.onLine && !isDeviceIsolated()) {
-		// 1. Try Cloudflare Edge Function proxy
+		// 1. Try Hono Edge Controller (/api/checkout)
 		try {
-			const controller = new AbortController();
-			const timeout = setTimeout(() => controller.abort(), 3500);
-			const res = await fetch("/api/stock/decrement", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ items, transaction: txData }),
-				signal: controller.signal,
+			const res = await apiClient.post("/checkout", {
+				items,
+				transaction: txData,
 			});
-			clearTimeout(timeout);
-			if (res.ok) {
-				const json = await res.json();
-				if (json.success) return { success: true, via: "cloudflare-edge" };
+			if (res?.success) {
+				return { success: true, via: "hono-edge-pure" };
 			}
 		} catch (_) {}
 

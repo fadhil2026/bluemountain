@@ -103,7 +103,7 @@ export const analyzeChanges = () => {
 			!f.startsWith("docs/") &&
 			!f.endsWith(".state.json") &&
 			f !== "package.json" &&
-			f !== "functions/api/health.js" &&
+			f !== "functions/api/[[route]].js" &&
 			f !== "index.html" &&
 			f !== "README.md",
 	);
@@ -291,16 +291,16 @@ export const syncVersionEverywhere = (version) => {
 		}
 	}
 
-	// 4. functions/api/health.js
-	const healthFile = path.resolve(process.cwd(), "functions/api/health.js");
-	if (fs.existsSync(healthFile)) {
-		const healthContent = fs.readFileSync(healthFile, "utf8");
-		const updated = healthContent.replace(
+	// 4. functions/api/[[route]].js
+	const routeFile = path.resolve(process.cwd(), "functions/api/[[route]].js");
+	if (fs.existsSync(routeFile)) {
+		const routeContent = fs.readFileSync(routeFile, "utf8");
+		const updated = routeContent.replace(
 			/version:\s*['"][^'"]+['"]/g,
 			`version: "${version}"`,
 		);
-		if (updated !== healthContent) {
-			fs.writeFileSync(healthFile, updated, "utf8");
+		if (updated !== routeContent) {
+			fs.writeFileSync(routeFile, updated, "utf8");
 		}
 	}
 

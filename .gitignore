@@ -33,4 +33,5 @@ _backup_*.zip
 !.env.example
 backups/
 .wrangler/
+_worker.bundle
 
