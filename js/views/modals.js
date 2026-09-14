@@ -543,7 +543,12 @@ export const showPaymentModal = (method = "cash") => {
 					store.addTransaction(txData);
 
 					// Atomic checkout & cloud stock decrement (anti race-condition)
-					atomicCheckoutAndDecrement(txData.items, txData).catch(() => {});
+					atomicCheckoutAndDecrement(txData.items, txData).catch((err) =>
+						console.warn(
+							"[POS Modal] Atomic checkout cloud warning:",
+							err?.message || err,
+						),
+					);
 
 					// Fast-read local Dexie cache stock update
 					for (const item of txData.items || []) {

@@ -260,7 +260,9 @@ const store = {
 			if (jwtToken) {
 				localStorage.setItem("bm_jwt_token", jwtToken);
 			}
-		} catch (_) {}
+		} catch (err) {
+			console.warn("[Store] Session save error:", err?.message || err);
+		}
 		this.emit("auth:change", sessionData);
 	},
 
@@ -269,7 +271,9 @@ const store = {
 		try {
 			sessionStorage.removeItem("bm_active_user");
 			localStorage.removeItem("bm_jwt_token");
-		} catch (_) {}
+		} catch (err) {
+			console.warn("[Store] Session clear error:", err?.message || err);
+		}
 		this.emit("auth:change", null);
 	},
 
@@ -281,7 +285,9 @@ const store = {
 				this.emit("auth:change", this.state.currentUser);
 				return this.state.currentUser;
 			}
-		} catch (_) {}
+		} catch (err) {
+			console.warn("[Store] Session restore error:", err?.message || err);
+		}
 		return null;
 	},
 

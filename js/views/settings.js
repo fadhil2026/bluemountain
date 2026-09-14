@@ -17,7 +17,6 @@ import { printTestReceipt } from "../printer.js";
 import store from "../store.js";
 import {
 	getMasterStoreId,
-	pushSettingToCloud,
 	setMasterStoreId,
 	setupRealtimeSubscription,
 	syncInitialData,
@@ -495,7 +494,6 @@ const bindSettingsEvents = () => {
 				// 1. Save to local Dexie database & push to Supabase Cloud
 				for (const [key, val] of Object.entries(updates)) {
 					await setSetting(key, val);
-					pushSettingToCloud(key, val).catch(() => {});
 				}
 
 				// 2. Update reactive application state

@@ -67,6 +67,97 @@ const createJwtToken = async (payload, secret) => {
 	return `${tokenMessage}.${base64Url(signature)}`;
 };
 
+const verifyJwtToken = async (token, secret) => {
+	if (!token || typeof token !== "string") return null;
+	const parts = token.split(".");
+	if (parts.length !== 3) return null;
+
+	const [headerB64, payloadB64, signatureB64] = parts;
+	const message = `${headerB64}.${payloadB64}`;
+	const encoder = new TextEncoder();
+
+	try {
+		const key = await crypto.subtle.importKey(
+			"raw",
+			encoder.encode(secret),
+			{ name: "HMAC", hash: "SHA-256" },
+			false,
+			["verify"],
+		);
+		let base64 = signatureB64.replace(/-/g, "+").replace(/_/g, "/");
+		while (base64.length % 4) base64 += "=";
+		const binary = atob(base64);
+		const bytes = new Uint8Array(binary.length);
+		for (let i = 0; i < binary.length; i++) {
+			bytes[i] = binary.charCodeAt(i);
+		}
+
+		const isValid = await crypto.subtle.verify(
+			"HMAC",
+			key,
+			bytes,
+			encoder.encode(message),
+		);
+		if (!isValid) return null;
+
+		let payloadStr = payloadB64.replace(/-/g, "+").replace(/_/g, "/");
+		while (payloadStr.length % 4) payloadStr += "=";
+		const payload = JSON.parse(atob(payloadStr));
+		const now = Math.floor(Date.now() / 1000);
+		if (payload.exp && payload.exp < now) return null;
+		return payload;
+	} catch (err) {
+		console.warn("[Auth Edge] JWT verification failed:", err.message);
+		return null;
+	}
+};
+
+const authMiddleware = async (c, next) => {
+	const authHeader = c.req.header("Authorization") || "";
+	const token = authHeader.startsWith("Bearer ")
+		? authHeader.slice(7).trim()
+		: "";
+	const { key } = getSupabaseConfig(c.env);
+	const jwtSecret =
+		c.env.JWT_SECRET ||
+		"BM_PROPRIETARY_EDGE_KEY_2026_AUTHORITATIVE_HONO_FREE_TIER";
+
+	// Allow Supabase Secret/Anon Service Key for admin automation scripts
+	if (token && (token === key || token === c.env.SUPABASE_SECRET_KEY)) {
+		c.set("user", { username: "system", role: "owner" });
+		return await next();
+	}
+
+	const user = await verifyJwtToken(token, jwtSecret);
+	if (!user) {
+		return c.json(
+			{
+				success: false,
+				error:
+					"Akses ditolak: Token autentikasi tidak valid atau telah kedaluwarsa.",
+			},
+			401,
+		);
+	}
+	c.set("user", user);
+	return await next();
+};
+
+const ownerOnlyMiddleware = async (c, next) => {
+	const user = c.get("user");
+	if (user?.role !== "owner") {
+		return c.json(
+			{
+				success: false,
+				error:
+					"Akses ditolak: Hanya Owner yang berwenang melakukan tindakan ini.",
+			},
+			403,
+		);
+	}
+	return await next();
+};
+
 // ── Global Middlewares ──
 app.use(
 	"*",
@@ -93,7 +184,7 @@ app.get("/health", (c) => {
 	return c.json({
 		status: "ok",
 		app: "Blue Mountain POS",
-		version: "1.6.7",
+		version: "1.6.8",
 		engine: "Hono.js Pure Edge Architecture",
 		runtime: "Cloudflare Pages Functions",
 		timestamp: new Date().toISOString(),
@@ -153,7 +244,12 @@ app.post("/auth/login", async (c) => {
 				foundUser = roster.find(
 					(u) => String(u.username).toLowerCase().trim() === cleanUser,
 				);
-			} catch (_) {}
+			} catch (err) {
+				console.warn(
+					"[Auth Edge] Failed to parse roster in login:",
+					err.message,
+				);
+			}
 		}
 	}
 
@@ -273,7 +369,12 @@ app.get("/auth/users", async (c) => {
 							isActive: true,
 						}));
 				}
-			} catch (_) {}
+			} catch (err) {
+				console.warn(
+					"[Auth Edge] Failed to parse public users roster:",
+					err.message,
+				);
+			}
 		}
 	}
 
@@ -294,7 +395,7 @@ app.get("/auth/users", async (c) => {
 });
 
 // ── 4. Auth: Save / Update Operator Profile (Owner Only) ──
-app.post("/auth/users", async (c) => {
+app.post("/auth/users", authMiddleware, ownerOnlyMiddleware, async (c) => {
 	const user = await c.req.json().catch(() => ({}));
 	if (!user?.username) {
 		return c.json({ success: false, error: "Data operator tidak valid." }, 400);
@@ -314,7 +415,12 @@ app.post("/auth/users", async (c) => {
 			try {
 				const parsed = JSON.parse(rows[0].value);
 				if (Array.isArray(parsed)) existingRoster = parsed;
-			} catch (_) {}
+			} catch (err) {
+				console.warn(
+					"[Auth Edge] Failed to parse existing roster:",
+					err.message,
+				);
+			}
 		}
 	}
 
@@ -353,44 +459,54 @@ app.post("/auth/users", async (c) => {
 });
 
 // ── 5. Auth: Delete Operator (Owner Only) ──
-app.delete("/auth/users/:username", async (c) => {
-	const username = c.req.param("username");
-	const cleanUsername = String(username || "")
-		.toLowerCase()
-		.trim();
+app.delete(
+	"/auth/users/:username",
+	authMiddleware,
+	ownerOnlyMiddleware,
+	async (c) => {
+		const username = c.req.param("username");
+		const cleanUsername = String(username || "")
+			.toLowerCase()
+			.trim();
 
-	const { storeId } = getSupabaseConfig(c.env);
-	const rosterKey = `users_roster_${storeId}`;
-	const res = await pgFetch(
-		c.env,
-		`/settings?key=eq.${rosterKey}&select=value`,
-	);
+		const { storeId } = getSupabaseConfig(c.env);
+		const rosterKey = `users_roster_${storeId}`;
+		const res = await pgFetch(
+			c.env,
+			`/settings?key=eq.${rosterKey}&select=value`,
+		);
 
-	if (res.ok) {
-		const rows = await res.json();
-		if (rows && rows.length > 0) {
-			try {
-				let existingRoster = JSON.parse(rows[0].value);
-				if (Array.isArray(existingRoster)) {
-					existingRoster = existingRoster.filter(
-						(u) => String(u.username).toLowerCase().trim() !== cleanUsername,
+		if (res.ok) {
+			const rows = await res.json();
+			if (rows && rows.length > 0) {
+				try {
+					let existingRoster = JSON.parse(rows[0].value);
+					if (Array.isArray(existingRoster)) {
+						existingRoster = existingRoster.filter(
+							(u) => String(u.username).toLowerCase().trim() !== cleanUsername,
+						);
+						await pgFetch(c.env, "/settings", {
+							method: "POST",
+							headers: { Prefer: "resolution=merge-duplicates" },
+							body: JSON.stringify({
+								key: rosterKey,
+								value: JSON.stringify(existingRoster),
+								updated_at: new Date().toISOString(),
+							}),
+						});
+					}
+				} catch (err) {
+					console.warn(
+						"[Auth Edge] Failed to parse roster on delete:",
+						err.message,
 					);
-					await pgFetch(c.env, "/settings", {
-						method: "POST",
-						headers: { Prefer: "resolution=merge-duplicates" },
-						body: JSON.stringify({
-							key: rosterKey,
-							value: JSON.stringify(existingRoster),
-							updated_at: new Date().toISOString(),
-						}),
-					});
 				}
-			} catch (_) {}
+			}
 		}
-	}
 
-	return c.json({ success: true });
-});
+		return c.json({ success: true });
+	},
+);
 
 // ── 6. Products: CRUD with Server-Side Validation ──
 app.get("/products", async (c) => {
@@ -405,7 +521,7 @@ app.get("/products", async (c) => {
 	return c.json({ success: true, products });
 });
 
-app.post("/products", async (c) => {
+app.post("/products", authMiddleware, async (c) => {
 	const p = await c.req.json().catch(() => ({}));
 	if (!p.name) {
 		return c.json({ success: false, error: "Nama produk wajib diisi." }, 400);
@@ -439,7 +555,7 @@ app.post("/products", async (c) => {
 	return c.json({ success: true, product: productPayload });
 });
 
-app.delete("/products/:id", async (c) => {
+app.delete("/products/:id", authMiddleware, async (c) => {
 	const id = c.req.param("id");
 	const res = await pgFetch(c.env, `/products?id=eq.${id}`, {
 		method: "DELETE",
@@ -448,7 +564,7 @@ app.delete("/products/:id", async (c) => {
 });
 
 // ── 7. Stock: Atomic Decrement (OCC Compare-And-Swap Guard) ──
-app.post("/stock/decrement", async (c) => {
+app.post("/stock/decrement", authMiddleware, async (c) => {
 	const body = await c.req.json().catch(() => ({}));
 	const items = body.items || [];
 	if (!Array.isArray(items) || items.length === 0) {
@@ -527,7 +643,7 @@ app.post("/stock/decrement", async (c) => {
 });
 
 // ── 8. Authoritative Full Checkout (Atomic Transaction + Stock Decrement + Ledger) ──
-app.post("/checkout", async (c) => {
+app.post("/checkout", authMiddleware, async (c) => {
 	const body = await c.req.json().catch(() => ({}));
 	const { transaction, items } = body;
 
@@ -666,7 +782,7 @@ app.get("/transactions", async (c) => {
 	return c.json({ success: true, transactions });
 });
 
-app.post("/transactions", async (c) => {
+app.post("/transactions", authMiddleware, async (c) => {
 	const tx = await c.req.json().catch(() => ({}));
 	const res = await pgFetch(c.env, "/transactions", {
 		method: "POST",
@@ -683,7 +799,7 @@ app.post("/transactions", async (c) => {
 	return c.json({ success: true });
 });
 
-app.delete("/transactions/:id", async (c) => {
+app.delete("/transactions/:id", authMiddleware, async (c) => {
 	const id = c.req.param("id");
 	const res = await pgFetch(c.env, `/transactions?id=eq.${id}`, {
 		method: "DELETE",
@@ -700,7 +816,7 @@ app.get("/customers", async (c) => {
 	return c.json({ success: true, customers });
 });
 
-app.post("/customers", async (c) => {
+app.post("/customers", authMiddleware, async (c) => {
 	const cust = await c.req.json().catch(() => ({}));
 	if (!cust.name) {
 		return c.json(
@@ -724,7 +840,7 @@ app.post("/customers", async (c) => {
 	return c.json({ success: true });
 });
 
-app.delete("/customers/:id", async (c) => {
+app.delete("/customers/:id", authMiddleware, async (c) => {
 	const id = c.req.param("id");
 	const res = await pgFetch(c.env, `/customers?id=eq.${id}`, {
 		method: "DELETE",
@@ -741,7 +857,7 @@ app.get("/expenses", async (c) => {
 	return c.json({ success: true, expenses });
 });
 
-app.post("/expenses", async (c) => {
+app.post("/expenses", authMiddleware, async (c) => {
 	const exp = await c.req.json().catch(() => ({}));
 	const res = await pgFetch(c.env, "/expenses", {
 		method: "POST",
@@ -758,7 +874,7 @@ app.post("/expenses", async (c) => {
 	return c.json({ success: true });
 });
 
-app.delete("/expenses/:id", async (c) => {
+app.delete("/expenses/:id", authMiddleware, async (c) => {
 	const id = c.req.param("id");
 	const res = await pgFetch(c.env, `/expenses?id=eq.${id}`, {
 		method: "DELETE",
@@ -775,7 +891,7 @@ app.get("/settings", async (c) => {
 	return c.json({ success: true, settings });
 });
 
-app.post("/settings", async (c) => {
+app.post("/settings", authMiddleware, async (c) => {
 	const payload = await c.req.json().catch(() => ({}));
 	const res = await pgFetch(c.env, "/settings", {
 		method: "POST",

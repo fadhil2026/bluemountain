@@ -57,6 +57,9 @@ db.version(5).stores({
 	users: "id, username, role, isActive",
 });
 
+const logSyncWarn = (err) =>
+	console.warn("[DB Sync Warning]", err?.message || err);
+
 // ── Users (RBAC) ──
 export const getAllUsers = () => db.users.toArray();
 export const getUserById = (id) => db.users.get(id);
@@ -65,7 +68,7 @@ export const getUserByUsername = (username) =>
 export const addUser = async (u) => {
 	const user = { ...u, id: u.id ? String(u.id) : generateUUID("usr") };
 	await db.users.put(user);
-	pushUserToCloud(user).catch(() => {});
+	pushUserToCloud(user).catch(logSyncWarn);
 	return user.id;
 };
 export const updateUser = async (u) => {
@@ -78,14 +81,14 @@ export const updateUser = async (u) => {
 				: generateUUID("usr"),
 	};
 	const res = await db.users.put(user);
-	pushUserToCloud(user).catch(() => {});
+	pushUserToCloud(user).catch(logSyncWarn);
 	return res;
 };
 export const deleteUser = async (id) => {
 	const user = await db.users.get(id);
 	const res = await db.users.delete(id);
 	if (user?.username) {
-		deleteUserFromCloud(user.username).catch(() => {});
+		deleteUserFromCloud(user.username).catch(logSyncWarn);
 	}
 	return res;
 };
@@ -104,13 +107,13 @@ export const addCustomer = async (c) => {
 		updated_at: new Date().toISOString(),
 	};
 	await db.customers.put(customer);
-	pushCustomerToCloud(customer).catch(() => {});
+	pushCustomerToCloud(customer).catch(logSyncWarn);
 	return customer.id;
 };
 export const updateCustomer = async (c) => {
 	const customer = { ...c, updated_at: new Date().toISOString() };
 	const res = await db.customers.put(customer);
-	pushCustomerToCloud(customer).catch(() => {});
+	pushCustomerToCloud(customer).catch(logSyncWarn);
 	return res;
 };
 export const deleteCustomer = async (id) => {
@@ -122,7 +125,7 @@ export const deleteCustomer = async (id) => {
 			updated_at: new Date().toISOString(),
 		};
 		await db.customers.put(tombstone);
-		deleteCustomerFromCloud(id).catch(() => {});
+		deleteCustomerFromCloud(id).catch(logSyncWarn);
 	}
 	return id;
 };
@@ -140,13 +143,13 @@ export const addProduct = async (p) => {
 		updated_at: new Date().toISOString(),
 	};
 	await db.products.put(product);
-	pushProductToCloud(product).catch(() => {});
+	pushProductToCloud(product).catch(logSyncWarn);
 	return product.id;
 };
 export const updateProduct = async (p) => {
 	const product = { ...p, updated_at: new Date().toISOString() };
 	const res = await db.products.put(product);
-	pushProductToCloud(product).catch(() => {});
+	pushProductToCloud(product).catch(logSyncWarn);
 	return res;
 };
 export const deleteProduct = async (id) => {
@@ -158,7 +161,7 @@ export const deleteProduct = async (id) => {
 			updated_at: new Date().toISOString(),
 		};
 		await db.products.put(tombstone);
-		deleteProductFromCloud(id).catch(() => {});
+		deleteProductFromCloud(id).catch(logSyncWarn);
 	}
 	return id;
 };
@@ -182,11 +185,18 @@ export const saveTransaction = async (tx) => {
 				transaction.syncStatus = "synced";
 				await db.transactions.put(transaction);
 			}
-		} catch (_) {}
+		} catch (err) {
+			console.warn(
+				"[DB Sync] Immediate transaction push warning:",
+				err?.message || err,
+			);
+		}
 	}
 	try {
 		checkStagedOfflineTransactions?.();
-	} catch (_) {}
+	} catch (err) {
+		console.warn("[DB Sync] Check staged warning:", err?.message || err);
+	}
 	return transaction.id;
 };
 export const getAllTransactions = async () => {
@@ -202,14 +212,14 @@ export const deleteTransaction = async (id) => {
 			updated_at: new Date().toISOString(),
 		};
 		await db.transactions.put(tombstone);
-		deleteTransactionFromCloud(id).catch(() => {});
+		deleteTransactionFromCloud(id).catch(logSyncWarn);
 	}
 	return id;
 };
 export const updateTransaction = async (tx) => {
 	const transaction = { ...tx, updated_at: new Date().toISOString() };
 	const res = await db.transactions.put(transaction);
-	pushTransactionToCloud(transaction).catch(() => {});
+	pushTransactionToCloud(transaction).catch(logSyncWarn);
 	return res;
 };
 export const getTransactionsByDateKey = async (dateKey) => {
@@ -236,7 +246,12 @@ export const saveExpense = async (exp) => {
 				expense.syncStatus = "synced";
 				await db.expenses.put(expense);
 			}
-		} catch (_) {}
+		} catch (err) {
+			console.warn(
+				"[DB Sync] Immediate expense push warning:",
+				err?.message || err,
+			);
+		}
 	}
 	return expense.id;
 };
@@ -253,7 +268,7 @@ export const deleteExpense = async (id) => {
 			updated_at: new Date().toISOString(),
 		};
 		await db.expenses.put(tombstone);
-		deleteExpenseFromCloud(id).catch(() => {});
+		deleteExpenseFromCloud(id).catch(logSyncWarn);
 	}
 	return id;
 };
@@ -265,12 +280,7 @@ export const getSetting = async (key) => {
 };
 export const setSetting = async (key, value) => {
 	await db.settings.put({ key, value });
-	pushSettingToCloud(key, value).catch(() => {});
-};
-
-// ── Server-Authoritative: Products are strictly fetched from Supabase Cloud ──
-export const seedDefaultProducts = async () => {
-	// Zero mock/dummy products. Single source of truth is Supabase Cloud.
+	pushSettingToCloud(key, value).catch(logSyncWarn);
 };
 
 // ── Server-Authoritative: Master Fallback for Brand New Device ──

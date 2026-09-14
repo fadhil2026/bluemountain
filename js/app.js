@@ -304,7 +304,9 @@ const init = async () => {
 
 	// Overwrite ephemeral cache with authoritative cloud roster if online
 	if (navigator.onLine) {
-		syncAuthoritativeRosterToCache().catch(() => {});
+		syncAuthoritativeRosterToCache().catch((err) =>
+			console.warn("[App] Roster sync warning:", err?.message || err),
+		);
 	}
 
 	// Bind operator badge click
@@ -380,7 +382,9 @@ const init = async () => {
 
 	// ── Supabase Cloud Realtime Multi-Device Sync & Active Heartbeat ──
 	startServerHeartbeat();
-	syncInitialData().catch(() => {});
+	syncInitialData().catch((err) =>
+		console.warn("[App] Initial sync warning:", err?.message || err),
+	);
 	setupRealtimeSubscription();
 	checkStagedOfflineTransactions();
 

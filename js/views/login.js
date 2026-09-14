@@ -64,7 +64,9 @@ export const renderLogin = async () => {
 
 	// Server-Authoritative: refresh local cache in background without blocking screen rendering
 	if (navigator.onLine) {
-		syncAuthoritativeRosterToCache().catch(() => {});
+		syncAuthoritativeRosterToCache().catch((err) =>
+			console.warn("[Login] Roster sync warning:", err?.message || err),
+		);
 	}
 
 	let allUsers = await getAllUsers();
@@ -154,7 +156,9 @@ export const renderLogin = async () => {
 					"success",
 				);
 				if (navigator.onLine) {
-					syncInitialData().catch(() => {});
+					syncInitialData().catch((err) =>
+						console.warn("[Login] Initial sync warning:", err?.message || err),
+					);
 				}
 				if (typeof window.appNavigateTo === "function") {
 					window.appNavigateTo("pos");
@@ -366,7 +370,9 @@ const processPinVerification = async (isManual = false) => {
 
 		// Pull fresh data from Supabase master cloud to Dexie cache
 		if (navigator.onLine) {
-			syncInitialData().catch(() => {});
+			syncInitialData().catch((err) =>
+				console.warn("[Login] Initial sync warning:", err?.message || err),
+			);
 		}
 
 		// Navigate to POS

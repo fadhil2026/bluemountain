@@ -881,11 +881,20 @@ export const pushProductToCloud = async (product) => {
 	if (isDeviceIsolated() || !navigator.onLine) return;
 	try {
 		await apiClient.post("/products", formatProductForCloud(product));
-	} catch (_) {
+	} catch (err) {
+		console.warn(
+			"[Cloud Push] Edge API product push failed, using Supabase fallback:",
+			err?.message || err,
+		);
 		try {
 			const supabase = getSupabase();
 			await supabase.from("products").upsert(formatProductForCloud(product));
-		} catch (_) {}
+		} catch (fallbackErr) {
+			console.warn(
+				"[Cloud Push] Direct Supabase product upsert failed:",
+				fallbackErr?.message || fallbackErr,
+			);
+		}
 	}
 };
 
@@ -893,11 +902,20 @@ export const deleteProductFromCloud = async (id) => {
 	if (isDeviceIsolated() || !navigator.onLine) return;
 	try {
 		await apiClient.delete(`/products/${id}`);
-	} catch (_) {
+	} catch (err) {
+		console.warn(
+			"[Cloud Push] Edge API product delete failed, using Supabase fallback:",
+			err?.message || err,
+		);
 		try {
 			const supabase = getSupabase();
 			await supabase.from("products").delete().eq("id", String(id));
-		} catch (_) {}
+		} catch (fallbackErr) {
+			console.warn(
+				"[Cloud Push] Direct Supabase product delete failed:",
+				fallbackErr?.message || fallbackErr,
+			);
+		}
 	}
 };
 
@@ -905,11 +923,20 @@ export const pushCustomerToCloud = async (customer) => {
 	if (isDeviceIsolated() || !navigator.onLine) return;
 	try {
 		await apiClient.post("/customers", formatCustomerForCloud(customer));
-	} catch (_) {
+	} catch (err) {
+		console.warn(
+			"[Cloud Push] Edge API customer push failed, using Supabase fallback:",
+			err?.message || err,
+		);
 		try {
 			const supabase = getSupabase();
 			await supabase.from("customers").upsert(formatCustomerForCloud(customer));
-		} catch (_) {}
+		} catch (fallbackErr) {
+			console.warn(
+				"[Cloud Push] Direct Supabase customer upsert failed:",
+				fallbackErr?.message || fallbackErr,
+			);
+		}
 	}
 };
 
@@ -917,11 +944,20 @@ export const deleteCustomerFromCloud = async (id) => {
 	if (isDeviceIsolated() || !navigator.onLine) return;
 	try {
 		await apiClient.delete(`/customers/${id}`);
-	} catch (_) {
+	} catch (err) {
+		console.warn(
+			"[Cloud Push] Edge API customer delete failed, using Supabase fallback:",
+			err?.message || err,
+		);
 		try {
 			const supabase = getSupabase();
 			await supabase.from("customers").delete().eq("id", String(id));
-		} catch (_) {}
+		} catch (fallbackErr) {
+			console.warn(
+				"[Cloud Push] Direct Supabase customer delete failed:",
+				fallbackErr?.message || fallbackErr,
+			);
+		}
 	}
 };
 
@@ -940,6 +976,10 @@ export const pushTransactionToCloud = async (tx) => {
 			if (error) throw error;
 			return { success: true };
 		} catch (fallbackErr) {
+			console.warn(
+				"[Cloud Push] Direct Supabase transaction upsert failed:",
+				fallbackErr?.message || fallbackErr,
+			);
 			return { success: false, error: fallbackErr.message };
 		}
 	}
@@ -949,11 +989,20 @@ export const deleteTransactionFromCloud = async (id) => {
 	if (isDeviceIsolated() || !navigator.onLine) return;
 	try {
 		await apiClient.delete(`/transactions/${id}`);
-	} catch (_) {
+	} catch (err) {
+		console.warn(
+			"[Cloud Push] Edge API transaction delete failed, using Supabase fallback:",
+			err?.message || err,
+		);
 		try {
 			const supabase = getSupabase();
 			await supabase.from("transactions").delete().eq("id", String(id));
-		} catch (_) {}
+		} catch (fallbackErr) {
+			console.warn(
+				"[Cloud Push] Direct Supabase transaction delete failed:",
+				fallbackErr?.message || fallbackErr,
+			);
+		}
 	}
 };
 
@@ -972,6 +1021,10 @@ export const pushExpenseToCloud = async (exp) => {
 			if (error) throw error;
 			return { success: true };
 		} catch (fallbackErr) {
+			console.warn(
+				"[Cloud Push] Direct Supabase expense upsert failed:",
+				fallbackErr?.message || fallbackErr,
+			);
 			return { success: false, error: fallbackErr.message };
 		}
 	}
@@ -981,11 +1034,20 @@ export const deleteExpenseFromCloud = async (id) => {
 	if (isDeviceIsolated() || !navigator.onLine) return;
 	try {
 		await apiClient.delete(`/expenses/${id}`);
-	} catch (_) {
+	} catch (err) {
+		console.warn(
+			"[Cloud Push] Edge API expense delete failed, using Supabase fallback:",
+			err?.message || err,
+		);
 		try {
 			const supabase = getSupabase();
 			await supabase.from("expenses").delete().eq("id", String(id));
-		} catch (_) {}
+		} catch (fallbackErr) {
+			console.warn(
+				"[Cloud Push] Direct Supabase expense delete failed:",
+				fallbackErr?.message || fallbackErr,
+			);
+		}
 	}
 };
 
@@ -998,7 +1060,11 @@ export const pushSettingToCloud = async (key, value) => {
 				typeof value === "object" ? JSON.stringify(value) : String(value ?? ""),
 			updated_at: new Date().toISOString(),
 		});
-	} catch (_) {
+	} catch (err) {
+		console.warn(
+			"[Cloud Push] Edge API setting push failed, using Supabase fallback:",
+			err?.message || err,
+		);
 		try {
 			const supabase = getSupabase();
 			await supabase.from("settings").upsert({
@@ -1009,7 +1075,12 @@ export const pushSettingToCloud = async (key, value) => {
 						: String(value ?? ""),
 				updated_at: new Date().toISOString(),
 			});
-		} catch (_) {}
+		} catch (fallbackErr) {
+			console.warn(
+				"[Cloud Push] Direct Supabase setting upsert failed:",
+				fallbackErr?.message || fallbackErr,
+			);
+		}
 	}
 };
 
@@ -1035,7 +1106,9 @@ export const fetchAuthoritativeRoster = async () => {
 				return json.users;
 			}
 		}
-	} catch (_) {}
+	} catch (err) {
+		console.warn("[Sync Roster] Edge endpoint warning:", err?.message || err);
+	}
 
 	// 2. Direct Supabase Cloud query fallback
 	const storeId = getMasterStoreId();
@@ -1059,7 +1132,12 @@ export const fetchAuthoritativeRoster = async () => {
 				return parsed;
 			}
 		}
-	} catch (_) {}
+	} catch (err) {
+		console.warn(
+			"[Sync Roster] Supabase settings query warning:",
+			err?.message || err,
+		);
+	}
 
 	return null;
 };
@@ -1152,7 +1230,12 @@ export const authenticateWithServer = async (usernameOrId, pin) => {
 							localStorage.setItem(JWT_SESSION_STORAGE_KEY, json.token);
 						} catch (_) {}
 					}
-					syncAuthoritativeRosterToCache().catch(() => {});
+					syncAuthoritativeRosterToCache().catch((err) =>
+						console.warn(
+							"[Auth] Background roster sync warning:",
+							err?.message || err,
+						),
+					);
 					return {
 						success: true,
 						user: json.user,
@@ -1205,7 +1288,12 @@ export const authenticateWithServer = async (usernameOrId, pin) => {
 							};
 						}
 
-						syncAuthoritativeRosterToCache().catch(() => {});
+						syncAuthoritativeRosterToCache().catch((err) =>
+							console.warn(
+								"[Auth] Direct cloud roster sync warning:",
+								err?.message || err,
+							),
+						);
 						const payload = {
 							sub: targetUser.id || targetUser.username,
 							username: targetUser.username,
