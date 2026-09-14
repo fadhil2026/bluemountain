@@ -184,7 +184,7 @@ app.get("/health", (c) => {
 	return c.json({
 		status: "ok",
 		app: "Blue Mountain POS",
-		version: "1.6.8",
+		version: "1.6.9",
 		engine: "Hono.js Pure Edge Architecture",
 		runtime: "Cloudflare Pages Functions",
 		timestamp: new Date().toISOString(),

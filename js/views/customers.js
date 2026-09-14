@@ -94,25 +94,46 @@ const getTransactionsForCustomer = (cust, transactions = []) => {
 		.sort((a, b) => new Date(b.date) - new Date(a.date));
 };
 
+let _cachedCustomers = [];
+let _cachedCustomerStatsMap = {};
+
 /**
- * Render Customer Management Page
+ * Update Customers Metric Cards without re-rendering search bar
  */
+const updateCustomerMetricsUI = (
+	totalCustomers,
+	totalAllDebt,
+	totalAllLoanedGalon,
+	totalAllSpent,
+) => {
+	const elTotal = document.getElementById("cust-stat-total");
+	if (elTotal)
+		elTotal.innerHTML = `${totalCustomers} <span style="font-size:12px;font-weight:600;color:var(--text-muted)">orang</span>`;
+	const elDebt = document.getElementById("cust-stat-debt");
+	if (elDebt) elDebt.textContent = formatRupiah(totalAllDebt);
+	const elGalon = document.getElementById("cust-stat-galon");
+	if (elGalon)
+		elGalon.innerHTML = `${totalAllLoanedGalon} <span style="font-size:12px;font-weight:600;color:var(--text-muted)">galon</span>`;
+	const elSpent = document.getElementById("cust-stat-spent");
+	if (elSpent) elSpent.textContent = formatRupiah(totalAllSpent);
+};
+
 export const renderCustomers = async () => {
 	const container = document.getElementById("view-customers");
 	if (!container) return;
 
-	const customers = store.state.customers || [];
-	const transactions = await getAllTransactions();
+	const [customers, allTransactions] = await Promise.all([
+		getAllCustomers(),
+		getAllTransactions(),
+	]);
 
-	// Aggregate live stats per customer
+	// Build customer transaction map
 	const customerStatsMap = {};
-	for (const tx of transactions) {
-		const custId = tx.customerId ? String(tx.customerId) : null;
-		const nameKey = (tx.customerName || "").trim().toLowerCase();
-
+	for (const tx of allTransactions) {
 		const keys = [];
-		if (custId) keys.push(`id:${custId}`);
-		if (nameKey) keys.push(`name:${nameKey}`);
+		if (tx.customerId) keys.push(`id:${tx.customerId}`);
+		if (tx.customerName)
+			keys.push(`name:${tx.customerName.trim().toLowerCase()}`);
 
 		for (const k of keys) {
 			if (!customerStatsMap[k]) {
@@ -136,6 +157,9 @@ export const renderCustomers = async () => {
 			}
 		}
 	}
+
+	_cachedCustomers = customers;
+	_cachedCustomerStatsMap = customerStatsMap;
 
 	// Aggregate global metrics
 	const totalCustomers = customers.length;
@@ -163,6 +187,139 @@ export const renderCustomers = async () => {
 		totalAllLoanedGalon += Number(c.galonLoaned || 0);
 	});
 
+	const searchInputExists = container.querySelector("#cust-search");
+
+	if (!searchInputExists) {
+		container.innerHTML = `
+      <!-- Responsive Section Header matching other POS modules -->
+      <div class="section-header" style="flex-wrap:wrap;gap:12px;margin-bottom:var(--space-4)">
+        <div>
+          <h2 class="section-title">
+            👥 Manajemen Pelanggan <span id="cust-header-count">${totalCustomers} total</span>
+          </h2>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">
+            Data langganan, pelacakan piutang real-time, pinjaman galon & broadcast WhatsApp
+          </div>
+        </div>
+        <button class="btn btn--primary" id="btn-add-customer" style="font-weight:700;display:flex;align-items:center;gap:6px">
+          <span>➕</span> Tambah Pelanggan Baru
+        </button>
+      </div>
+
+      <!-- Summary Metrics Cards: responsive 4-card / 2x2 grid via CSS -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Total Pelanggan</div>
+          <div style="font-size:20px;font-weight:800;color:var(--blue-700);margin-top:4px" id="cust-stat-total">${totalCustomers} <span style="font-size:12px;font-weight:600;color:var(--text-muted)">orang</span></div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Sisa Piutang</div>
+          <div style="font-size:20px;font-weight:800;color:#dc2626;margin-top:4px" id="cust-stat-debt">${formatRupiah(totalAllDebt)}</div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Galon Dipinjam</div>
+          <div style="font-size:20px;font-weight:800;color:#d97706;margin-top:4px" id="cust-stat-galon">${totalAllLoanedGalon} <span style="font-size:12px;font-weight:600;color:var(--text-muted)">galon</span></div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Akumulasi Omzet (LTV)</div>
+          <div style="font-size:20px;font-weight:800;color:#16a34a;margin-top:4px" id="cust-stat-spent">${formatRupiah(totalAllSpent)}</div>
+        </div>
+      </div>
+
+      <!-- Filters & Responsive Search Bar (POS Standard Pattern) -->
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:16px">
+        <div class="category-pills" id="cust-category-pills" style="display:flex;flex-wrap:wrap;gap:6px;max-width:100%">
+          ${CATEGORIES.map(
+						(cat) => `
+            <button class="btn btn--sm ${cat.id === _currentCategory ? "btn--primary" : "btn--secondary"} cat-filter-btn"
+                    data-cat="${cat.id}" style="border-radius:20px;font-size:12px;padding:5px 12px">
+              ${cat.label}
+            </button>
+          `,
+					).join("")}
+        </div>
+
+        <div style="position:relative;flex:1;min-width:200px;max-width:320px">
+          <input type="text" class="input" id="cust-search"
+                 placeholder="Cari nama, nomor HP, alamat..."
+                 value="${esc(_searchQuery)}"
+                 autocomplete="off"
+                 style="width:100%;border-radius:20px;padding-left:34px;padding-right:32px;font-size:12px">
+          <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text-muted)">🔍</span>
+          <button id="btn-clear-cust-search" type="button" style="display:${_searchQuery ? "inline-flex" : "none"};position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:14px;padding:2px 4px;" title="Hapus pencarian">✕</button>
+        </div>
+      </div>
+
+      <!-- Dedicated Container for Dynamic Customer List (POS Pattern) -->
+      <div id="cust-data-container"></div>
+
+      <!-- Dock Clearance Spacer -->
+      <div style="height:48px" aria-hidden="true"></div>
+    `;
+
+		// Bind Shell Event Handlers
+		container.querySelectorAll(".cat-filter-btn").forEach((btn) => {
+			btn.addEventListener("click", () => {
+				_currentCategory = btn.dataset.cat;
+				_currentPage = 1;
+				container.querySelectorAll(".cat-filter-btn").forEach((b) => {
+					const isActive = b.dataset.cat === _currentCategory;
+					b.className = `btn btn--sm ${isActive ? "btn--primary" : "btn--secondary"} cat-filter-btn`;
+				});
+				renderCustomerData();
+			});
+		});
+
+		const searchInput = document.getElementById("cust-search");
+		const clearBtn = document.getElementById("btn-clear-cust-search");
+
+		searchInput?.addEventListener("input", (e) => {
+			_searchQuery = e.target.value;
+			_currentPage = 1;
+			if (clearBtn) {
+				clearBtn.style.display = _searchQuery ? "inline-flex" : "none";
+			}
+			renderCustomerData();
+		});
+
+		clearBtn?.addEventListener("click", () => {
+			_searchQuery = "";
+			_currentPage = 1;
+			if (searchInput) {
+				searchInput.value = "";
+				searchInput.focus();
+			}
+			clearBtn.style.display = "none";
+			renderCustomerData();
+		});
+
+		document
+			.getElementById("btn-add-customer")
+			?.addEventListener("click", () => {
+				showCustomerModal();
+			});
+	} else {
+		updateCustomerMetricsUI(
+			totalCustomers,
+			totalAllDebt,
+			totalAllLoanedGalon,
+			totalAllSpent,
+		);
+	}
+
+	renderCustomerData();
+};
+
+/**
+ * Render Customers Table & Pagination strictly into #cust-data-container
+ */
+const renderCustomerData = () => {
+	const dataContainer = document.getElementById("cust-data-container");
+	if (!dataContainer) return;
+
+	const customers = _cachedCustomers;
+	const customerStatsMap = _cachedCustomerStatsMap;
+
 	// Filter & Search
 	const filtered = customers.filter((c) => {
 		const matchCat =
@@ -175,7 +332,13 @@ export const renderCustomers = async () => {
 		return matchCat && matchSearch;
 	});
 
-	// Pagination calculation (consistent with transactions & other modules)
+	// Update Header Count badge
+	const headerCount = document.getElementById("cust-header-count");
+	if (headerCount) {
+		headerCount.textContent = `${customers.length} total (${filtered.length} terfilter)`;
+	}
+
+	// Pagination calculation
 	const totalItems = filtered.length;
 	const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
 	if (_currentPage > totalPages) _currentPage = totalPages;
@@ -188,236 +351,164 @@ export const renderCustomers = async () => {
 		_currentPage * PAGE_SIZE,
 	);
 
-	container.innerHTML = `
-    <!-- Responsive Section Header matching other POS modules -->
-    <div class="section-header" style="flex-wrap:wrap;gap:12px;margin-bottom:var(--space-4)">
-      <div>
-        <h2 class="section-title">
-          👥 Manajemen Pelanggan <span>${totalCustomers} total (${filtered.length} terfilter)</span>
-        </h2>
-        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">
-          Data langganan, pelacakan piutang real-time, pinjaman galon & broadcast WhatsApp
-        </div>
-      </div>
-      <button class="btn btn--primary" id="btn-add-customer" style="font-weight:700;display:flex;align-items:center;gap:6px">
-        <span>➕</span> Tambah Pelanggan Baru
-      </button>
-    </div>
-
-    <!-- Summary Metrics Cards: responsive 4-card / 2x2 grid via CSS -->
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Total Pelanggan</div>
-        <div style="font-size:20px;font-weight:800;color:var(--blue-700);margin-top:4px">${totalCustomers} <span style="font-size:12px;font-weight:600;color:var(--text-muted)">orang</span></div>
-      </div>
-      <div class="stat-card">
-        <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Sisa Piutang</div>
-        <div style="font-size:20px;font-weight:800;color:#dc2626;margin-top:4px">${formatRupiah(totalAllDebt)}</div>
-      </div>
-      <div class="stat-card">
-        <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Galon Dipinjam</div>
-        <div style="font-size:20px;font-weight:800;color:#d97706;margin-top:4px">${totalAllLoanedGalon} <span style="font-size:12px;font-weight:600;color:var(--text-muted)">galon</span></div>
-      </div>
-      <div class="stat-card">
-        <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Akumulasi Omzet (LTV)</div>
-        <div style="font-size:20px;font-weight:800;color:#16a34a;margin-top:4px">${formatRupiah(totalAllSpent)}</div>
-      </div>
-    </div>
-
-    <!-- Filters & Responsive Search Bar -->
-    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:16px">
-      <div class="category-pills" style="display:flex;flex-wrap:wrap;gap:6px;max-width:100%">
-        ${CATEGORIES.map(
-					(cat) => `
-          <button class="btn btn--sm ${cat.id === _currentCategory ? "btn--primary" : "btn--secondary"} cat-filter-btn"
-                  data-cat="${cat.id}" style="border-radius:20px;font-size:12px;padding:5px 12px">
-            ${cat.label}
-          </button>
-        `,
-				).join("")}
-      </div>
-
-      <div style="position:relative;flex:1;min-width:200px;max-width:320px">
-        <input type="text" class="input" id="cust-search"
-               placeholder="Cari nama, nomor HP, alamat..."
-               value="${esc(_searchQuery)}"
-               style="width:100%;border-radius:20px;padding-left:34px;font-size:12px">
-        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text-muted)">🔍</span>
-      </div>
-    </div>
-
-    <!-- Customer Card with Native Scroll & Always-Visible Pagination -->
-    <div class="card card--elevated" style="overflow:hidden;padding:0;margin-bottom:var(--space-6)">
-      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%">
-        <table class="data-table" id="cust-table" style="width:100%;min-width:720px">
-          <thead>
-            <tr>
-              <th>Nama Pelanggan</th>
-              <th>Kategori</th>
-              <th>Kontak WhatsApp</th>
-              <th>Alamat Pengantaran</th>
-              <th style="text-align:right">Total Piutang</th>
-              <th style="text-align:center">Galon Dipinjam</th>
-              <th style="text-align:center">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${
-							paginated.length === 0
-								? `
+	dataContainer.innerHTML = `
+      <!-- Customer Card with Native Scroll & Always-Visible Pagination -->
+      <div class="card card--elevated" style="overflow:hidden;padding:0;margin-bottom:var(--space-6)">
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%">
+          <table class="data-table" id="cust-table" style="width:100%;min-width:720px">
+            <thead>
               <tr>
-                <td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">
-                  Belum ada data pelanggan yang sesuai filter.
-                </td>
+                <th>Nama Pelanggan</th>
+                <th>Kategori</th>
+                <th>Kontak WhatsApp</th>
+                <th>Alamat Pengantaran</th>
+                <th style="text-align:right">Total Piutang</th>
+                <th style="text-align:center">Galon Dipinjam</th>
+                <th style="text-align:center">Aksi</th>
               </tr>
-            `
-								: paginated
-										.map((c) => {
-											const idKey = `id:${c.id}`;
-											const nameKey = `name:${(c.name || "").trim().toLowerCase()}`;
-											const liveStatsId = customerStatsMap[idKey];
-											const liveStatsName = customerStatsMap[nameKey];
-											const liveDebt = Math.max(
-												liveStatsId?.debt || 0,
-												liveStatsName?.debt || 0,
-											);
-											const debt = Math.max(Number(c.totalDebt || 0), liveDebt);
-
-											const cleanPhone = (c.phone || "").replace(/\D/g, "");
-											const waPhone = cleanPhone.startsWith("08")
-												? `62${cleanPhone.slice(1)}`
-												: cleanPhone;
-
-											return `
+            </thead>
+            <tbody>
+              ${
+								paginated.length === 0
+									? `
                 <tr>
-                  <td>
-                    <div style="font-weight:700;color:var(--text-primary)">${esc(c.name)}</div>
-                    ${c.creditLimit > 0 ? `<div style="font-size:11px;color:var(--text-muted)">Limit: ${formatRupiah(c.creditLimit)}</div>` : ""}
-                  </td>
-                  <td>
-                    <span class="badge badge--blue">
-                      ${esc(c.category || "Rumah Tangga")}
-                    </span>
-                  </td>
-                  <td>
-                    ${
-											waPhone
-												? `
-                      <a href="https://wa.me/${waPhone}" target="_blank" rel="noopener noreferrer"
-                         style="display:inline-flex;align-items:center;gap:4px;color:#166534;background:#dcfce7;border:1px solid #86efac;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700;text-decoration:none">
-                        💬 ${esc(c.phone)}
-                      </a>
-                    `
-												: '<span style="color:var(--text-muted)">-</span>'
-										}
-                  </td>
-                  <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(c.address || "-")}">
-                    ${esc(c.address || "-")}
-                  </td>
-                  <td style="text-align:right">
-                    ${
-											debt > 0
-												? `
-                      <div style="color:#dc2626;font-weight:800;font-size:13px">${formatRupiah(debt)}</div>
-                      <button class="btn btn--sm btn-pay-debt-quick" data-id="${c.id}"
-                              style="margin-top:3px;padding:2px 8px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:6px;cursor:pointer">
-                        💰 Bayar
-                      </button>
-                    `
-												: '<span style="color:#16a34a;font-weight:700;font-size:12px">Lunas ✅</span>'
-										}
-                  </td>
-                  <td style="text-align:center">
-                    ${
-											c.galonLoaned > 0
-												? `
-                      <span style="font-weight:800;color:#d97706;background:rgba(245,158,11,0.1);padding:2px 8px;border-radius:8px;font-size:12px">
-                        🪣 ${c.galonLoaned}
-                      </span>
-                    `
-												: '<span style="color:var(--text-muted)">0</span>'
-										}
-                  </td>
-                  <td style="text-align:center">
-                    <div style="display:inline-flex;gap:4px">
-                      <button class="btn btn--secondary btn--sm btn-view-360" data-id="${c.id}" title="Detail Profil 360°" style="padding:4px 8px;font-size:11px">
-                        🔍 Profil
-                      </button>
-                      <button class="btn btn--secondary btn--sm btn-edit-cust" data-id="${c.id}" title="Edit Pelanggan" style="padding:4px 8px;font-size:11px">
-                        ✏️
-                      </button>
-                      <button class="btn btn--danger btn--sm btn-del-cust" data-id="${c.id}" title="Hapus Pelanggan" style="padding:4px 8px;font-size:11px">
-                        🗑️
-                      </button>
-                    </div>
+                  <td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">
+                    Belum ada data pelanggan yang sesuai filter.
                   </td>
                 </tr>
-              `;
-										})
-										.join("")
-						}
-          </tbody>
-        </table>
-      </div>
+              `
+									: paginated
+											.map((c) => {
+												const idKey = `id:${c.id}`;
+												const nameKey = `name:${(c.name || "").trim().toLowerCase()}`;
+												const liveStatsId = customerStatsMap[idKey];
+												const liveStatsName = customerStatsMap[nameKey];
+												const liveDebt = Math.max(
+													liveStatsId?.debt || 0,
+													liveStatsName?.debt || 0,
+												);
+												const debt = Math.max(
+													Number(c.totalDebt || 0),
+													liveDebt,
+												);
 
-      <!-- Pagination ALWAYS Visible matching Riwayat Transaksi -->
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:white;border-top:1.5px solid var(--border-subtle);flex-wrap:wrap;gap:8px">
-        <div style="font-size:12px;color:var(--text-muted)">
-          Menampilkan <strong>${startIdx}-${endIdx}</strong> dari <strong>${totalItems}</strong> pelanggan
+												const cleanPhone = (c.phone || "").replace(/\D/g, "");
+												const waPhone = cleanPhone.startsWith("08")
+													? `62${cleanPhone.slice(1)}`
+													: cleanPhone;
+
+												return `
+                  <tr>
+                    <td>
+                      <div style="font-weight:700;color:var(--text-primary)">${esc(c.name)}</div>
+                      ${c.creditLimit > 0 ? `<div style="font-size:11px;color:var(--text-muted)">Limit: ${formatRupiah(c.creditLimit)}</div>` : ""}
+                    </td>
+                    <td>
+                      <span class="badge badge--blue">
+                        ${esc(c.category || "Rumah Tangga")}
+                      </span>
+                    </td>
+                    <td>
+                      ${
+												waPhone
+													? `
+                        <a href="https://wa.me/${waPhone}" target="_blank" rel="noopener noreferrer"
+                           style="display:inline-flex;align-items:center;gap:4px;color:#166534;background:#dcfce7;border:1px solid #86efac;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700;text-decoration:none">
+                          💬 ${esc(c.phone)}
+                        </a>
+                      `
+													: '<span style="color:var(--text-muted)">-</span>'
+											}
+                    </td>
+                    <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(c.address || "-")}">
+                      ${esc(c.address || "-")}
+                    </td>
+                    <td style="text-align:right">
+                      ${
+												debt > 0
+													? `
+                        <div style="color:#dc2626;font-weight:800;font-size:13px">${formatRupiah(debt)}</div>
+                        <button class="btn btn--sm btn-pay-debt-quick" data-id="${c.id}"
+                                style="margin-top:3px;padding:2px 8px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:6px;cursor:pointer">
+                          💰 Bayar
+                        </button>
+                      `
+													: '<span style="color:#16a34a;font-weight:700;font-size:12px">Lunas ✅</span>'
+											}
+                    </td>
+                    <td style="text-align:center">
+                      ${
+												c.galonLoaned > 0
+													? `
+                        <span style="font-weight:800;color:#d97706;background:rgba(245,158,11,0.1);padding:2px 8px;border-radius:8px;font-size:12px">
+                          🪣 ${c.galonLoaned}
+                        </span>
+                      `
+													: '<span style="color:var(--text-muted)">0</span>'
+											}
+                    </td>
+                    <td style="text-align:center">
+                      <div style="display:inline-flex;gap:4px">
+                        <button class="btn btn--secondary btn--sm btn-view-360" data-id="${c.id}" title="Detail Profil 360°" style="padding:4px 8px;font-size:11px">
+                          🔍 Profil
+                        </button>
+                        <button class="btn btn--secondary btn--sm btn-edit-cust" data-id="${c.id}" title="Edit Pelanggan" style="padding:4px 8px;font-size:11px">
+                          ✏️
+                        </button>
+                        <button class="btn btn--danger btn--sm btn-del-cust" data-id="${c.id}" title="Hapus Pelanggan" style="padding:4px 8px;font-size:11px">
+                          🗑️
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                `;
+											})
+											.join("")
+							}
+            </tbody>
+          </table>
         </div>
-        <div style="display:flex;gap:6px;align-items:center">
-          <button class="btn btn--secondary btn--sm" id="cust-prev-page" ${_currentPage <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ""}>
-            ◀ Sebelumnya
-          </button>
-          <span style="font-size:12px;font-weight:700;padding:0 8px;color:var(--blue-700)">
-            Hal ${_currentPage} / ${totalPages}
-          </span>
-          <button class="btn btn--secondary btn--sm" id="cust-next-page" ${_currentPage >= totalPages ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ""}>
-            Berikutnya ▶
-          </button>
+
+        <!-- Pagination ALWAYS Visible matching Riwayat Transaksi -->
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:white;border-top:1.5px solid var(--border-subtle);flex-wrap:wrap;gap:8px">
+          <div style="font-size:12px;color:var(--text-muted)">
+            Menampilkan <strong>${startIdx}-${endIdx}</strong> dari <strong>${totalItems}</strong> pelanggan
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="btn btn--secondary btn--sm" id="cust-prev-page" ${_currentPage <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ""}>
+              ◀ Sebelumnya
+            </button>
+            <span style="font-size:12px;font-weight:700;padding:0 8px;color:var(--blue-700)">
+              Hal ${_currentPage} / ${totalPages}
+            </span>
+            <button class="btn btn--secondary btn--sm" id="cust-next-page" ${_currentPage >= totalPages ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ""}>
+              Berikutnya ▶
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+	`;
 
-    <!-- Dock Clearance Spacer: prevents bottom navigation dock from overlapping content -->
-    <div style="height:48px" aria-hidden="true"></div>
-  `;
-
-	// Attach Event Handlers
-	container.querySelectorAll(".cat-filter-btn").forEach((btn) => {
-		btn.addEventListener("click", () => {
-			_currentCategory = btn.dataset.cat;
-			_currentPage = 1;
-			renderCustomers();
+	// Bind actions strictly inside dataContainer
+	dataContainer
+		.querySelector("#cust-prev-page")
+		?.addEventListener("click", () => {
+			if (_currentPage > 1) {
+				_currentPage--;
+				renderCustomerData();
+			}
 		});
-	});
 
-	const searchInput = document.getElementById("cust-search");
-	searchInput?.addEventListener("input", (e) => {
-		_searchQuery = e.target.value;
-		_currentPage = 1;
-		renderCustomers();
-	});
+	dataContainer
+		.querySelector("#cust-next-page")
+		?.addEventListener("click", () => {
+			if (_currentPage < totalPages) {
+				_currentPage++;
+				renderCustomerData();
+			}
+		});
 
-	document.getElementById("cust-prev-page")?.addEventListener("click", () => {
-		if (_currentPage > 1) {
-			_currentPage--;
-			renderCustomers();
-		}
-	});
-
-	document.getElementById("cust-next-page")?.addEventListener("click", () => {
-		if (_currentPage < totalPages) {
-			_currentPage++;
-			renderCustomers();
-		}
-	});
-
-	document.getElementById("btn-add-customer")?.addEventListener("click", () => {
-		showCustomerModal();
-	});
-
-	container.querySelectorAll(".btn-edit-cust").forEach((btn) => {
+	dataContainer.querySelectorAll(".btn-edit-cust").forEach((btn) => {
 		btn.addEventListener("click", () => {
 			const id = btn.dataset.id;
 			const cust = customers.find((c) => String(c.id) === String(id));
@@ -425,7 +516,7 @@ export const renderCustomers = async () => {
 		});
 	});
 
-	container.querySelectorAll(".btn-del-cust").forEach((btn) => {
+	dataContainer.querySelectorAll(".btn-del-cust").forEach((btn) => {
 		btn.addEventListener("click", async () => {
 			const id = btn.dataset.id;
 			const cust = customers.find((c) => String(c.id) === String(id));
@@ -433,12 +524,14 @@ export const renderCustomers = async () => {
 				await deleteCustomer(cust.id);
 				const updated = await getAllCustomers();
 				store.setCustomers(updated);
+				_cachedCustomers = updated;
 				window.showToast?.("Pelanggan berhasil dihapus.", "info");
+				renderCustomerData();
 			}
 		});
 	});
 
-	container.querySelectorAll(".btn-view-360").forEach((btn) => {
+	dataContainer.querySelectorAll(".btn-view-360").forEach((btn) => {
 		btn.addEventListener("click", () => {
 			const id = btn.dataset.id;
 			const cust = customers.find((c) => String(c.id) === String(id));
@@ -446,7 +539,7 @@ export const renderCustomers = async () => {
 		});
 	});
 
-	container.querySelectorAll(".btn-pay-debt-quick").forEach((btn) => {
+	dataContainer.querySelectorAll(".btn-pay-debt-quick").forEach((btn) => {
 		btn.addEventListener("click", () => {
 			const id = btn.dataset.id;
 			const cust = customers.find((c) => String(c.id) === String(id));

@@ -1,5 +1,5 @@
-# 📐 01 — MASTER BLUEPRINT: ARSITEKTUR POS & CRM ENTERPRISE (v1.6.8)
-**Blue Mountain Refilling Station POS & CRM — Personal & Proprietary Architecture (v1.6.8)**
+# 📐 01 — MASTER BLUEPRINT: ARSITEKTUR POS & CRM ENTERPRISE (v1.6.9)
+**Blue Mountain Refilling Station POS & CRM — Personal & Proprietary Architecture (v1.6.9)**
 
 ---
 

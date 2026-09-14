@@ -21,6 +21,8 @@ let _searchQuery = "";
 let _selectedRoleFilter = "all"; // 'all' | 'owner' | 'supervisor' | 'cashier'
 let _isSyncing = false;
 
+let _allUsersCache = [];
+
 export const ROLE_LABELS = {
 	owner: {
 		label: "👑 Owner / Pemilik",
@@ -70,7 +72,59 @@ export const initUsers = async () => {
 };
 
 /**
+ * Update Header Counters & Role Pill Badges without re-rendering search bar
+ */
+const updateHeaderAndStats = () => {
+	const totalUsers = _allUsersCache.length;
+	const ownerCount = _allUsersCache.filter((u) => u.role === "owner").length;
+	const supervisorCount = _allUsersCache.filter(
+		(u) => u.role === "supervisor",
+	).length;
+	const cashierCount = _allUsersCache.filter(
+		(u) => u.role === "cashier",
+	).length;
+	const activeCashierCount = _allUsersCache.filter(
+		(u) => u.role === "cashier" && u.isActive !== false,
+	).length;
+
+	const elTotal = document.getElementById("staff-stat-total");
+	if (elTotal) elTotal.textContent = String(totalUsers);
+	const elOwner = document.getElementById("staff-stat-owner");
+	if (elOwner) elOwner.textContent = String(ownerCount);
+	const elSupervisor = document.getElementById("staff-stat-supervisor");
+	if (elSupervisor) elSupervisor.textContent = String(supervisorCount);
+	const elCashier = document.getElementById("staff-stat-cashier");
+	if (elCashier) {
+		elCashier.innerHTML = `${activeCashierCount} <span style="font-size: 13px; font-weight: 500; color: var(--text-muted);">/ ${cashierCount}</span>`;
+	}
+
+	const pillAll = document.querySelector("#pill-user-all .pill-count");
+	if (pillAll) pillAll.textContent = String(totalUsers);
+	const pillOwner = document.querySelector("#pill-user-owner .pill-count");
+	if (pillOwner) pillOwner.textContent = String(ownerCount);
+	const pillSupervisor = document.querySelector(
+		"#pill-user-supervisor .pill-count",
+	);
+	if (pillSupervisor) pillSupervisor.textContent = String(supervisorCount);
+	const pillCashier = document.querySelector("#pill-user-cashier .pill-count");
+	if (pillCashier) pillCashier.textContent = String(cashierCount);
+};
+
+/**
+ * Update Sync Button State
+ */
+const updateSyncUI = (isSyncing) => {
+	const syncBtn = document.getElementById("btn-sync-roster");
+	if (!syncBtn) return;
+	syncBtn.classList.toggle("is-syncing", isSyncing);
+	const textEl = syncBtn.querySelector(".sync-text");
+	if (textEl)
+		textEl.textContent = isSyncing ? "Menyinkronkan..." : "Sinkron Roster";
+};
+
+/**
  * Main Render Function
+ * Keeps search input and toolbar mounted, only re-rendering dynamic list container
  */
 export const renderUsers = async () => {
 	const container = document.getElementById("view-users");
@@ -107,122 +161,218 @@ export const renderUsers = async () => {
 		return;
 	}
 
-	const allUsers = await getAllUsers();
-
-	// Calculate Role Metrics
-	const totalUsers = allUsers.length;
-	const ownerCount = allUsers.filter((u) => u.role === "owner").length;
-	const supervisorCount = allUsers.filter(
+	_allUsersCache = await getAllUsers();
+	const totalUsers = _allUsersCache.length;
+	const ownerCount = _allUsersCache.filter((u) => u.role === "owner").length;
+	const supervisorCount = _allUsersCache.filter(
 		(u) => u.role === "supervisor",
 	).length;
-	const cashierCount = allUsers.filter((u) => u.role === "cashier").length;
-	const activeCashierCount = allUsers.filter(
+	const cashierCount = _allUsersCache.filter(
+		(u) => u.role === "cashier",
+	).length;
+	const activeCashierCount = _allUsersCache.filter(
 		(u) => u.role === "cashier" && u.isActive !== false,
 	).length;
 
-	// Filter by Search Query & Selected Role Tab
-	const filteredUsers = allUsers.filter((u) => {
+	const searchInputExists = container.querySelector("#user-search-input");
+
+	if (!searchInputExists) {
+		// Render initial shell once (POS standard pattern)
+		container.innerHTML = `
+      <div class="staff-view-container">
+        <!-- Header Section -->
+        <div class="staff-header">
+          <div class="staff-header-info">
+            <h1>👥 Manajemen Akun & Hak Akses</h1>
+            <p>Kontrol hak akses operator kasir, supervisor, dan owner toko dengan enkripsi PIN Salted SHA-256.</p>
+          </div>
+          <div class="staff-header-actions">
+            <button class="btn-staff-action btn-staff-sync ${_isSyncing ? "is-syncing" : ""}" id="btn-sync-roster" title="Perbarui dan sinkronkan daftar operator dengan Supabase Cloud">
+              <span class="sync-icon">🔄</span>
+              <span class="sync-text">${_isSyncing ? "Menyinkronkan..." : "Sinkron Roster"}</span>
+            </button>
+            <button class="btn-staff-action btn-staff-add" id="btn-add-user" title="Buat akun operator baru">
+              <span>➕</span> Tambah Operator
+            </button>
+          </div>
+        </div>
+
+        <!-- Executive Stats Cards (Responsive Grid) -->
+        <div class="staff-stats-grid">
+          <div class="staff-stat-card">
+            <div class="staff-stat-icon" style="background: rgba(37, 99, 235, 0.10); color: #2563eb;">👥</div>
+            <div>
+              <div class="staff-stat-val" id="staff-stat-total">${totalUsers}</div>
+              <div class="staff-stat-lbl">Total Operator Terdaftar</div>
+            </div>
+          </div>
+
+          <div class="staff-stat-card">
+            <div class="staff-stat-icon" style="background: rgba(124, 58, 237, 0.10); color: #7c3aed;">👑</div>
+            <div>
+              <div class="staff-stat-val" id="staff-stat-owner">${ownerCount}</div>
+              <div class="staff-stat-lbl">Owner / Pemilik</div>
+            </div>
+          </div>
+
+          <div class="staff-stat-card">
+            <div class="staff-stat-icon" style="background: rgba(37, 99, 235, 0.10); color: #2563eb;">⭐</div>
+            <div>
+              <div class="staff-stat-val" id="staff-stat-supervisor">${supervisorCount}</div>
+              <div class="staff-stat-lbl">Supervisor</div>
+            </div>
+          </div>
+
+          <div class="staff-stat-card">
+            <div class="staff-stat-icon" style="background: rgba(5, 150, 105, 0.10); color: #059669;">👤</div>
+            <div>
+              <div class="staff-stat-val" id="staff-stat-cashier">${activeCashierCount} <span style="font-size: 13px; font-weight: 500; color: var(--text-muted);">/ ${cashierCount}</span></div>
+              <div class="staff-stat-lbl">Kasir Aktif</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Security & Cloud Integrity Banner -->
+        <div class="staff-security-bar">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span>🛡️</span>
+            <span><strong>Keamanan Terverifikasi:</strong> Zero-Plaintext PIN (Salted SHA-256) • Brute-Force Rate Limiter 60 Detik Aktif</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; font-weight: 600;">
+            <span style="width: 7px; height: 7px; border-radius: 50%; background: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,0.3);"></span>
+            <span>Cloud Realtime Active</span>
+          </div>
+        </div>
+
+        <!-- Toolbar: Search & Role Filter Tabs (Stable DOM Mount) -->
+        <div class="staff-toolbar">
+          <div class="staff-search-box">
+            <span style="font-size: 16px; opacity: 0.6;">🔍</span>
+            <input type="text" id="user-search-input" class="staff-search-input" value="${esc(_searchQuery)}" placeholder="Cari nama atau username operator..." autocomplete="off">
+            <button id="btn-clear-user-search" type="button" style="display: ${_searchQuery ? "inline-flex" : "none"}; background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 14px; padding: 2px 6px;" title="Hapus pencarian">✕</button>
+          </div>
+
+          <div class="staff-filter-pills" id="staff-filter-pills">
+            <button class="staff-filter-pill ${_selectedRoleFilter === "all" ? "active" : ""}" data-role="all" id="pill-user-all">
+              Semua (<span class="pill-count">${totalUsers}</span>)
+            </button>
+            <button class="staff-filter-pill ${_selectedRoleFilter === "owner" ? "active" : ""}" data-role="owner" id="pill-user-owner">
+              👑 Owner (<span class="pill-count">${ownerCount}</span>)
+            </button>
+            <button class="staff-filter-pill ${_selectedRoleFilter === "supervisor" ? "active" : ""}" data-role="supervisor" id="pill-user-supervisor">
+              ⭐ Supervisor (<span class="pill-count">${supervisorCount}</span>)
+            </button>
+            <button class="staff-filter-pill ${_selectedRoleFilter === "cashier" ? "active" : ""}" data-role="cashier" id="pill-user-cashier">
+              👤 Kasir (<span class="pill-count">${cashierCount}</span>)
+            </button>
+          </div>
+        </div>
+
+        <!-- Dedicated Container for Dynamic Results List (POS Pattern) -->
+        <div id="staff-data-container"></div>
+      </div>
+    `;
+
+		// ── Bind Shell Event Listeners Once ──
+
+		// Manual Cloud Roster Synchronization Button
+		document
+			.getElementById("btn-sync-roster")
+			?.addEventListener("click", async () => {
+				if (_isSyncing) return;
+				_isSyncing = true;
+				updateSyncUI(true);
+				try {
+					const synced = await syncAuthoritativeRosterToCache();
+					window.showToast?.(
+						`Sukses menyinkronkan ${synced?.length || 0} akun operator dari Cloud!`,
+						"success",
+					);
+				} catch (err) {
+					window.showToast?.(
+						`Sinkronisasi gagal: ${err.message || "Koneksi terganggu"}`,
+						"error",
+					);
+				} finally {
+					_isSyncing = false;
+					updateSyncUI(false);
+					_allUsersCache = await getAllUsers();
+					updateHeaderAndStats();
+					renderUsersData();
+				}
+			});
+
+		// Add User Button
+		document
+			.getElementById("btn-add-user")
+			?.addEventListener("click", () => openUserFormModal());
+
+		// Search Input (POS Pattern: Fluid, continuous, never losing focus)
+		const searchInput = document.getElementById("user-search-input");
+		const clearBtn = document.getElementById("btn-clear-user-search");
+
+		searchInput?.addEventListener("input", (e) => {
+			_searchQuery = e.target.value;
+			if (clearBtn) {
+				clearBtn.style.display = _searchQuery ? "inline-flex" : "none";
+			}
+			renderUsersData();
+		});
+
+		// Clear Search Button
+		clearBtn?.addEventListener("click", () => {
+			_searchQuery = "";
+			if (searchInput) {
+				searchInput.value = "";
+				searchInput.focus();
+			}
+			clearBtn.style.display = "none";
+			renderUsersData();
+		});
+
+		// Role Filter Pills (Only updates results and active class, never destroying search)
+		container.querySelectorAll(".staff-filter-pill").forEach((pill) => {
+			pill.addEventListener("click", () => {
+				_selectedRoleFilter = pill.getAttribute("data-role") || "all";
+				container.querySelectorAll(".staff-filter-pill").forEach((p) => {
+					p.classList.toggle(
+						"active",
+						(p.getAttribute("data-role") || "all") === _selectedRoleFilter,
+					);
+				});
+				renderUsersData();
+			});
+		});
+	} else {
+		// Update header and stats counters without touching the input element
+		updateHeaderAndStats();
+	}
+
+	renderUsersData();
+};
+
+/**
+ * Render Staff Results (Table & Cards) strictly into #staff-data-container
+ */
+const renderUsersData = () => {
+	const dataContainer = document.getElementById("staff-data-container");
+	if (!dataContainer) return;
+
+	const currentUser = store.state.currentUser;
+	const q = (_searchQuery || "").trim().toLowerCase();
+
+	const filteredUsers = _allUsersCache.filter((u) => {
 		if (_selectedRoleFilter !== "all" && u.role !== _selectedRoleFilter) {
 			return false;
 		}
-		if (!_searchQuery) return true;
-		const q = _searchQuery.toLowerCase();
+		if (!q) return true;
 		return (
 			(u.name || "").toLowerCase().includes(q) ||
 			(u.username || "").toLowerCase().includes(q)
 		);
 	});
 
-	container.innerHTML = `
-    <div class="staff-view-container">
-      <!-- Header Section -->
-      <div class="staff-header">
-        <div class="staff-header-info">
-          <h1>👥 Manajemen Akun & Hak Akses</h1>
-          <p>Kontrol hak akses operator kasir, supervisor, dan owner toko dengan enkripsi PIN Salted SHA-256.</p>
-        </div>
-        <div class="staff-header-actions">
-          <button class="btn-staff-action btn-staff-sync ${_isSyncing ? "is-syncing" : ""}" id="btn-sync-roster" title="Perbarui dan sinkronkan daftar operator dengan Supabase Cloud">
-            <span class="sync-icon">🔄</span>
-            <span class="sync-text">${_isSyncing ? "Menyinkronkan..." : "Sinkron Roster"}</span>
-          </button>
-          <button class="btn-staff-action btn-staff-add" id="btn-add-user" title="Buat akun operator baru">
-            <span>➕</span> Tambah Operator
-          </button>
-        </div>
-      </div>
-
-      <!-- Executive Stats Cards (Responsive Grid) -->
-      <div class="staff-stats-grid">
-        <div class="staff-stat-card">
-          <div class="staff-stat-icon" style="background: rgba(37, 99, 235, 0.10); color: #2563eb;">👥</div>
-          <div>
-            <div class="staff-stat-val">${totalUsers}</div>
-            <div class="staff-stat-lbl">Total Operator Terdaftar</div>
-          </div>
-        </div>
-
-        <div class="staff-stat-card">
-          <div class="staff-stat-icon" style="background: rgba(124, 58, 237, 0.10); color: #7c3aed;">👑</div>
-          <div>
-            <div class="staff-stat-val">${ownerCount}</div>
-            <div class="staff-stat-lbl">Owner / Pemilik</div>
-          </div>
-        </div>
-
-        <div class="staff-stat-card">
-          <div class="staff-stat-icon" style="background: rgba(37, 99, 235, 0.10); color: #2563eb;">⭐</div>
-          <div>
-            <div class="staff-stat-val">${supervisorCount}</div>
-            <div class="staff-stat-lbl">Supervisor</div>
-          </div>
-        </div>
-
-        <div class="staff-stat-card">
-          <div class="staff-stat-icon" style="background: rgba(5, 150, 105, 0.10); color: #059669;">👤</div>
-          <div>
-            <div class="staff-stat-val">${activeCashierCount} <span style="font-size: 13px; font-weight: 500; color: var(--text-muted);">/ ${cashierCount}</span></div>
-            <div class="staff-stat-lbl">Kasir Aktif</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Security & Cloud Integrity Banner -->
-      <div class="staff-security-bar">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span>🛡️</span>
-          <span><strong>Keamanan Terverifikasi:</strong> Zero-Plaintext PIN (Salted SHA-256) • Brute-Force Rate Limiter 60 Detik Aktif</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 6px; font-weight: 600;">
-          <span style="width: 7px; height: 7px; border-radius: 50%; background: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,0.3);"></span>
-          <span>Cloud Realtime Active</span>
-        </div>
-      </div>
-
-      <!-- Toolbar: Search & Role Filter Tabs -->
-      <div class="staff-toolbar">
-        <div class="staff-search-box">
-          <span style="font-size: 16px; opacity: 0.6;">🔍</span>
-          <input type="text" id="user-search-input" class="staff-search-input" value="${esc(_searchQuery)}" placeholder="Cari nama atau username operator...">
-          ${_searchQuery ? `<button id="btn-clear-user-search" style="background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 14px; padding: 2px 6px;">✕</button>` : ""}
-        </div>
-
-        <div class="staff-filter-pills">
-          <button class="staff-filter-pill ${_selectedRoleFilter === "all" ? "active" : ""}" data-role="all">
-            Semua (${totalUsers})
-          </button>
-          <button class="staff-filter-pill ${_selectedRoleFilter === "owner" ? "active" : ""}" data-role="owner">
-            👑 Owner (${ownerCount})
-          </button>
-          <button class="staff-filter-pill ${_selectedRoleFilter === "supervisor" ? "active" : ""}" data-role="supervisor">
-            ⭐ Supervisor (${supervisorCount})
-          </button>
-          <button class="staff-filter-pill ${_selectedRoleFilter === "cashier" ? "active" : ""}" data-role="cashier">
-            👤 Kasir (${cashierCount})
-          </button>
-        </div>
-      </div>
-
+	dataContainer.innerHTML = `
       <!-- Desktop View: Adaptive Data Table -->
       <div class="staff-table-wrapper">
         <table class="staff-table">
@@ -384,66 +534,10 @@ export const renderUsers = async () => {
 								.join("")
 				}
       </div>
-    </div>
-  `;
+	`;
 
-	// ── Event Handlers ──
-
-	// Manual Cloud Roster Synchronization Button
-	document
-		.getElementById("btn-sync-roster")
-		?.addEventListener("click", async () => {
-			if (_isSyncing) return;
-			_isSyncing = true;
-			renderUsers();
-			try {
-				const synced = await syncAuthoritativeRosterToCache();
-				window.showToast?.(
-					`Sukses menyinkronkan ${synced?.length || 0} akun operator dari Cloud!`,
-					"success",
-				);
-			} catch (err) {
-				window.showToast?.(
-					`Sinkronisasi gagal: ${err.message || "Koneksi terganggu"}`,
-					"error",
-				);
-			} finally {
-				_isSyncing = false;
-				renderUsers();
-			}
-		});
-
-	// Add User Button
-	document
-		.getElementById("btn-add-user")
-		?.addEventListener("click", () => openUserFormModal());
-
-	// Search Input
-	document
-		.getElementById("user-search-input")
-		?.addEventListener("input", (e) => {
-			_searchQuery = e.target.value;
-			renderUsers();
-		});
-
-	// Clear Search
-	document
-		.getElementById("btn-clear-user-search")
-		?.addEventListener("click", () => {
-			_searchQuery = "";
-			renderUsers();
-		});
-
-	// Role Filter Pills
-	container.querySelectorAll(".staff-filter-pill").forEach((pill) => {
-		pill.addEventListener("click", () => {
-			_selectedRoleFilter = pill.getAttribute("data-role") || "all";
-			renderUsers();
-		});
-	});
-
-	// Edit User Buttons (Desktop Table & Mobile Cards)
-	container.querySelectorAll(".btn-edit-user").forEach((btn) => {
+	// Bind actions strictly inside dataContainer
+	dataContainer.querySelectorAll(".btn-edit-user").forEach((btn) => {
 		btn.addEventListener("click", async () => {
 			const id = btn.getAttribute("data-id");
 			const user = await getUserById(String(id));
@@ -451,14 +545,12 @@ export const renderUsers = async () => {
 		});
 	});
 
-	// Delete User Buttons (Desktop Table & Mobile Cards)
-	container.querySelectorAll(".btn-delete-user").forEach((btn) => {
+	dataContainer.querySelectorAll(".btn-delete-user").forEach((btn) => {
 		btn.addEventListener("click", async () => {
 			const id = btn.getAttribute("data-id");
 			const name = btn.getAttribute("data-name");
 			const role = btn.getAttribute("data-role");
 
-			// Safeguard: Prevent deleting the last owner account
 			if (role === "owner") {
 				const currentUsers = await getAllUsers();
 				const remainingOwners = currentUsers.filter(
@@ -485,7 +577,9 @@ export const renderUsers = async () => {
 						`Operator "${name}" berhasil dihapus dari sistem & Cloud.`,
 						"success",
 					);
-					renderUsers();
+					_allUsersCache = updated;
+					updateHeaderAndStats();
+					renderUsersData();
 				} catch (err) {
 					alert(`Gagal menghapus operator: ${err.message}`);
 				}
